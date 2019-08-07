@@ -5,31 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "Skottie.h"
+#include "modules/skottie/include/Skottie.h"
 
-#include "SkCanvas.h"
-#include "SkData.h"
-#include "SkFontMgr.h"
-#include "SkImage.h"
-#include "SkMakeUnique.h"
-#include "SkPaint.h"
-#include "SkPoint.h"
-#include "SkSGColor.h"
-#include "SkSGInvalidationController.h"
-#include "SkSGOpacityEffect.h"
-#include "SkSGPath.h"
-#include "SkSGRenderEffect.h"
-#include "SkSGScene.h"
-#include "SkSGTransform.h"
-#include "SkStream.h"
-#include "SkTArray.h"
-#include "SkTo.h"
-#include "SkottieAdapter.h"
-#include "SkottieJson.h"
-#include "SkottiePriv.h"
-#include "SkottieProperty.h"
-#include "SkottieValue.h"
-#include "SkTraceEvent.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTo.h"
+#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/src/SkottieAdapter.h"
+#include "modules/skottie/src/SkottieJson.h"
+#include "modules/skottie/src/SkottiePriv.h"
+#include "modules/skottie/src/SkottieValue.h"
+#include "modules/sksg/include/SkSGInvalidationController.h"
+#include "modules/sksg/include/SkSGOpacityEffect.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGPath.h"
+#include "modules/sksg/include/SkSGRenderEffect.h"
+#include "modules/sksg/include/SkSGScene.h"
+#include "modules/sksg/include/SkSGTransform.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkTraceEvent.h"
 
 #include <chrono>
 #include <cmath>
@@ -117,12 +117,16 @@ sk_sp<sksg::Transform> AnimationBuilder::attachMatrix2D(const skjson::ObjectValu
 
 sk_sp<sksg::Transform> AnimationBuilder::attachMatrix3D(const skjson::ObjectValue& t,
                                                         AnimatorScope* ascope,
-                                                        sk_sp<sksg::Transform> parent) const {
+                                                        sk_sp<sksg::Transform> parent,
+                                                        sk_sp<TransformAdapter3D> adapter,
+                                                        bool precompose_parent) const {
     static const VectorValue g_default_vec_0   = {  0,   0,   0},
                              g_default_vec_100 = {100, 100, 100};
 
-    auto matrix = sksg::Matrix<SkMatrix44>::Make(SkMatrix::I());
-    auto adapter = sk_make_sp<TransformAdapter3D>(matrix);
+    if (!adapter) {
+        // Default to TransformAdapter3D (we only use external adapters for cameras).
+        adapter = sk_make_sp<TransformAdapter3D>();
+    }
 
     auto bound = this->bindProperty<VectorValue>(t["a"], ascope,
             [adapter](const VectorValue& a) {
@@ -164,9 +168,13 @@ sk_sp<sksg::Transform> AnimationBuilder::attachMatrix3D(const skjson::ObjectValu
 
     // TODO: dispatch 3D transform properties
 
-    return (bound)
-        ? sksg::Transform::MakeConcat(std::move(parent), std::move(matrix))
-        : parent;
+    if (!bound) {
+        return parent;
+    }
+
+    return precompose_parent
+        ? sksg::Transform::MakeConcat(adapter->refTransform(), std::move(parent))
+        : sksg::Transform::MakeConcat(std::move(parent), adapter->refTransform());
 }
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachOpacity(const skjson::ObjectValue& jtransform,
@@ -209,6 +217,7 @@ static SkBlendMode GetBlendMode(const skjson::ObjectValue& jobject,
         SkBlendMode::kSaturation, // 13:'saturation'
         SkBlendMode::kColor,      // 14:'color'
         SkBlendMode::kLuminosity, // 15:'luminosity'
+        SkBlendMode::kPlus,       // 16:'add'
     };
 
     const auto bm_index = ParseDefault<size_t>(jobject["bm"], 0);
@@ -266,13 +275,14 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
                                    sk_sp<PropertyObserver> pobserver, sk_sp<Logger> logger,
                                    sk_sp<MarkerObserver> mobserver,
                                    Animation::Builder::Stats* stats,
-                                   float duration, float framerate)
+                                   const SkSize& size, float duration, float framerate)
     : fResourceProvider(std::move(rp))
     , fLazyFontMgr(std::move(fontmgr))
     , fPropertyObserver(std::move(pobserver))
     , fLogger(std::move(logger))
     , fMarkerObserver(std::move(mobserver))
     , fStats(stats)
+    , fSize(size)
     , fDuration(duration)
     , fFrameRate(framerate)
     , fHasNontrivialBlending(false) {}
@@ -499,7 +509,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
                                        std::move(fPropertyObserver),
                                        std::move(fLogger),
                                        std::move(fMarkerObserver),
-                                       &fStats, duration, fps);
+                                       &fStats, size, duration, fps);
     auto scene = builder.parse(json);
 
     const auto t2 = std::chrono::steady_clock::now();
@@ -588,7 +598,10 @@ void Animation::seek(SkScalar t) {
     if (!fScene)
         return;
 
-    fScene->animate(fInPoint + SkTPin(t, 0.0f, 1.0f) * (fOutPoint - fInPoint));
+    // Per AE/Lottie semantics out_point is exclusive.
+    const auto kLastValidFrame = std::nextafter(fOutPoint, fInPoint);
+
+    fScene->animate(SkTPin(fInPoint + t * (fOutPoint - fInPoint), fInPoint, kLastValidFrame));
 }
 
 sk_sp<Animation> Animation::Make(const char* data, size_t length) {

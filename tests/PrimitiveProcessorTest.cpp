@@ -7,23 +7,23 @@
 
 // This is a GPU-backend specific test. It relies on static intializers to work
 
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkTypes.h"
+#include "tests/Test.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrGeometryProcessor.h"
-#include "GrGpu.h"
-#include "GrMemoryPool.h"
-#include "GrOpFlushState.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
-#include "SkPointPriv.h"
-#include "SkString.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLVarying.h"
-#include "ops/GrMeshDrawOp.h"
+#include "include/core/SkString.h"
+#include "include/gpu/GrContext.h"
+#include "src/core/SkPointPriv.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
 
 namespace {
 class Op : public GrMeshDrawOp {
@@ -63,8 +63,15 @@ private:
                 fAttributes.reset(new Attribute[numAttribs]);
                 for (auto i = 0; i < numAttribs; ++i) {
                     fAttribNames[i].printf("attr%d", i);
-                    fAttributes[i] = {fAttribNames[i].c_str(), kFloat2_GrVertexAttribType,
-                                                               kFloat2_GrSLType};
+                    // This gives us more of a mix of attribute types, and allows the
+                    // component count to fit within the limits for iOS Metal.
+                    if (i & 0x1) {
+                        fAttributes[i] = {fAttribNames[i].c_str(), kFloat_GrVertexAttribType,
+                                                                   kFloat_GrSLType};
+                    } else {
+                        fAttributes[i] = {fAttribNames[i].c_str(), kFloat2_GrVertexAttribType,
+                                                                   kFloat2_GrSLType};
+                    }
                 }
                 this->setVertexAttributes(fAttributes.get(), numAttribs);
             }

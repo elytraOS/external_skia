@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "GrBackendSurface.h"
-#include "GrContextFactory.h"
-#include "GrContextOptions.h"
-#include "GrContextPriv.h"
-#include "GrGpu.h"
-#include "GrProxyProvider.h"
-#include "GrXferProcessor.h"
-#include "effects/GrPorterDuffXferProcessor.h"
-#include "gl/GrGLCaps.h"
-#include "ops/GrMeshDrawOp.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContextOptions.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/gl/GrGLCaps.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "tools/gpu/GrContextFactory.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,8 +27,12 @@ static void test_color_opaque_no_coverage(skiatest::Reporter* reporter, const Gr
 static void test_lcd_coverage(skiatest::Reporter* reporter, const GrCaps& caps);
 static void test_lcd_coverage_fallback_case(skiatest::Reporter* reporter, const GrCaps& caps);
 
-DEF_GPUTEST_FOR_NULLGL_CONTEXT(GrPorterDuff, reporter, ctxInfo) {
-    const GrCaps& caps = *ctxInfo.grContext()->priv().getGpu()->caps();
+DEF_GPUTEST(GrPorterDuff, reporter, /*ctxInfo*/) {
+    GrMockOptions mockOptions;
+    mockOptions.fDualSourceBlendingSupport = true;
+    auto context = GrContext::MakeMock(&mockOptions, GrContextOptions());
+    const GrCaps& caps = *context->priv().getGpu()->caps();
+
     if (!caps.shaderCaps()->dualSourceBlendingSupport()) {
         SK_ABORT("Null context does not support dual source blending.");
         return;
@@ -979,23 +983,22 @@ DEF_GPUTEST(PorterDuffNoDualSourceBlending, reporter, options) {
     GrContextOptions opts = options;
     opts.fSuppressDualSourceBlending = true;
     sk_gpu_test::GrContextFactory mockFactory(opts);
-    GrContext* ctx = mockFactory.get(sk_gpu_test::GrContextFactory::kNullGL_ContextType);
+    GrContext* ctx = mockFactory.get(sk_gpu_test::GrContextFactory::kMock_ContextType);
     if (!ctx) {
-        SK_ABORT("Failed to create null context without ARB_blend_func_extended.");
+        SK_ABORT("Failed to create mock context without ARB_blend_func_extended.");
         return;
     }
 
-    GrGpu* gpu = ctx->priv().getGpu();
     GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
     const GrCaps& caps = *ctx->priv().caps();
     if (caps.shaderCaps()->dualSourceBlendingSupport()) {
-        SK_ABORT("Null context failed to honor request for no ARB_blend_func_extended.");
+        SK_ABORT("Mock context failed to honor request for no ARB_blend_func_extended.");
         return;
     }
 
     GrBackendTexture backendTex =
-        gpu->createTestingOnlyBackendTexture(nullptr, 100, 100, GrColorType::kRGBA_8888,
-                                             false, GrMipMapped::kNo);
+        ctx->createBackendTexture(100, 100, kRGBA_8888_SkColorType,
+                                  GrMipMapped::kNo, GrRenderable::kNo);
 
     GrXferProcessor::DstProxy fakeDstProxy;
     {
@@ -1027,5 +1030,5 @@ DEF_GPUTEST(PorterDuffNoDualSourceBlending, reporter, options) {
             }
         }
     }
-    gpu->deleteTestingOnlyBackendTexture(backendTex);
+    ctx->deleteBackendTexture(backendTex);
 }

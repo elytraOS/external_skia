@@ -5,21 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "SkMatrixConvolutionImageFilter.h"
-#include "SkBitmap.h"
-#include "SkColorData.h"
-#include "SkColorSpaceXformer.h"
-#include "SkImageFilterPriv.h"
-#include "SkReadBuffer.h"
-#include "SkSpecialImage.h"
-#include "SkWriteBuffer.h"
-#include "SkRect.h"
-#include "SkUnPreMultiply.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "include/effects/SkMatrixConvolutionImageFilter.h"
+#include "include/private/SkColorData.h"
+#include "src/core/SkImageFilterPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "GrContext.h"
-#include "GrTextureProxy.h"
-#include "effects/GrMatrixConvolutionEffect.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/gpu/effects/GrMatrixConvolutionEffect.h"
 #endif
 
 // We need to be able to read at most SK_MaxS32 bytes, so divide that
@@ -434,19 +433,6 @@ sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilter::onFilterImage(SkSpecialIma
 
     return SkSpecialImage::MakeFromRaster(SkIRect::MakeWH(dstBounds.width(), dstBounds.height()),
                                           dst);
-}
-
-sk_sp<SkImageFilter> SkMatrixConvolutionImageFilter::onMakeColorSpace(SkColorSpaceXformer* xformer)
-const {
-    SkASSERT(1 == this->countInputs());
-
-    sk_sp<SkImageFilter> input = xformer->apply(this->getInput(0));
-    if (input.get() != this->getInput(0)) {
-        return SkMatrixConvolutionImageFilter::Make(fKernelSize, fKernel, fGain, fBias,
-                                                    fKernelOffset, fTileMode, fConvolveAlpha,
-                                                    std::move(input), this->getCropRectIfSet());
-    }
-    return this->refMe();
 }
 
 SkIRect SkMatrixConvolutionImageFilter::onFilterNodeBounds(const SkIRect& src, const SkMatrix& ctm,

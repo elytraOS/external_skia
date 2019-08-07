@@ -8,13 +8,15 @@
 #ifndef GrMtlGpuCommandBuffer_DEFINED
 #define GrMtlGpuCommandBuffer_DEFINED
 
-#include "GrGpuCommandBuffer.h"
-#include "GrMtlGpu.h"
-#include "GrMesh.h"
+#include "src/gpu/GrGpuCommandBuffer.h"
+#include "src/gpu/GrMesh.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/mtl/GrMtlGpu.h"
 
 #import <metal/metal.h>
 
 typedef uint32_t GrColor;
+class GrMtlBuffer;
 class GrMtlPipelineState;
 class GrMtlRenderTarget;
 
@@ -31,7 +33,11 @@ public:
               const SkIPoint& dstPoint) override {
         fGpu->copySurface(fTexture, fOrigin, src, srcOrigin, srcRect, dstPoint);
     }
-
+    void transferFrom(const SkIRect& srcRect, GrColorType bufferColorType,
+                      GrGpuBuffer* transferBuffer, size_t offset) override {
+        fGpu->transferPixelsFrom(fTexture, srcRect.fLeft, srcRect.fTop, srcRect.width(),
+                                 srcRect.height(), bufferColorType, transferBuffer, offset);
+    }
     void insertEventMarker(const char* msg) override {}
 
 private:
@@ -56,8 +62,12 @@ public:
 
     void insertEventMarker(const char* msg) override {}
 
-    void inlineUpload(GrOpFlushState* state, GrDeferredTextureUploadFn& upload) override {}
-
+    void inlineUpload(GrOpFlushState* state, GrDeferredTextureUploadFn& upload) override {
+        // TODO: this could be more efficient
+        state->doUpload(upload);
+    }
+    void transferFrom(const SkIRect& srcRect, GrColorType bufferColorType,
+                      GrGpuBuffer* transferBuffer, size_t offset) override;
     void copy(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
               const SkIPoint& dstPoint) override;
 
@@ -117,6 +127,9 @@ private:
                                        const GrBuffer* instanceBuffer, int instanceCount,
                                        int baseInstance, GrPrimitiveRestart) final;
 
+    void setVertexBuffer(id<MTLRenderCommandEncoder>, const GrMtlBuffer*, size_t index);
+    void resetBufferBindings();
+
     GrMtlGpu*                                     fGpu;
     // GrRenderTargetProxy bounds
 #ifdef SK_DEBUG
@@ -133,6 +146,9 @@ private:
     };
 
     CommandBufferInfo fCommandBufferInfo;
+
+    static constexpr size_t kNumBindings = GrMtlUniformHandler::kLastUniformBinding + 3;
+    id<MTLBuffer> fBufferBindings[kNumBindings];
 
     typedef GrGpuRTCommandBuffer INHERITED;
 };

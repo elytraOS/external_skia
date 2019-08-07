@@ -5,19 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "SkGlyph.h"
+#include "src/core/SkGlyph.h"
 
-#include "SkArenaAlloc.h"
-#include "SkMakeUnique.h"
-#include "SkScalerContext.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkScalerContext.h"
 
-void SkGlyph::toMask(SkMask* mask) const {
-    SkASSERT(mask);
+SkMask SkGlyph::mask() const {
+    // getMetrics had to be called.
+    SkASSERT(fMaskFormat != MASK_FORMAT_UNKNOWN);
 
-    mask->fImage = (uint8_t*)fImage;
-    mask->fBounds.set(fLeft, fTop, fLeft + fWidth, fTop + fHeight);
-    mask->fRowBytes = this->rowBytes();
-    mask->fFormat = static_cast<SkMask::Format>(fMaskFormat);
+    SkMask mask;
+    mask.fImage = (uint8_t*)fImage;
+    mask.fBounds.set(fLeft, fTop, fLeft + fWidth, fTop + fHeight);
+    mask.fRowBytes = this->rowBytes();
+    mask.fFormat = static_cast<SkMask::Format>(fMaskFormat);
+    return mask;
+}
+
+SkMask SkGlyph::mask(SkPoint position) const {
+    SkMask answer = this->mask();
+    answer.fBounds.offset(SkScalarFloorToInt(position.x()), SkScalarFloorToInt(position.y()));
+    return answer;
 }
 
 void SkGlyph::zeroMetrics() {
@@ -119,4 +128,3 @@ SkPath* SkGlyph::addPath(SkScalerContext* scalerContext, SkArenaAlloc* alloc) {
     }
     return this->path();
 }
-

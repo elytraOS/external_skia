@@ -8,18 +8,18 @@
 #ifndef GrGLSLProgramBuilder_DEFINED
 #define GrGLSLProgramBuilder_DEFINED
 
-#include "GrCaps.h"
-#include "GrGeometryProcessor.h"
-#include "GrProgramDesc.h"
-#include "GrRenderTarget.h"
-#include "GrRenderTargetPriv.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLPrimitiveProcessor.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLVertexGeoBuilder.h"
-#include "glsl/GrGLSLXferProcessor.h"
+#include "include/gpu/GrRenderTarget.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrProgramDesc.h"
+#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
+#include "src/gpu/glsl/GrGLSLXferProcessor.h"
 
 class GrShaderVar;
 class GrGLSLVaryingHandler;
@@ -42,7 +42,7 @@ public:
     GrPixelConfig config() const { return fRenderTarget->config(); }
     int effectiveSampleCnt() const {
         SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & header().processorFeatures());
-        return fRenderTarget->renderTargetPriv().getSampleLocations(fPipeline).count();
+        return fRenderTarget->renderTargetPriv().getSampleLocations().count();
     }
     GrSurfaceOrigin origin() const { return fOrigin; }
     const GrPipeline& pipeline() const { return fPipeline; }
@@ -156,7 +156,6 @@ private:
                                     SkTArray<std::unique_ptr<GrGLSLFragmentProcessor>>*);
     void emitAndInstallXferProc(const SkString& colorIn, const SkString& coverageIn);
     SamplerHandle emitSampler(const GrTexture*, const GrSamplerState&, const char* name);
-    void emitFSOutputSwizzle(bool hasSecondaryOutput);
     bool checkSamplerCounts();
 
 #ifdef SK_DEBUG

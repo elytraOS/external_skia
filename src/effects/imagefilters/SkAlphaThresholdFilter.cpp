@@ -5,27 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "SkAlphaThresholdFilter.h"
+#include "include/effects/SkAlphaThresholdFilter.h"
 
-#include "SkBitmap.h"
-#include "SkColorSpaceXformer.h"
-#include "SkImageFilterPriv.h"
-#include "SkReadBuffer.h"
-#include "SkSpecialImage.h"
-#include "SkWriteBuffer.h"
-#include "SkRegion.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkRegion.h"
+#include "src/core/SkImageFilterPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "GrCaps.h"
-#include "GrColorSpaceXform.h"
-#include "GrContext.h"
-#include "GrFixedClip.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrTextureProxy.h"
-#include "effects/GrSimpleTextureEffect.h"
-#include "effects/GrAlphaThresholdFragmentProcessor.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrFixedClip.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/effects/generated/GrAlphaThresholdFragmentProcessor.h"
+#include "src/gpu/effects/generated/GrSimpleTextureEffect.h"
 #endif
 
 class SkAlphaThresholdFilterImpl : public SkImageFilter {
@@ -41,8 +40,6 @@ protected:
 
     sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source, const Context&,
                                         SkIPoint* offset) const override;
-
-    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override;
 
 #if SK_SUPPORT_GPU
     sk_sp<GrTextureProxy> createMaskTexture(GrRecordingContext*,
@@ -276,15 +273,4 @@ sk_sp<SkSpecialImage> SkAlphaThresholdFilterImpl::onFilterImage(SkSpecialImage* 
     offset->fY = bounds.top();
     return SkSpecialImage::MakeFromRaster(SkIRect::MakeWH(bounds.width(), bounds.height()),
                                           dst);
-}
-
-sk_sp<SkImageFilter> SkAlphaThresholdFilterImpl::onMakeColorSpace(SkColorSpaceXformer* xformer)
-const {
-    SkASSERT(1 == this->countInputs());
-    sk_sp<SkImageFilter> input = xformer->apply(this->getInput(0));
-    if (input.get() != this->getInput(0)) {
-        return SkAlphaThresholdFilter::Make(fRegion, fInnerThreshold, fOuterThreshold,
-                                            std::move(input), this->getCropRectIfSet());
-    }
-    return this->refMe();
 }

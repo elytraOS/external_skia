@@ -4,12 +4,22 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
+
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -61,7 +71,7 @@ protected:
             {SkPaint::kStrokeAndFill_Style, "Stroke And Fill"},
         };
 
-        SkFont font(sk_tool_utils::create_portable_typeface(), 15);
+        SkFont     font(ToolUtils::create_portable_typeface(), 15);
         const char title[] = "Empty Paths Drawn Into Rectangle Clips With "
                              "Indicated Style and Fill";
         canvas->drawString(title, 20.0f, 20.0f, font, SkPaint());
@@ -86,7 +96,7 @@ protected:
 
                 SkColor color = rand.nextU();
                 color = 0xff000000 | color; // force solid
-                color = sk_tool_utils::color_to_565(color);
+                color         = ToolUtils::color_to_565(color);
                 this->drawEmpty(canvas, color, rect,
                                 gStyles[style].fStyle, gFills[fill].fFill);
 
@@ -99,7 +109,7 @@ protected:
 
                 SkPaint labelPaint;
                 labelPaint.setColor(color);
-                SkFont labelFont(sk_tool_utils::create_portable_typeface(), 12);
+                SkFont labelFont(ToolUtils::create_portable_typeface(), 12);
                 canvas->drawString(gStyles[style].fName, 0, rect.height() + 15.0f,
                                    labelFont, labelPaint);
                 canvas->drawString(gFills[fill].fName, 0, rect.height() + 28.0f,

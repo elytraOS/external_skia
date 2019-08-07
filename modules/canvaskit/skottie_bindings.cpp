@@ -5,23 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkImage.h"
-#include "SkMakeUnique.h"
-#include "SkTypes.h"
-#include "SkString.h"
-#include "Skottie.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "modules/skottie/include/Skottie.h"
+#include "src/core/SkMakeUnique.h"
 
 #include <string>
 #include <vector>
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
-#include "WasmAliases.h"
+#include "modules/canvaskit/WasmAliases.h"
 
 #if SK_INCLUDE_MANAGED_SKOTTIE
-#include "SkottieProperty.h"
-#include "SkottieUtils.h"
+#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/utils/SkottieUtils.h"
 #endif // SK_INCLUDE_MANAGED_SKOTTIE
 
 using namespace emscripten;
@@ -51,7 +51,7 @@ public:
                                               const char name[]) const override {
         // For CK/Skottie we ignore paths and identify images based solely on name.
         if (auto data = this->findAsset(name)) {
-            return skottie_utils::MultiFrameImageAsset::Make(std::move(data));
+            return skottie_utils::MultiFrameImageAsset::Make(std::move(data), true /* predecode */);
         }
 
         return nullptr;
@@ -131,8 +131,8 @@ public:
         return props;
     }
 
-    bool setColor(const std::string& key, JSColor c) {
-        return fPropMgr->setColor(key, static_cast<SkColor>(c));
+    bool setColor(const std::string& key, SkColor c) {
+        return fPropMgr->setColor(key, c);
     }
 
     bool setOpacity(const std::string& key, float o) {

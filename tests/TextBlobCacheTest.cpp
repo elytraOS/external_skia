@@ -5,27 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "sk_tool_utils.h"
+#include "tools/ToolUtils.h"
 
-#include "SkCanvas.h"
-#include "SkFontMgr.h"
-#include "SkGlyphRun.h"
-#include "SkGraphics.h"
-#include "SkPaint.h"
-#include "SkPoint.h"
-#include "SkRandomScalerContext.h"
-#include "SkSurface.h"
-#include "SkTextBlob.h"
-#include "SkTypeface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "src/core/SkGlyphRun.h"
+#include "tools/fonts/RandomScalerContext.h"
 
 #ifdef SK_BUILD_FOR_WIN
-    #include "SkTypeface_win.h"
+    #include "include/ports/SkTypeface_win.h"
 #endif
 
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 
 static void draw(SkCanvas* canvas, int redraw, const SkTArray<sk_sp<SkTextBlob>>& blobs) {
     int yOffset = 0;
@@ -61,7 +61,8 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
         context->priv().testingOnly_setTextBlobCacheLimit(0);
     }
 
-    SkImageInfo info = SkImageInfo::Make(kWidth, kHeight, kN32_SkColorType, kPremul_SkAlphaType);
+    SkImageInfo info = SkImageInfo::Make(kWidth, kHeight, kRGBA_8888_SkColorType,
+                                         kPremul_SkAlphaType);
     auto surface(SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info, 0, &props));
     REPORTER_ASSERT(reporter, surface);
     if (!surface) {
@@ -129,7 +130,7 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
     }
 
     // create surface where LCD is impossible
-    info = SkImageInfo::MakeN32Premul(kWidth, kHeight);
+    info = SkImageInfo::Make(kWidth, kHeight, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
     SkSurfaceProps propsNoLCD(0, kUnknown_SkPixelGeometry);
     auto surfaceNoLCD(canvas->makeSurface(info, &propsNoLCD));
     REPORTER_ASSERT(reporter, surface);
@@ -155,18 +156,18 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
     draw(canvas, 1, blobs);
 }
 
-DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobCache, reporter, ctxInfo) {
+DEF_GPUTEST_FOR_MOCK_CONTEXT(TextBlobCache, reporter, ctxInfo) {
     text_blob_cache_inner(reporter, ctxInfo.grContext(), 1024, 256, 30, true, false);
 }
 
-DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobStressCache, reporter, ctxInfo) {
+DEF_GPUTEST_FOR_MOCK_CONTEXT(TextBlobStressCache, reporter, ctxInfo) {
     text_blob_cache_inner(reporter, ctxInfo.grContext(), 256, 256, 10, true, true);
 }
 
-DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobAbnormal, reporter, ctxInfo) {
+DEF_GPUTEST_FOR_MOCK_CONTEXT(TextBlobAbnormal, reporter, ctxInfo) {
     text_blob_cache_inner(reporter, ctxInfo.grContext(), 256, 256, 10, false, false);
 }
 
-DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobStressAbnormal, reporter, ctxInfo) {
+DEF_GPUTEST_FOR_MOCK_CONTEXT(TextBlobStressAbnormal, reporter, ctxInfo) {
     text_blob_cache_inner(reporter, ctxInfo.grContext(), 256, 256, 10, false, true);
 }

@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "GrCCStroker.h"
+#include "src/gpu/ccpr/GrCCStroker.h"
 
-#include "GrGpuCommandBuffer.h"
-#include "GrOnFlushResourceProvider.h"
-#include "SkPathPriv.h"
-#include "SkStrokeRec.h"
-#include "ccpr/GrCCCoverageProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLVertexGeoBuilder.h"
+#include "include/core/SkStrokeRec.h"
+#include "src/core/SkPathPriv.h"
+#include "src/gpu/GrGpuCommandBuffer.h"
+#include "src/gpu/GrOnFlushResourceProvider.h"
+#include "src/gpu/ccpr/GrCCCoverageProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
 static constexpr int kMaxNumLinearSegmentsLog2 = GrCCStrokeGeometry::kMaxNumLinearSegmentsLog2;
 using TriangleInstance = GrCCCoverageProcessor::TriPointInstance;
@@ -573,8 +573,8 @@ bool GrCCStroker::prepareToDraw(GrOnFlushResourceProvider* onFlushRP) {
     fBaseInstances[1].fStrokes[0] = fInstanceCounts[0]->fStrokes[0];
     int endLinearStrokesIdx = fBaseInstances[1].fStrokes[0] + fInstanceCounts[1]->fStrokes[0];
 
-    int cubicStrokesIdx = GR_CT_DIV_ROUND_UP(endLinearStrokesIdx * sizeof(LinearStrokeInstance),
-                                             sizeof(CubicStrokeInstance));
+    int cubicStrokesIdx = GrSizeDivRoundUp(endLinearStrokesIdx * sizeof(LinearStrokeInstance),
+                                           sizeof(CubicStrokeInstance));
     for (int i = 1; i <= kMaxNumLinearSegmentsLog2; ++i) {
         for (int j = 0; j < kNumScissorModes; ++j) {
             fBaseInstances[j].fStrokes[i] = cubicStrokesIdx;
@@ -582,16 +582,16 @@ bool GrCCStroker::prepareToDraw(GrOnFlushResourceProvider* onFlushRP) {
         }
     }
 
-    int trianglesIdx = GR_CT_DIV_ROUND_UP(cubicStrokesIdx * sizeof(CubicStrokeInstance),
-                                          sizeof(TriangleInstance));
+    int trianglesIdx = GrSizeDivRoundUp(cubicStrokesIdx * sizeof(CubicStrokeInstance),
+                                        sizeof(TriangleInstance));
     fBaseInstances[0].fTriangles = trianglesIdx;
     fBaseInstances[1].fTriangles =
             fBaseInstances[0].fTriangles + fInstanceCounts[0]->fTriangles;
     int endTrianglesIdx =
             fBaseInstances[1].fTriangles + fInstanceCounts[1]->fTriangles;
 
-    int conicsIdx = GR_CT_DIV_ROUND_UP(endTrianglesIdx * sizeof(TriangleInstance),
-                                       sizeof(ConicInstance));
+    int conicsIdx =
+            GrSizeDivRoundUp(endTrianglesIdx * sizeof(TriangleInstance), sizeof(ConicInstance));
     fBaseInstances[0].fConics = conicsIdx;
     fBaseInstances[1].fConics = fBaseInstances[0].fConics + fInstanceCounts[0]->fConics;
 
@@ -672,8 +672,8 @@ bool GrCCStroker::prepareToDraw(GrOnFlushResourceProvider* onFlushRP) {
     return true;
 }
 
-void GrCCStroker::drawStrokes(GrOpFlushState* flushState, BatchID batchID,
-                              const SkIRect& drawBounds) const {
+void GrCCStroker::drawStrokes(GrOpFlushState* flushState, GrCCCoverageProcessor* proc,
+                              BatchID batchID, const SkIRect& drawBounds) const {
     using PrimitiveType = GrCCCoverageProcessor::PrimitiveType;
     SkASSERT(fInstanceBuffer);
 
@@ -708,14 +708,14 @@ void GrCCStroker::drawStrokes(GrOpFlushState* flushState, BatchID batchID,
     }
 
     // Draw triangles.
-    GrCCCoverageProcessor triProc(flushState->resourceProvider(), PrimitiveType::kTriangles);
+    proc->reset(PrimitiveType::kTriangles, flushState->resourceProvider());
     this->drawConnectingGeometry<&InstanceTallies::fTriangles>(
-            flushState, pipeline, triProc, batch, startIndices, startScissorSubBatch, drawBounds);
+            flushState, pipeline, *proc, batch, startIndices, startScissorSubBatch, drawBounds);
 
     // Draw conics.
-    GrCCCoverageProcessor conicProc(flushState->resourceProvider(), PrimitiveType::kConics);
+    proc->reset(PrimitiveType::kConics, flushState->resourceProvider());
     this->drawConnectingGeometry<&InstanceTallies::fConics>(
-            flushState, pipeline, conicProc, batch, startIndices, startScissorSubBatch, drawBounds);
+            flushState, pipeline, *proc, batch, startIndices, startScissorSubBatch, drawBounds);
 }
 
 void GrCCStroker::appendStrokeMeshesToBuffers(int numSegmentsLog2, const Batch& batch,

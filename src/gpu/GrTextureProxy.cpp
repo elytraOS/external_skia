@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "GrTextureProxy.h"
-#include "GrTextureProxyPriv.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/gpu/GrTextureProxyPriv.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrDeferredProxyUploader.h"
-#include "GrProxyProvider.h"
-#include "GrSurfacePriv.h"
-#include "GrTexturePriv.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDeferredProxyUploader.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrTexturePriv.h"
 
 // Deferred version - with data
 GrTextureProxy::GrTextureProxy(const GrBackendFormat& format, const GrSurfaceDesc& srcDesc,
@@ -92,10 +92,10 @@ bool GrTextureProxy::instantiate(GrResourceProvider* resourceProvider) {
 }
 
 sk_sp<GrSurface> GrTextureProxy::createSurface(GrResourceProvider* resourceProvider) const {
-    sk_sp<GrSurface> surface= this->createSurfaceImpl(resourceProvider, 1,
-                                                      /* needsStencil = */ false,
-                                                      kNone_GrSurfaceFlags,
-                                                      fMipMapped);
+    sk_sp<GrSurface> surface = this->createSurfaceImpl(resourceProvider, 1,
+                                                       /* needsStencil = */ false,
+                                                       kNone_GrSurfaceFlags,
+                                                       fMipMapped);
     if (!surface) {
         return nullptr;
     }
@@ -150,7 +150,7 @@ void GrTextureProxy::setUniqueKey(GrProxyProvider* proxyProvider, const GrUnique
     SkASSERT(key.isValid());
     SkASSERT(!fUniqueKey.isValid()); // proxies can only ever get one uniqueKey
 
-    if (fTarget) {
+    if (fTarget && fSyncTargetKey) {
         if (!fTarget->getUniqueKey().isValid()) {
             fTarget->resourcePriv().setUniqueKey(key);
         }

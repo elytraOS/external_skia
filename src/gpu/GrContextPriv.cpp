@@ -5,31 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "GrContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 
-#include "GrClip.h"
-#include "GrContextThreadSafeProxy.h"
-#include "GrContextThreadSafeProxyPriv.h"
-#include "GrDrawingManager.h"
-#include "GrGpu.h"
-#include "GrMemoryPool.h"
-#include "GrRenderTargetContext.h"
-#include "GrSkSLFPFactoryCache.h"
-#include "GrSurfacePriv.h"
-#include "GrTexture.h"
-#include "GrTextureContext.h"
-#include "SkAutoPixmapStorage.h"
-#include "SkImage_Base.h"
-#include "SkImage_Gpu.h"
-#include "SkGr.h"
-#include "text/GrTextBlobCache.h"
+#include "include/gpu/GrContextThreadSafeProxy.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/GrSkSLFPFactoryCache.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextThreadSafeProxyPriv.h"
+#include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrTextureContext.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/text/GrTextBlobCache.h"
+#include "src/image/SkImage_Base.h"
+#include "src/image/SkImage_Gpu.h"
 
-#define ASSERT_OWNED_PROXY_PRIV(P) \
+#define ASSERT_OWNED_PROXY(P) \
     SkASSERT(!(P) || !((P)->peekTexture()) || (P)->peekTexture()->getContext() == fContext)
-#define ASSERT_SINGLE_OWNER_PRIV \
+#define ASSERT_SINGLE_OWNER \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fContext->singleOwner());)
-#define RETURN_IF_ABANDONED_PRIV if (fContext->abandoned()) { return; }
-#define RETURN_FALSE_IF_ABANDONED_PRIV if (fContext->abandoned()) { return false; }
+#define RETURN_VALUE_IF_ABANDONED(value) if (fContext->abandoned()) { return (value); }
+#define RETURN_IF_ABANDONED RETURN_VALUE_IF_ABANDONED(void)
 
 sk_sp<const GrCaps> GrContextPriv::refCaps() const {
     return fContext->refCaps();
@@ -103,7 +103,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContextWithF
 sk_sp<GrTextureContext> GrContextPriv::makeBackendTextureContext(const GrBackendTexture& tex,
                                                                  GrSurfaceOrigin origin,
                                                                  sk_sp<SkColorSpace> colorSpace) {
-    ASSERT_SINGLE_OWNER_PRIV
+    ASSERT_SINGLE_OWNER
 
     sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendTexture(
             tex, origin, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, kRW_GrIOType);
@@ -122,7 +122,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureRenderTargetContex
                                                                    const SkSurfaceProps* props,
                                                                    ReleaseProc releaseProc,
                                                                    ReleaseContext releaseCtx) {
-    ASSERT_SINGLE_OWNER_PRIV
+    ASSERT_SINGLE_OWNER
     SkASSERT(sampleCnt > 0);
 
     sk_sp<GrTextureProxy> proxy(this->proxyProvider()->wrapRenderableBackendTexture(
@@ -143,7 +143,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendRenderTargetRenderTargetC
                                                 const SkSurfaceProps* surfaceProps,
                                                 ReleaseProc releaseProc,
                                                 ReleaseContext releaseCtx) {
-    ASSERT_SINGLE_OWNER_PRIV
+    ASSERT_SINGLE_OWNER
 
     sk_sp<GrSurfaceProxy> proxy = this->proxyProvider()->wrapBackendRenderTarget(
             backendRT, origin, releaseProc, releaseCtx);
@@ -162,7 +162,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureAsRenderTargetRend
                                                      int sampleCnt,
                                                      sk_sp<SkColorSpace> colorSpace,
                                                      const SkSurfaceProps* props) {
-    ASSERT_SINGLE_OWNER_PRIV
+    ASSERT_SINGLE_OWNER
     SkASSERT(sampleCnt > 0);
     sk_sp<GrSurfaceProxy> proxy(
             this->proxyProvider()->wrapBackendTextureAsRenderTarget(tex, origin, sampleCnt));
@@ -177,7 +177,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureAsRenderTargetRend
 
 sk_sp<GrRenderTargetContext> GrContextPriv::makeVulkanSecondaryCBRenderTargetContext(
         const SkImageInfo& imageInfo, const GrVkDrawableInfo& vkInfo, const SkSurfaceProps* props) {
-    ASSERT_SINGLE_OWNER_PRIV
+    ASSERT_SINGLE_OWNER
     sk_sp<GrSurfaceProxy> proxy(
             this->proxyProvider()->wrapVulkanSecondaryCBAsRenderTarget(imageInfo, vkInfo));
     if (!proxy) {
@@ -189,43 +189,23 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeVulkanSecondaryCBRenderTargetCon
                                                            props);
 }
 
-void GrContextPriv::flush(GrSurfaceProxy* proxy) {
-    ASSERT_SINGLE_OWNER_PRIV
-    RETURN_IF_ABANDONED_PRIV
-    ASSERT_OWNED_PROXY_PRIV(proxy);
-
-    fContext->drawingManager()->flush(proxy, SkSurface::BackendSurfaceAccess::kNoAccess,
-                                      kNone_GrFlushFlags, 0, nullptr, nullptr, nullptr);
-}
-
-void GrContextPriv::flushSurfaceWrites(GrSurfaceProxy* proxy) {
-    ASSERT_SINGLE_OWNER_PRIV
-    RETURN_IF_ABANDONED_PRIV
-    SkASSERT(proxy);
-    ASSERT_OWNED_PROXY_PRIV(proxy);
-    if (proxy->priv().hasPendingWrite()) {
-        this->flush(proxy);
+GrSemaphoresSubmitted GrContextPriv::flushSurfaces(GrSurfaceProxy* proxies[], int numProxies,
+                                                   const GrFlushInfo& info) {
+    ASSERT_SINGLE_OWNER
+    RETURN_VALUE_IF_ABANDONED(GrSemaphoresSubmitted::kNo)
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrContextPriv", "flushSurfaces", fContext);
+    SkASSERT(numProxies >= 0);
+    SkASSERT(!numProxies || proxies);
+    for (int i = 0; i < numProxies; ++i) {
+        SkASSERT(proxies[i]);
+        ASSERT_OWNED_PROXY(proxies[i]);
     }
+    return fContext->drawingManager()->flushSurfaces(
+            proxies, numProxies, SkSurface::BackendSurfaceAccess::kNoAccess, info);
 }
 
-void GrContextPriv::flushSurfaceIO(GrSurfaceProxy* proxy) {
-    ASSERT_SINGLE_OWNER_PRIV
-    RETURN_IF_ABANDONED_PRIV
-    SkASSERT(proxy);
-    ASSERT_OWNED_PROXY_PRIV(proxy);
-    if (proxy->priv().hasPendingIO()) {
-        this->flush(proxy);
-    }
-}
-
-void GrContextPriv::prepareSurfaceForExternalIO(GrSurfaceProxy* proxy) {
-    ASSERT_SINGLE_OWNER_PRIV
-    RETURN_IF_ABANDONED_PRIV
-    SkASSERT(proxy);
-    ASSERT_OWNED_PROXY_PRIV(proxy);
-    fContext->drawingManager()->prepareSurfaceForExternalIO(proxy,
-            SkSurface::BackendSurfaceAccess::kNoAccess, kNone_GrFlushFlags, 0, nullptr,
-            nullptr, nullptr);
+void GrContextPriv::flushSurface(GrSurfaceProxy* proxy) {
+    this->flushSurfaces(proxy ? &proxy : nullptr, proxy ? 1 : 0, {});
 }
 
 static bool valid_premul_color_type(GrColorType ct) {
@@ -298,24 +278,20 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
                                       int height, GrColorType dstColorType,
                                       SkColorSpace* dstColorSpace, void* buffer, size_t rowBytes,
                                       uint32_t pixelOpsFlags) {
-    ASSERT_SINGLE_OWNER_PRIV
-    RETURN_FALSE_IF_ABANDONED_PRIV
+    ASSERT_SINGLE_OWNER
+    RETURN_VALUE_IF_ABANDONED(false)
     SkASSERT(src);
     SkASSERT(buffer);
-    ASSERT_OWNED_PROXY_PRIV(src->asSurfaceProxy());
+    ASSERT_OWNED_PROXY(src->asSurfaceProxy());
     GR_CREATE_TRACE_MARKER_CONTEXT("GrContextPriv", "readSurfacePixels", fContext);
 
-    SkASSERT(!(pixelOpsFlags & kDontFlush_PixelOpsFlag));
-    if (pixelOpsFlags & kDontFlush_PixelOpsFlag) {
-        return false;
-    }
+    GrSurfaceProxy* srcProxy = src->asSurfaceProxy();
 
     // MDB TODO: delay this instantiation until later in the method
-    if (!src->asSurfaceProxy()->instantiate(this->resourceProvider())) {
+    if (!srcProxy->instantiate(this->resourceProvider())) {
         return false;
     }
 
-    GrSurfaceProxy* srcProxy = src->asSurfaceProxy();
     GrSurface* srcSurface = srcProxy->peekSurface();
 
     if (!GrSurfacePriv::AdjustReadPixelParams(srcSurface->width(), srcSurface->height(),
@@ -331,6 +307,9 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
         return false;
     }
 
+    bool needColorConversion =
+            SkColorSpaceXformSteps::Required(src->colorSpaceInfo().colorSpace(), dstColorSpace);
+
     // This is the getImageData equivalent to the canvas2D putImageData fast path. We probably don't
     // care so much about getImageData performance. However, in order to ensure putImageData/
     // getImageData in "legacy" mode are round-trippable we use the GPU to do the complementary
@@ -338,7 +317,7 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
     // fContext->vaildaPMUPMConversionExists()).
     bool canvas2DFastPath =
             unpremul &&
-            !src->colorSpaceInfo().colorSpace() &&
+            !needColorConversion &&
             (GrColorType::kRGBA_8888 == dstColorType || GrColorType::kBGRA_8888 == dstColorType) &&
             SkToBool(srcProxy->asTextureProxy()) &&
             (srcProxy->config() == kRGBA_8888_GrPixelConfig ||
@@ -349,8 +328,6 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
     if (!fContext->priv().caps()->surfaceSupportsReadPixels(srcSurface) ||
         canvas2DFastPath) {
         GrSurfaceDesc desc;
-        desc.fFlags = canvas2DFastPath ? kRenderTarget_GrSurfaceFlag : kNone_GrSurfaceFlags;
-        desc.fConfig = canvas2DFastPath ? kRGBA_8888_GrPixelConfig : srcProxy->config();
         desc.fWidth = width;
         desc.fHeight = height;
         desc.fSampleCnt = 1;
@@ -412,7 +389,7 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
                                        dstColorSpace, buffer, rowBytes, flags);
     }
 
-    bool convert = unpremul;
+    bool convert = unpremul || needColorConversion;
 
     bool flip = srcProxy->origin() == kBottomLeft_GrSurfaceOrigin;
     if (flip) {
@@ -422,12 +399,6 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
     GrColorType allowedColorType = fContext->priv().caps()->supportedReadPixelsColorType(
             srcProxy->config(), dstColorType);
     convert = convert || (dstColorType != allowedColorType);
-
-    if (!src->colorSpaceInfo().colorSpace()) {
-        // "Legacy" mode - no color space conversions.
-        dstColorSpace = nullptr;
-    }
-    convert = convert || !SkColorSpace::Equals(dstColorSpace, src->colorSpaceInfo().colorSpace());
 
     SkAutoPixmapStorage tempPixmap;
     SkPixmap finalPixmap;
@@ -461,9 +432,7 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
         sk_bzero(buffer, tempPixmap.computeByteSize());
     }
 
-    if (srcSurface->surfacePriv().hasPendingWrite()) {
-        this->flush(nullptr);  // MDB TODO: tighten this
-    }
+    this->flushSurface(srcProxy);
 
     if (!fContext->fGpu->readPixels(srcSurface, left, top, width, height, allowedColorType, buffer,
                                     rowBytes)) {
@@ -493,22 +462,22 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
                                        int height, GrColorType srcColorType,
                                        SkColorSpace* srcColorSpace, const void* buffer,
                                        size_t rowBytes, uint32_t pixelOpsFlags) {
-    ASSERT_SINGLE_OWNER_PRIV
-    RETURN_FALSE_IF_ABANDONED_PRIV
+    ASSERT_SINGLE_OWNER
+    RETURN_VALUE_IF_ABANDONED(false)
     SkASSERT(dst);
     SkASSERT(buffer);
-    ASSERT_OWNED_PROXY_PRIV(dst->asSurfaceProxy());
+    ASSERT_OWNED_PROXY(dst->asSurfaceProxy());
     GR_CREATE_TRACE_MARKER_CONTEXT("GrContextPriv", "writeSurfacePixels", fContext);
 
     if (GrColorType::kUnknown == srcColorType) {
         return false;
     }
 
-    if (!dst->asSurfaceProxy()->instantiate(this->resourceProvider())) {
+    GrSurfaceProxy* dstProxy = dst->asSurfaceProxy();
+    if (!dstProxy->instantiate(this->resourceProvider())) {
         return false;
     }
 
-    GrSurfaceProxy* dstProxy = dst->asSurfaceProxy();
     GrSurface* dstSurface = dstProxy->peekSurface();
 
     if (!GrSurfacePriv::AdjustWritePixelParams(dstSurface->width(), dstSurface->height(),
@@ -520,29 +489,24 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
     // TODO: Make GrSurfaceContext know its alpha type and pass src buffer's alpha type.
     bool premul = SkToBool(kUnpremul_PixelOpsFlag & pixelOpsFlags);
 
+    bool needColorConversion =
+            SkColorSpaceXformSteps::Required(srcColorSpace, dst->colorSpaceInfo().colorSpace());
+
     // For canvas2D putImageData performance we have a special code path for unpremul RGBA_8888 srcs
     // that are premultiplied on the GPU. This is kept as narrow as possible for now.
     bool canvas2DFastPath =
             !fContext->priv().caps()->avoidWritePixelsFastPath() &&
             premul &&
-            !dst->colorSpaceInfo().colorSpace() &&
+            !needColorConversion &&
             (srcColorType == GrColorType::kRGBA_8888 || srcColorType == GrColorType::kBGRA_8888) &&
             SkToBool(dst->asRenderTargetContext()) &&
             (dstProxy->config() == kRGBA_8888_GrPixelConfig ||
              dstProxy->config() == kBGRA_8888_GrPixelConfig) &&
-            !(pixelOpsFlags & kDontFlush_PixelOpsFlag) &&
             fContext->priv().caps()->isConfigTexturable(kRGBA_8888_GrPixelConfig) &&
             fContext->validPMUPMConversionExists();
 
     const GrCaps* caps = this->caps();
-    if (!caps->surfaceSupportsWritePixels(dstSurface) ||
-        canvas2DFastPath) {
-        // We don't expect callers that are skipping flushes to require an intermediate draw.
-        SkASSERT(!(pixelOpsFlags & kDontFlush_PixelOpsFlag));
-        if (pixelOpsFlags & kDontFlush_PixelOpsFlag) {
-            return false;
-        }
-
+    if (!caps->surfaceSupportsWritePixels(dstSurface) || canvas2DFastPath) {
         GrSurfaceDesc desc;
         desc.fWidth = width;
         desc.fHeight = height;
@@ -596,13 +560,16 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
             dst->asRenderTargetContext()->fillRectToRect(
                     GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(),
                     SkRect::MakeXYWH(left, top, width, height), SkRect::MakeWH(width, height));
-            return true;
         } else {
-            return dst->copy(tempProxy.get(), SkIRect::MakeWH(width, height), {left, top});
+            if (!dst->copy(tempProxy.get(), SkIRect::MakeWH(width, height), {left, top})) {
+                return false;
+            }
         }
+
+        return true;
     }
 
-    bool convert = premul;
+    bool convert = premul || needColorConversion;
 
     if (!valid_pixel_conversion(srcColorType, dstProxy->config(), premul)) {
         return false;
@@ -611,12 +578,6 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
     GrColorType allowedColorType = fContext->priv().caps()->supportedWritePixelsColorType(
             dstProxy->config(), srcColorType);
     convert = convert || (srcColorType != allowedColorType);
-
-    if (!dst->colorSpaceInfo().colorSpace()) {
-        // "Legacy" mode - no color space conversions.
-        srcColorSpace = nullptr;
-    }
-    convert = convert || !SkColorSpace::Equals(srcColorSpace, dst->colorSpaceInfo().colorSpace());
 
     std::unique_ptr<char[]> tempBuffer;
     if (convert) {
@@ -667,9 +628,12 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst, int left, int top,
         top = dstSurface->height() - top - height;
     }
 
-    if (!(kDontFlush_PixelOpsFlag & pixelOpsFlags) && dstSurface->surfacePriv().hasPendingIO()) {
-        this->flush(nullptr);  // MDB TODO: tighten this
-    }
+    // On platforms that prefer flushes over VRAM use (i.e., ANGLE) we're better off forcing a
+    // complete flush here. On platforms that prefer VRAM use over flushes we're better off
+    // giving the drawing manager the chance of skipping the flush (i.e., by passing in the
+    // destination proxy)
+    // TODO: should this policy decision just be moved into the drawing manager?
+    this->flushSurface(caps->preferVRAMUseOverFlushes() ? dstProxy : nullptr);
 
     return this->getGpu()->writePixels(dstSurface, left, top, width, height, srcColorType, buffer,
                                        rowBytes);
@@ -686,7 +650,7 @@ void GrContextPriv::copyOpListsFromDDL(const SkDeferredDisplayList* ddl,
 
 //////////////////////////////////////////////////////////////////////////////
 #ifdef SK_ENABLE_DUMP_GPU
-#include "SkJSONWriter.h"
+#include "src/utils/SkJSONWriter.h"
 SkString GrContextPriv::dump() const {
     SkDynamicMemoryWStream stream;
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
@@ -801,3 +765,47 @@ void GrContextPriv::testingOnly_flushAndRemoveOnFlushCallbackObject(GrOnFlushCal
 }
 #endif
 
+//////////////////////////////////////////////////////////////////////////////
+GrBackendTexture GrContextPriv::createBackendTexture(int width, int height,
+                                                     GrBackendFormat backendFormat,
+                                                     const SkColor4f& color,
+                                                     GrMipMapped mipMapped,
+                                                     GrRenderable renderable) {
+    if (!fContext->asDirectContext()) {
+        return GrBackendTexture();
+    }
+
+    if (this->abandoned()) {
+        return GrBackendTexture();
+    }
+
+    if (!backendFormat.isValid()) {
+        return GrBackendTexture();
+    }
+
+    GrGpu* gpu = fContext->fGpu.get();
+
+    return gpu->createBackendTexture(width, height, backendFormat,
+                                     mipMapped, renderable, nullptr, 0, color);
+}
+
+GrBackendTexture GrContextPriv::createBackendTexture(int width, int height,
+                                                     SkColorType colorType,
+                                                     const SkColor4f& color,
+                                                     GrMipMapped mipMapped,
+                                                     GrRenderable renderable) {
+    if (!fContext->asDirectContext()) {
+        return GrBackendTexture();
+    }
+
+    if (this->abandoned()) {
+        return GrBackendTexture();
+    }
+
+    GrBackendFormat format = fContext->caps()->getBackendFormatFromColorType(colorType);
+    if (!format.isValid()) {
+        return GrBackendTexture();
+    }
+
+    return this->createBackendTexture(width, height, format, color, mipMapped, renderable);
+}

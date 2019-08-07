@@ -5,11 +5,11 @@
 * found in the LICENSE file.
 */
 
-#include "Window.h"
+#include "tools/sk_app/Window.h"
 
-#include "SkSurface.h"
-#include "SkCanvas.h"
-#include "WindowContext.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkSurface.h"
+#include "tools/sk_app/WindowContext.h"
 
 namespace sk_app {
 
@@ -70,10 +70,10 @@ void Window::onPaint() {
         return;
     }
     markInvalProcessed();
+    this->visitLayers([](Layer* layer) { layer->onPrePaint(); });
     sk_sp<SkSurface> backbuffer = fWindowContext->getBackbufferSurface();
     if (backbuffer) {
         // draw into the canvas of this surface
-        this->visitLayers([](Layer* layer) { layer->onPrePaint(); });
         this->visitLayers([=](Layer* layer) { layer->onPaint(backbuffer.get()); });
 
         backbuffer->flush();

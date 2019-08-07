@@ -5,16 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
-
-#include "Resources.h"
-#include "SkGradientShader.h"
-#include "SkStream.h"
-#include "SkTypeface.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 static void setTypeface(SkFont* font, const char name[], SkFontStyle style) {
-    font->setTypeface(sk_tool_utils::create_portable_typeface(name, style));
+    font->setTypeface(ToolUtils::create_portable_typeface(name, style));
 }
 
 static SkSize computeSize(const SkBitmap& bm, const SkMatrix& mat) {
@@ -170,7 +180,7 @@ public:
           }
           if (fConvertToG8) {
               SkBitmap tmp;
-              sk_tool_utils::copy_to_g8(&tmp, fBM);
+              ToolUtils::copy_to_g8(&tmp, fBM);
               fBM = tmp;
           }
       }
@@ -205,7 +215,7 @@ protected:
 
         if (fConvertToG8) {
             SkBitmap tmp;
-            sk_tool_utils::copy_to_g8(&tmp, fBM);
+            ToolUtils::copy_to_g8(&tmp, fBM);
             fBM = tmp;
         }
       }

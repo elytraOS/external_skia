@@ -5,40 +5,38 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkBitmapCache.h"
-#include "SkCachedData.h"
-#include "SkCanvas.h"
-#include "SkColorSpacePriv.h"
-#include "SkData.h"
-#include "SkImageEncoder.h"
-#include "SkImageFilter.h"
-#include "SkImageFilterCache.h"
-#include "SkImageGenerator.h"
-#include "SkImagePriv.h"
-#include "SkImageShader.h"
-#include "SkImage_Base.h"
-#include "SkNextID.h"
-#include "SkPicture.h"
-#include "SkReadPixelsRec.h"
-#include "SkSpecialImage.h"
-#include "SkString.h"
-#include "SkSurface.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkBitmapCache.h"
+#include "src/core/SkCachedData.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkImageFilterCache.h"
+#include "src/core/SkImagePriv.h"
+#include "src/core/SkNextID.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/image/SkImage_Base.h"
+#include "src/image/SkReadPixelsRec.h"
+#include "src/shaders/SkImageShader.h"
 
 #if SK_SUPPORT_GPU
-#include "GrContext.h"
-#include "GrTexture.h"
-#include "SkImage_Gpu.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
+#include "src/image/SkImage_Gpu.h"
 #endif
-#include "GrBackendSurface.h"
+#include "include/gpu/GrBackendSurface.h"
 
-SkImage::SkImage(int width, int height, uint32_t uniqueID)
-    : fWidth(width)
-    , fHeight(height)
-    , fUniqueID(kNeedNewImageUniqueID == uniqueID ? SkNextID::ImageID() : uniqueID)
-{
-    SkASSERT(width > 0);
-    SkASSERT(height > 0);
+SkImage::SkImage(const SkImageInfo& info, uint32_t uniqueID)
+        : fInfo(info)
+        , fUniqueID(kNeedNewImageUniqueID == uniqueID ? SkNextID::ImageID() : uniqueID) {
+    SkASSERT(info.width() > 0);
+    SkASSERT(info.height() > 0);
 }
 
 bool SkImage::peekPixels(SkPixmap* pm) const {
@@ -49,8 +47,8 @@ bool SkImage::peekPixels(SkPixmap* pm) const {
     return as_IB(this)->onPeekPixels(pm);
 }
 
-bool SkImage::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
-                           int srcX, int srcY, CachingHint chint) const {
+bool SkImage::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes, int srcX,
+                         int srcY, CachingHint chint) const {
     return as_IB(this)->onReadPixels(dstInfo, dstPixels, dstRowBytes, srcX, srcY, chint);
 }
 
@@ -76,25 +74,17 @@ bool SkImage::scalePixels(const SkPixmap& dst, SkFilterQuality quality, CachingH
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkColorType SkImage::colorType() const {
-    return as_IB(this)->onImageInfo().colorType();
-}
+SkColorType SkImage::colorType() const { return fInfo.colorType(); }
 
-SkAlphaType SkImage::alphaType() const {
-    return as_IB(this)->onImageInfo().alphaType();
-}
+SkAlphaType SkImage::alphaType() const { return fInfo.alphaType(); }
 
-SkColorSpace* SkImage::colorSpace() const {
-    return as_IB(this)->onImageInfo().colorSpace();
-}
+SkColorSpace* SkImage::colorSpace() const { return fInfo.colorSpace(); }
 
-sk_sp<SkColorSpace> SkImage::refColorSpace() const {
-    return as_IB(this)->onImageInfo().refColorSpace();
-}
+sk_sp<SkColorSpace> SkImage::refColorSpace() const { return fInfo.refColorSpace(); }
 
-sk_sp<SkShader> SkImage::makeShader(SkShader::TileMode tileX, SkShader::TileMode tileY,
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkMatrix* localMatrix) const {
-    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tileX, tileY, localMatrix);
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, localMatrix);
 }
 
 sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
@@ -170,6 +160,12 @@ bool SkImage::isValid(GrContext* context) const {
     return as_IB(this)->onIsValid(context);
 }
 
+GrSemaphoresSubmitted SkImage::flush(GrContext* context, const GrFlushInfo& flushInfo) {
+    return as_IB(this)->onFlush(context, flushInfo);
+}
+
+void SkImage::flush(GrContext* context) { as_IB(this)->onFlush(context, {}); }
+
 #else
 
 GrTexture* SkImage::getTexture() const { return nullptr; }
@@ -188,14 +184,18 @@ bool SkImage::isValid(GrContext* context) const {
     return as_IB(this)->onIsValid(context);
 }
 
+GrSemaphoresSubmitted SkImage::flush(GrContext*, const GrFlushInfo&) {
+    return GrSemaphoresSubmitted::kNo;
+}
+
+void SkImage::flush(GrContext*) {}
+
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkImage_Base::SkImage_Base(int width, int height, uint32_t uniqueID)
-    : INHERITED(width, height, uniqueID)
-    , fAddedToRasterCache(false)
-{}
+SkImage_Base::SkImage_Base(const SkImageInfo& info, uint32_t uniqueID)
+        : INHERITED(info, uniqueID), fAddedToRasterCache(false) {}
 
 SkImage_Base::~SkImage_Base() {
     if (fAddedToRasterCache.load()) {
@@ -234,7 +234,7 @@ sk_sp<SkCachedData> SkImage_Base::getPlanes(SkYUVASizeInfo*, SkYUVAIndex[4],
 bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap) const {
     // As the base-class, all we can do is make a copy (regardless of mode).
     // Subclasses that want to be more optimal should override.
-    SkImageInfo info = this->onImageInfo().makeColorType(kN32_SkColorType).makeColorSpace(nullptr);
+    SkImageInfo info = fInfo.makeColorType(kN32_SkColorType).makeColorSpace(nullptr);
     if (!bitmap->tryAllocPixels(info)) {
         return false;
     }
@@ -282,8 +282,7 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrContext* grContext,
 
     sk_sp<SkImageFilterCache> cache(
         SkImageFilterCache::Create(SkImageFilterCache::kDefaultTransientSize));
-    SkImageFilter::OutputProperties outputProperties(as_IB(this)->onImageInfo().colorType(),
-                                                     as_IB(this)->onImageInfo().colorSpace());
+    SkImageFilter::OutputProperties outputProperties(fInfo.colorType(), fInfo.colorSpace());
     SkImageFilter::Context context(SkMatrix::I(), clipBounds, cache.get(), outputProperties);
 
     sk_sp<SkSpecialImage> result = filter->filterImage(srcSpecialImage.get(), context, offset);
@@ -307,9 +306,7 @@ bool SkImage::isLazyGenerated() const {
     return as_IB(this)->onIsLazyGenerated();
 }
 
-bool SkImage::isAlphaOnly() const {
-    return as_IB(this)->onImageInfo().colorType() == kAlpha_8_SkColorType;
-}
+bool SkImage::isAlphaOnly() const { return SkColorTypeIsAlphaOnly(fInfo.colorType()); }
 
 sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target) const {
     if (!target) {
@@ -374,20 +371,19 @@ sk_sp<SkImage> SkImage::makeRasterImage() const {
         return sk_ref_sp(const_cast<SkImage*>(this));
     }
 
-    const SkImageInfo info = as_IB(this)->onImageInfo();
-    const size_t rowBytes = info.minRowBytes();
-    size_t size = info.computeByteSize(rowBytes);
+    const size_t rowBytes = fInfo.minRowBytes();
+    size_t size = fInfo.computeByteSize(rowBytes);
     if (SkImageInfo::ByteSizeOverflowed(size)) {
         return nullptr;
     }
 
     sk_sp<SkData> data = SkData::MakeUninitialized(size);
-    pm = { info.makeColorSpace(nullptr), data->writable_data(), info.minRowBytes() };
+    pm = {fInfo.makeColorSpace(nullptr), data->writable_data(), fInfo.minRowBytes()};
     if (!this->readPixels(pm, 0, 0)) {
         return nullptr;
     }
 
-    return SkImage::MakeRasterData(info, std::move(data), rowBytes);
+    return SkImage::MakeRasterData(fInfo, std::move(data), rowBytes);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -498,7 +494,7 @@ SkIRect SkImage_getSubset(const SkImage* image) {
 sk_sp<SkImage> SkImageMakeRasterCopyAndAssignColorSpace(const SkImage* src,
                                                         SkColorSpace* colorSpace) {
     // Read the pixels out of the source image, with no conversion
-    SkImageInfo info = as_IB(src)->onImageInfo();
+    const SkImageInfo& info = src->imageInfo();
     if (kUnknown_SkColorType == info.colorType()) {
         SkDEBUGFAIL("Unexpected color type");
         return nullptr;

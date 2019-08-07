@@ -5,26 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrContextFactory.h"
-#include "GrGpu.h"
-#include "GrGpuResourceCacheAccess.h"
-#include "GrGpuResourcePriv.h"
-#include "GrProxyProvider.h"
-#include "GrRenderTargetPriv.h"
-#include "GrResourceCache.h"
-#include "GrResourceProvider.h"
-#include "GrTexture.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrGpuResourceCacheAccess.h"
+#include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "tools/gpu/GrContextFactory.h"
 
-#include "SkCanvas.h"
-#include "SkGr.h"
-#include "SkMessageBus.h"
-#include "SkMipMap.h"
-#include "SkSurface.h"
-#include "Test.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkMessageBus.h"
+#include "src/core/SkMipMap.h"
+#include "src/gpu/SkGr.h"
+#include "tests/Test.h"
 
 #include <thread>
 
@@ -103,7 +103,8 @@ static sk_sp<GrRenderTarget> create_RT_with_SB(GrResourceProvider* provider,
     desc.fConfig = kRGBA_8888_GrPixelConfig;
     desc.fSampleCnt = sampleCount;
 
-    sk_sp<GrTexture> tex(provider->createTexture(desc, budgeted));
+    sk_sp<GrTexture> tex(provider->createTexture(desc, budgeted,
+                                                 GrResourceProvider::Flags::kNoPendingIO));
     if (!tex || !tex->asRenderTarget()) {
         return nullptr;
     }
@@ -208,12 +209,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, ctxI
     static const int kW = 100;
     static const int kH = 100;
 
-    backendTextures[0] = gpu->createTestingOnlyBackendTexture(nullptr, kW, kH,
-                                                              GrColorType::kRGBA_8888,
-                                                              false, GrMipMapped::kNo);
-    backendTextures[1] = gpu->createTestingOnlyBackendTexture(nullptr, kW, kH,
-                                                              GrColorType::kRGBA_8888,
-                                                              false, GrMipMapped::kNo);
+    backendTextures[0] = context->createBackendTexture(kW, kH, kRGBA_8888_SkColorType,
+                                                       GrMipMapped::kNo, GrRenderable::kNo);
+    backendTextures[1] = context->createBackendTexture(kW, kH, kRGBA_8888_SkColorType,
+                                                       GrMipMapped::kNo, GrRenderable::kNo);
     REPORTER_ASSERT(reporter, backendTextures[0].isValid());
     REPORTER_ASSERT(reporter, backendTextures[1].isValid());
     if (!backendTextures[0].isValid() || !backendTextures[1].isValid()) {
@@ -245,10 +244,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, ctxI
     REPORTER_ASSERT(reporter, !adoptedIsAlive);
 
     if (borrowedIsAlive) {
-        gpu->deleteTestingOnlyBackendTexture(backendTextures[0]);
+        context->deleteBackendTexture(backendTextures[0]);
     }
     if (adoptedIsAlive) {
-        gpu->deleteTestingOnlyBackendTexture(backendTextures[1]);
+        context->deleteBackendTexture(backendTextures[1]);
     }
 
     context->resetContext();
@@ -1624,7 +1623,8 @@ static sk_sp<GrTexture> make_normal_texture(GrResourceProvider* provider,
     desc.fConfig = kRGBA_8888_GrPixelConfig;
     desc.fSampleCnt = sampleCnt;
 
-    return provider->createTexture(desc, SkBudgeted::kYes);
+    return provider->createTexture(desc, SkBudgeted::kYes,
+                                   GrResourceProvider::Flags::kNoPendingIO);
 }
 
 static sk_sp<GrTextureProxy> make_mipmap_proxy(GrProxyProvider* proxyProvider,
@@ -1708,3 +1708,62 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GPUMemorySize, reporter, ctxInfo) {
         REPORTER_ASSERT(reporter, kSize*kSize*4+(kSize*kSize*4)/3 == size);
     }
 }
+
+#if GR_GPU_STATS
+DEF_GPUTEST_FOR_MOCK_CONTEXT(OverbudgetFlush, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
+    context->setResourceCacheLimits(1, 1);
+
+    // Helper that determines if cache is overbudget.
+    auto overbudget = [context] {
+         int uNum;
+         size_t uSize;
+         context->getResourceCacheUsage(&uNum, &uSize);
+         int bNum;
+         size_t bSize;
+         context->getResourceCacheLimits(&bNum, &bSize);
+         return uNum > bNum || uSize > bSize;
+    };
+
+    // Helper that does a trivial draw to a surface.
+    auto drawToSurf = [](SkSurface* surf) {
+        surf->getCanvas()->drawRect(SkRect::MakeWH(1,1), SkPaint());
+    };
+
+    // Helper that checks whether a flush has occurred between calls.
+    int baseFlushCount = 0;
+    auto getFlushCountDelta = [context, &baseFlushCount]() {
+        int cur = context->priv().getGpu()->stats()->numFinishFlushes();
+        int delta = cur - baseFlushCount;
+        baseFlushCount = cur;
+        return delta;
+    };
+
+    auto info = SkImageInfo::Make(10, 10, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    auto surf1 = SkSurface::MakeRenderTarget(context, SkBudgeted::kYes, info, 1, nullptr);
+    auto surf2 = SkSurface::MakeRenderTarget(context, SkBudgeted::kYes, info, 1, nullptr);
+
+    drawToSurf(surf1.get());
+    drawToSurf(surf2.get());
+
+    // Flush each surface once to ensure that their backing stores are allocated.
+    surf1->flush();
+    surf2->flush();
+    REPORTER_ASSERT(reporter, overbudget());
+    getFlushCountDelta();
+
+    // Nothing should be purgeable so drawing to either surface doesn't cause a flush.
+    drawToSurf(surf1.get());
+    REPORTER_ASSERT(reporter, !getFlushCountDelta());
+    drawToSurf(surf2.get());
+    REPORTER_ASSERT(reporter, !getFlushCountDelta());
+    REPORTER_ASSERT(reporter, overbudget());
+
+    // Make surf1 purgeable. Drawing to surf2 should flush.
+    surf1->flush();
+    surf1.reset();
+    drawToSurf(surf2.get());
+    REPORTER_ASSERT(reporter, getFlushCountDelta());
+    REPORTER_ASSERT(reporter, overbudget());
+}
+#endif

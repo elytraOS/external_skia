@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
+#include "samplecode/Sample.h"
 
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkFont.h"
-#include "SkImage.h"
-#include "SkPath.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkSurface.h"
+#include "tools/timer/AnimTimer.h"
 
 namespace skiagm {
 
@@ -214,14 +214,14 @@ public:
         blit.setFilterQuality(scale > 1.f ? kNone_SkFilterQuality : kMedium_SkFilterQuality);
         if (debugMode) {
             // Makes anything that's > 1/255 alpha fully opaque and sets color to medium green.
-            static constexpr SkScalar kFilter[] = {
-                0.f, 0.f, 0.f, 0.f, 16.f,
-                0.f, 0.f, 0.f, 0.f, 200.f,
-                0.f, 0.f, 0.f, 0.f, 16.f,
+            static constexpr float kFilter[] = {
+                0.f, 0.f, 0.f, 0.f, 16.f/255,
+                0.f, 0.f, 0.f, 0.f, 200.f/255,
+                0.f, 0.f, 0.f, 0.f, 16.f/255,
                 0.f, 0.f, 0.f, 255.f, 0.f
             };
 
-            blit.setColorFilter(SkColorFilter::MakeMatrixFilterRowMajor255(kFilter));
+            blit.setColorFilter(SkColorFilters::Matrix(kFilter));
         }
 
         canvas->scale(scale, scale);
@@ -316,7 +316,7 @@ protected:
         this->drawShapes(canvas, "SSx64", 4, fSS16);
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
+    bool onAnimate(const AnimTimer& timer) override {
         SkScalar t = timer.secs();
         SkScalar dt = fLastFrameTime < 0.f ? 0.f : t - fLastFrameTime;
         fLastFrameTime = t;

@@ -5,20 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "Sample.h"
-#include "sk_tool_utils.h"
+#include "samplecode/Sample.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
-#include "SkCanvas.h"
-#include "SkFontMetrics.h"
-#include "SkFontMgr.h"
-#include "SkRandom.h"
-#include "SkTypeface.h"
-#include "SkTextBlob.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkRandom.h"
 
 #if SK_SUPPORT_GPU
-#include "GrContext.h"
-#include "GrContextPriv.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 #endif
 
 static sk_sp<SkTypeface> chinese_typeface() {
@@ -92,8 +92,13 @@ private:
             this->createRandomWord(glyphs);
 
             SkTextBlobBuilder builder;
-            sk_tool_utils::add_to_text_blob_w_len(&builder, (const char*) glyphs, kWordLength*4,
-                                                  kUTF32_SkTextEncoding, font, 0, 0);
+            ToolUtils::add_to_text_blob_w_len(&builder,
+                                              (const char*)glyphs,
+                                              kWordLength * 4,
+                                              SkTextEncoding::kUTF32,
+                                              font,
+                                              0,
+                                              0);
 
             fBlobs.emplace_back(builder.make());
         }
@@ -216,9 +221,13 @@ private:
                 auto currentLineLength = SkTMin(45, paragraphLength - 45);
                 this->createRandomLine(glyphs, currentLineLength);
 
-                sk_tool_utils::add_to_text_blob_w_len(&builder, (const char*) glyphs,
-                                                      currentLineLength*4, kUTF32_SkTextEncoding,
-                                                      font, 0, y);
+                ToolUtils::add_to_text_blob_w_len(&builder,
+                                                  (const char*)glyphs,
+                                                  currentLineLength * 4,
+                                                  SkTextEncoding::kUTF32,
+                                                  font,
+                                                  0,
+                                                  y);
                 y += fMetrics.fDescent - fMetrics.fAscent + fMetrics.fLeading;
                 paragraphLength -= 45;
             }

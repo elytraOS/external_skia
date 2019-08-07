@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "GrShaderVar.h"
-#include "GrShaderCaps.h"
-#include "GrSwizzle.h"
-#include "glsl/GrGLSLShaderBuilder.h"
-#include "glsl/GrGLSLColorSpaceXformHelper.h"
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrShaderVar.h"
+#include "src/gpu/GrSwizzle.h"
+#include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/glsl/GrGLSLShaderBuilder.h"
 
 GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     : fProgramBuilder(program)
@@ -22,8 +22,6 @@ GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     // We push back some dummy pointers which will later become our header
     for (int i = 0; i <= kCode; i++) {
         fShaderStrings.push_back();
-        fCompilerStrings.push_back(nullptr);
-        fCompilerStringLengths.push_back(0);
     }
 
     this->main() = "void main() {";
@@ -252,8 +250,7 @@ void GrGLSLShaderBuilder::finalize(uint32_t visibility) {
     this->code().append("}");
 
     for (int i = 0; i <= fCodeIndex; i++) {
-        fCompilerStrings[i] = fShaderStrings[i].c_str();
-        fCompilerStringLengths[i] = (int)fShaderStrings[i].size();
+        fCompilerString.append(fShaderStrings[i].c_str(), fShaderStrings[i].size());
     }
 
     fFinalized = true;

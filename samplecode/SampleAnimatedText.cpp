@@ -5,20 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkUTF.h"
-#include "SkColorPriv.h"
-#include "SkColorFilter.h"
-#include "SkImage.h"
-#include "SkRandom.h"
-#include "SkTime.h"
-#include "SkTypeface.h"
-#include "Timer.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkTime.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkRandom.h"
+#include "samplecode/Sample.h"
+#include "src/utils/SkUTF.h"
+#include "tools/timer/Timer.h"
 
 #if SK_SUPPORT_GPU
-#include "GrContext.h"
-#include "GrContextPriv.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 #endif
 
 SkRandom gRand;
@@ -27,7 +27,7 @@ static void DrawTheText(SkCanvas* canvas, const char text[], size_t length, SkSc
                         const SkFont& font, const SkPaint& paint) {
     SkFont f(font);
     f.setSubpixel(true);
-    canvas->drawSimpleText(text, length, kUTF8_SkTextEncoding, x, y, f, paint);
+    canvas->drawSimpleText(text, length, SkTextEncoding::kUTF8, x, y, f, paint);
 }
 
 // This sample demonstrates the cache behavior of bitmap vs. distance field text
@@ -129,7 +129,7 @@ protected:
         canvas->drawString(modeString, 768.f, 540.f, font, paint);
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
+    bool onAnimate(const AnimTimer& timer) override {
         // We add noise to the scale and rotation animations to
         // keep the font atlas from falling into a steady state
         fRotation += (1.0f + gRand.nextRangeF(-0.1f, 0.1f));

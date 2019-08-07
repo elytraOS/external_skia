@@ -8,16 +8,16 @@
 #ifndef DMSrcSink_DEFINED
 #define DMSrcSink_DEFINED
 
-#include "SkBBHFactory.h"
-#include "SkBBoxHierarchy.h"
-#include "SkBitmap.h"
-#include "SkBitmapRegionDecoder.h"
-#include "SkCanvas.h"
-#include "SkCommonFlagsConfig.h"
-#include "SkData.h"
-#include "SkMultiPictureDocument.h"
-#include "SkPicture.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/android/SkBitmapRegionDecoder.h"
+#include "include/core/SkBBHFactory.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkPicture.h"
+#include "src/core/SkBBoxHierarchy.h"
+#include "src/utils/SkMultiPictureDocument.h"
+#include "tools/flags/CommonFlagsConfig.h"
 
 //#define TEST_VIA_SVG
 
@@ -394,7 +394,8 @@ public:
                                   SkCommandLineConfigGpu::SurfType surfType, int samples,
                                   bool diText, SkColorType colorType, SkAlphaType alphaType,
                                   sk_sp<SkColorSpace> colorSpace, bool threaded,
-                                  const GrContextOptions& grCtxOptions);
+                                  const GrContextOptions& grCtxOptions,
+                                  int cacheType);
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
 
@@ -404,6 +405,8 @@ public:
     }
 
 private:
+    int fCacheType;
+
     typedef GPUSink INHERITED;
 };
 
@@ -540,21 +543,6 @@ class ViaSVG : public Via {
 public:
     explicit ViaSVG(Sink* sink) : Via(sink) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
-};
-
-class ViaLite : public Via {
-public:
-    explicit ViaLite(Sink* sink) : Via(sink) {}
-    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
-};
-
-class ViaCSXform : public Via {
-public:
-    explicit ViaCSXform(Sink*, sk_sp<SkColorSpace>, bool colorSpin);
-    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
-private:
-    sk_sp<SkColorSpace> fCS;
-    bool                fColorSpin;
 };
 
 }  // namespace DM

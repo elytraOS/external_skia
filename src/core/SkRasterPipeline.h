@@ -8,12 +8,12 @@
 #ifndef SkRasterPipeline_DEFINED
 #define SkRasterPipeline_DEFINED
 
-#include "SkArenaAlloc.h"
-#include "SkColor.h"
-#include "SkImageInfo.h"
-#include "SkNx.h"
-#include "SkTArray.h" // TODO: unused
-#include "SkTypes.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkNx.h"
+#include "include/private/SkTArray.h"
+#include "src/core/SkArenaAlloc.h"
 #include <functional>
 #include <vector>  // TODO: unused
 
@@ -35,7 +35,7 @@
 #define SK_RASTER_PIPELINE_STAGES(M)                               \
     M(callback)                                                    \
     M(move_src_dst) M(move_dst_src)                                \
-    M(clamp_0) M(clamp_1) M(clamp_a) M(clamp_a_dst) M(clamp_gamut) \
+    M(clamp_0) M(clamp_1) M(clamp_a) M(clamp_gamut)                \
     M(unpremul) M(premul) M(premul_dst)                            \
     M(force_opaque) M(force_opaque_dst)                            \
     M(set_rgb) M(unbounded_set_rgb) M(swap_rb) M(swap_rb_dst)      \
@@ -54,7 +54,7 @@
     M(store_u16_be)                                                \
     M(load_src) M(store_src) M(load_dst) M(store_dst)              \
     M(scale_u8) M(scale_565) M(scale_1_float)                      \
-    M( lerp_u8) M( lerp_565) M( lerp_1_float)                      \
+    M( lerp_u8) M( lerp_565) M( lerp_1_float) M(lerp_native)       \
     M(dstatop) M(dstin) M(dstout) M(dstover)                       \
     M(srcatop) M(srcin) M(srcout) M(srcover)                       \
     M(clear) M(modulate) M(multiply) M(plus_) M(screen) M(xor_)    \
@@ -65,7 +65,7 @@
     M(matrix_translate) M(matrix_scale_translate)                  \
     M(matrix_2x3) M(matrix_3x3) M(matrix_3x4) M(matrix_4x5) M(matrix_4x3) \
     M(matrix_perspective)                                          \
-    M(parametric) M(gamma)                                         \
+    M(parametric) M(gamma_)                                        \
     M(mirror_x)   M(repeat_x)                                      \
     M(mirror_y)   M(repeat_y)                                      \
     M(decal_x)    M(decal_y)   M(decal_x_and_y)                    \

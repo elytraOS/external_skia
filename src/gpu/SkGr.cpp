@@ -5,42 +5,42 @@
  * found in the LICENSE file.
  */
 
-#include "SkGr.h"
-#include "GrBitmapTextureMaker.h"
-#include "GrCaps.h"
-#include "GrColorSpaceXform.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrGpuResourcePriv.h"
-#include "GrPaint.h"
-#include "GrProxyProvider.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrTextureProxy.h"
-#include "GrTypes.h"
-#include "GrXferProcessor.h"
-#include "SkAutoMalloc.h"
-#include "SkBlendModePriv.h"
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkData.h"
-#include "SkImage_Base.h"
-#include "SkImageInfoPriv.h"
-#include "SkImagePriv.h"
-#include "SkMaskFilterBase.h"
-#include "SkMessageBus.h"
-#include "SkMipMap.h"
-#include "SkPaintPriv.h"
-#include "SkPixelRef.h"
-#include "SkResourceCache.h"
-#include "SkShaderBase.h"
-#include "SkTemplates.h"
-#include "SkTraceEvent.h"
-#include "effects/GrBicubicEffect.h"
-#include "effects/GrConstColorProcessor.h"
-#include "effects/GrPorterDuffXferProcessor.h"
-#include "effects/GrXfermodeFragmentProcessor.h"
-#include "effects/GrSkSLFP.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkData.h"
+#include "include/core/SkPixelRef.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "include/private/SkImageInfoPriv.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkBlendModePriv.h"
+#include "src/core/SkImagePriv.h"
+#include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkMessageBus.h"
+#include "src/core/SkMipMap.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/core/SkResourceCache.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrBitmapTextureMaker.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrBicubicEffect.h"
+#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/effects/GrSkSLFP.h"
+#include "src/gpu/effects/GrXfermodeFragmentProcessor.h"
+#include "src/gpu/effects/generated/GrConstColorProcessor.h"
+#include "src/image/SkImage_Base.h"
+#include "src/shaders/SkShaderBase.h"
 
 #if SK_SUPPORT_GPU
 GR_FP_SRC_STRING SKSL_DITHER_SRC = R"(
@@ -105,28 +105,6 @@ void GrMakeKeyFromImageID(GrUniqueKey* key, uint32_t imageID, const SkIRect& ima
     builder[2] = imageBounds.fTop;
     builder[3] = imageBounds.fRight;
     builder[4] = imageBounds.fBottom;
-}
-
-//////////////////////////////////////////////////////////////////////////////
-sk_sp<GrTextureProxy> GrUploadBitmapToTextureProxy(GrProxyProvider* proxyProvider,
-                                                   const SkBitmap& bitmap) {
-    if (!bitmap.peekPixels(nullptr)) {
-        return nullptr;
-    }
-
-    if (!SkImageInfoIsValid(bitmap.info())) {
-        return nullptr;
-    }
-
-    // In non-ddl we will always instantiate right away. Thus we never want to copy the SkBitmap
-    // even if it's mutable. In ddl, if the bitmap is mutable then we must make a copy since the
-    // upload of the data to the gpu can happen at anytime and the bitmap may change by then.
-    SkCopyPixelsMode cpyMode = proxyProvider->renderingDirectly() ? kNever_SkCopyPixelsMode
-                                                                  : kIfMutable_SkCopyPixelsMode;
-    sk_sp<SkImage> image = SkMakeImageFromRasterBitmap(bitmap, cpyMode);
-
-    return proxyProvider->createTextureProxy(std::move(image), kNone_GrSurfaceFlags, 1,
-                                             SkBudgeted::kYes, SkBackingFit::kExact);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -267,18 +245,9 @@ SkPMColor4f SkColorToPMColor4f(SkColor c, const GrColorSpaceInfo& colorSpaceInfo
     return color.premul();
 }
 
-SkColor4f SkColor4fPrepForDst(SkColor4f color, const GrColorSpaceInfo& colorSpaceInfo,
-                              const GrCaps& caps) {
+SkColor4f SkColor4fPrepForDst(SkColor4f color, const GrColorSpaceInfo& colorSpaceInfo) {
     if (auto* xform = colorSpaceInfo.colorSpaceXformFromSRGB()) {
         color = xform->apply(color);
-    }
-    // TODO: Should we clamp here if config is kRGBA_half_Clamped_GrPixelConfig?
-    if (!GrPixelConfigIsFloatingPoint(colorSpaceInfo.config()) ||
-        !caps.halfFloatVertexAttributeSupport()) {
-        color = { SkTPin(color.fR, 0.0f, 1.0f),
-                  SkTPin(color.fG, 0.0f, 1.0f),
-                  SkTPin(color.fB, 0.0f, 1.0f),
-                         color.fA };
     }
     return color;
 }
@@ -384,8 +353,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
                                            SkBlendMode* primColorMode,
                                            GrPaint* grPaint) {
     // Convert SkPaint color to 4f format in the destination color space
-    SkColor4f origColor = SkColor4fPrepForDst(skPaint.getColor4f(), colorSpaceInfo,
-                                              *context->priv().caps());
+    SkColor4f origColor = SkColor4fPrepForDst(skPaint.getColor4f(), colorSpaceInfo);
 
     GrFPArgs fpArgs(context, &viewM, skPaint.getFilterQuality(), &colorSpaceInfo);
 

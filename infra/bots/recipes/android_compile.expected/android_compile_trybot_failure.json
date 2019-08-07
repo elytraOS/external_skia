@@ -6,7 +6,7 @@
       "--lunch_target",
       "cf_x86_phone-eng",
       "--mmma_targets",
-      "frameworks/base/core/jni,external/skia",
+      "frameworks/base/core/jni,frameworks/base/libs/hwui,external/skia",
       "--issue",
       "1234",
       "--patchset",
@@ -14,7 +14,6 @@
     ],
     "name": "Trigger and wait for task on android compile server",
     "~followup_annotations": [
-      "step returned non-zero exit code: 1",
       "@@@STEP_FAILURE@@@"
     ]
   },
@@ -33,15 +32,14 @@
       "@@@STEP_LOG_LINE@json.output@}@@@",
       "@@@STEP_LOG_END@json.output@@@",
       "@@@STEP_LINK@withpatch compilation log link@link1@@@",
-      "@@@STEP_LINK@nopatch compilation log link@link2@@@"
+      "@@@STEP_LINK@nopatch compilation log link@link2@@@",
+      "@@@STEP_LINK@force sync link@https://skia-android-compile.corp.goog/@@@"
     ]
   },
   {
     "failure": {
-      "failure": {
-        "step": "Trigger and wait for task on android compile server"
-      },
-      "humanReason": "Step('Trigger and wait for task on android compile server') failed with return_code 1"
+      "failure": {},
+      "humanReason": "Step('Trigger and wait for task on android compile server') (retcode: 1)"
     },
     "name": "$result"
   }

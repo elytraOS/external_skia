@@ -8,10 +8,10 @@
 #ifndef SkSurface_Base_DEFINED
 #define SkSurface_Base_DEFINED
 
-#include "SkCanvas.h"
-#include "SkImagePriv.h"
-#include "SkSurface.h"
-#include "SkSurfacePriv.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkImagePriv.h"
+#include "src/core/SkSurfacePriv.h"
 
 class SkSurface_Base : public SkSurface {
 public:
@@ -21,7 +21,10 @@ public:
 
     virtual GrBackendTexture onGetBackendTexture(BackendHandleAccess);
     virtual GrBackendRenderTarget onGetBackendRenderTarget(BackendHandleAccess);
-
+    virtual bool onReplaceBackendTexture(const GrBackendTexture&,
+                                         GrSurfaceOrigin,
+                                         TextureReleaseProc,
+                                         ReleaseContext);
     /**
      *  Allocate a canvas that will draw into this surface. We will cache this
      *  canvas, to return the same object to the caller multiple times. We
@@ -44,6 +47,15 @@ public:
     virtual sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset = nullptr) { return nullptr; }
 
     virtual void onWritePixels(const SkPixmap&, int x, int y) = 0;
+
+    /**
+     * Default implementation does a rescale/read and then calls the callback.
+     */
+    virtual void onAsyncRescaleAndReadPixels(const SkImageInfo& info, const SkIRect& srcRect,
+                                             RescaleGamma rescaleGamma,
+                                             SkFilterQuality rescaleQuality,
+                                             ReadPixelsCallback callback,
+                                             ReadPixelsContext context);
 
     /**
      *  Default implementation:
@@ -80,11 +92,7 @@ public:
      * Inserts the requested number of semaphores for the gpu to signal when work is complete on the
      * gpu and inits the array of GrBackendSemaphores with the signaled semaphores.
      */
-    virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, GrFlushFlags flags,
-                                          int numSemaphores,
-                                          GrBackendSemaphore signalSemaphores[],
-                                          GrGpuFinishedProc finishedProc,
-                                          GrGpuFinishedContext finishedContext) {
+    virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo&) {
         return GrSemaphoresSubmitted::kNo;
     }
 

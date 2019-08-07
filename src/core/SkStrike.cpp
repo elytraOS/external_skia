@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkStrike.h"
+#include "src/core/SkStrike.h"
 
-#include "SkGraphics.h"
-#include "SkMakeUnique.h"
-#include "SkMutex.h"
-#include "SkOnce.h"
-#include "SkPath.h"
-#include "SkTemplates.h"
-#include "SkTypeface.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkTypeface.h"
+#include "include/private/SkMutex.h"
+#include "include/private/SkOnce.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkMakeUnique.h"
 #include <cctype>
 
 namespace {
@@ -76,9 +76,13 @@ const SkGlyph& SkStrike::getGlyphIDMetrics(uint16_t glyphID) {
 }
 
 const SkGlyph& SkStrike::getGlyphIDMetrics(uint16_t glyphID, SkFixed x, SkFixed y) {
-    VALIDATE();
     SkPackedGlyphID packedGlyphID(glyphID, x, y);
-    return *this->lookupByPackedGlyphID(packedGlyphID, kFull_MetricsType);
+    return this->getGlyphIDMetrics(packedGlyphID);
+}
+
+const SkGlyph& SkStrike::getGlyphIDMetrics(SkPackedGlyphID id) {
+    VALIDATE();
+    return *this->lookupByPackedGlyphID(id, kFull_MetricsType);
 }
 
 void SkStrike::getAdvances(SkSpan<const SkGlyphID> glyphIDs, SkPoint advances[]) {
@@ -142,9 +146,7 @@ const void* SkStrike::findImage(const SkGlyph& glyph) {
 }
 
 void SkStrike::initializeImage(const volatile void* data, size_t size, SkGlyph* glyph) {
-    // Don't overwrite the image if we already have one. We could have used a fallback if the
-    // glyph was missing earlier.
-    if (glyph->fImage) return;
+    SkASSERT(!glyph->fImage);
 
     if (glyph->fWidth > 0 && glyph->fWidth < kMaxGlyphWidth) {
         size_t allocSize = glyph->allocImage(&fAlloc);
@@ -180,13 +182,13 @@ const SkPath* SkStrike::findPath(const SkGlyph& glyph) {
 }
 
 bool SkStrike::initializePath(SkGlyph* glyph, const volatile void* data, size_t size) {
-    // Don't overwrite the path if we already have one. We could have used a fallback if the
-    // glyph was missing earlier.
-    if (glyph->fPathData) return true;
+    SkASSERT(!glyph->fPathData);
 
     if (glyph->fWidth) {
         SkGlyph::PathData* pathData = fAlloc.make<SkGlyph::PathData>();
         glyph->fPathData = pathData;
+        if (size == 0u) return true;
+
         auto path = skstd::make_unique<SkPath>();
         if (!pathData->fPath.readFromMemory(const_cast<const void*>(data), size)) {
             return false;
@@ -237,28 +239,43 @@ const SkGlyph& SkStrike::getGlyphMetrics(SkGlyphID glyphID, SkPoint position) {
 
 // N.B. This glyphMetrics call culls all the glyphs which will not display based on a non-finite
 // position or that there are no mask pixels.
-int SkStrike::glyphMetrics(const SkGlyphID glyphIDs[],
-                 const SkPoint positions[],
-                 int n,
-                 SkGlyphPos result[]) {
-
-    int drawableGlyphCount = 0;
-    const SkPoint* posCursor = positions;
-    for (int i = 0; i < n; i++) {
-        SkPoint glyphPos = *posCursor++;
-        if (SkScalarsAreFinite(glyphPos.x(), glyphPos.y())) {
-            const SkGlyph& glyph = this->getGlyphMetrics(glyphIDs[i], glyphPos);
+SkSpan<const SkGlyphPos> SkStrike::prepareForDrawing(const SkGlyphID glyphIDs[],
+                                                     const SkPoint positions[],
+                                                     size_t n,
+                                                     int maxDimension,
+                                                     PreparationDetail detail,
+                                                     SkGlyphPos result[]) {
+    size_t drawableGlyphCount = 0;
+    for (size_t i = 0; i < n; i++) {
+        SkPoint position = positions[i];
+        if (SkScalarsAreFinite(position.x(), position.y())) {
+            // This assumes that the strike has no sub-pixel positioning for glyphs that are
+            // transformed from source space to device space.
+            const SkGlyph& glyph = this->getGlyphMetrics(glyphIDs[i], position);
             if (!glyph.isEmpty()) {
-                result[drawableGlyphCount++] = {&glyph, glyphPos};
+                result[drawableGlyphCount++] = {i, &glyph, position};
+                if (glyph.maxDimension() <= maxDimension) {
+                    // Glyph fits in the atlas, good to go.
+                    if (detail == SkStrikeInterface::kImageIfNeeded) {
+                        this->findImage(glyph);
+                    }
+                } else if (glyph.fMaskFormat != SkMask::kARGB32_Format) {
+                    // The out of atlas glyph is not color so we can draw it using paths.
+                    this->findPath(glyph);
+                } else {
+                    // This will be handled by the fallback strike.
+                    SkASSERT(glyph.maxDimension() > maxDimension
+                             && glyph.fMaskFormat == SkMask::kARGB32_Format);
+                }
             }
         }
     }
 
-    return drawableGlyphCount;
+    return SkSpan<const SkGlyphPos>{result, drawableGlyphCount};
 }
 
-#include "../pathops/SkPathOpsCubic.h"
-#include "../pathops/SkPathOpsQuad.h"
+#include "src/pathops/SkPathOpsCubic.h"
+#include "src/pathops/SkPathOpsQuad.h"
 
 static bool quad_in_bounds(const SkScalar* pts, const SkScalar bounds[2]) {
     SkScalar min = SkTMin(SkTMin(pts[0], pts[2]), pts[4]);
@@ -441,8 +458,8 @@ void SkStrike::dump() const {
     SkDebugf("%s\n", msg.c_str());
 }
 
-bool SkStrike::decideCouldDrawFromPath(const SkGlyph& glyph) {
-    return !glyph.isEmpty() && this->findPath(glyph) != nullptr;
+void SkStrike::generatePath(const SkGlyph& glyph) {
+    if (!glyph.isEmpty()) { this->findPath(glyph); }
 }
 
 void SkStrike::onAboutToExitScope() { }

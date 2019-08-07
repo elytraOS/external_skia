@@ -9,13 +9,13 @@
 #define GrTypesPriv_DEFINED
 
 #include <chrono>
-#include "GrSharedEnums.h"
-#include "GrTypes.h"
-#include "SkCanvas.h"
-#include "SkImageInfo.h"
-#include "SkImageInfoPriv.h"
-#include "SkRefCnt.h"
-#include "SkWeakRefCnt.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/GrSharedEnums.h"
+#include "include/private/SkImageInfoPriv.h"
+#include "include/private/SkWeakRefCnt.h"
 
 class GrCaps;
 
@@ -313,14 +313,6 @@ enum class GrFSAAType {
 };
 
 /**
- * Not all drawing code paths support using mixed samples when available and instead use
- * coverage-based aa.
- */
-enum class GrAllowMixedSamples : bool { kNo = false, kYes = true };
-
-GrAAType GrChooseAAType(GrAA, GrFSAAType, GrAllowMixedSamples, const GrCaps&);
-
-/*
  * Some pixel configs are inherently clamped to [0,1], some are allowed to go outside that range,
  * and some are FP but manually clamped in the XP.
  */
@@ -770,15 +762,10 @@ enum class GrInternalSurfaceFlags {
     kNone                           = 0,
 
     // Surface-level
-
-    kNoPendingIO                    = 1 << 0,
-
-    kSurfaceMask                    = kNoPendingIO,
-
     // Texture-level
 
     // Means the pixels in the texture are read-only. Cannot also be a GrRenderTarget[Proxy].
-    kReadOnly                       = 1 << 1,
+    kReadOnly                       = 1 << 0,
 
     kTextureMask                    = kReadOnly,
 
@@ -790,10 +777,10 @@ enum class GrInternalSurfaceFlags {
     //    this is disabled for FBO0
     //    but, otherwise, is enabled whenever MSAA is enabled and GrCaps reports mixed samples
     //        are supported
-    kMixedSampled                   = 1 << 2,
+    kMixedSampled                   = 1 << 1,
 
     // This flag is for use with GL only. It tells us that the internal render target wraps FBO 0.
-    kGLRTFBOIDIs0                   = 1 << 3,
+    kGLRTFBOIDIs0                   = 1 << 2,
 
     kRenderTargetMask               = kMixedSampled | kGLRTFBOIDIs0,
 };
@@ -841,7 +828,9 @@ enum class GpuPathRenderers {
     kSmall             = 1 << 6,
     kTessellating      = 1 << 7,
 
-    kAll               = (kTessellating | (kTessellating - 1))
+    kAll               = (kTessellating | (kTessellating - 1)),
+    kDefault           = kAll & ~kCoverageCounting
+
 };
 
 /**
@@ -1489,8 +1478,7 @@ static inline GrPixelConfig GrColorTypeToPixelConfig(GrColorType config,
 }
 
 /**
- * Ref-counted object that calls a callback from its destructor. These can be chained together. Any
- * owner can cancel calling the callback via abandon().
+ * Ref-counted object that calls a callback from its destructor.
  */
 class GrRefCntedCallback : public SkRefCnt {
 public:
@@ -1502,28 +1490,9 @@ public:
     }
     ~GrRefCntedCallback() override { fReleaseProc ? fReleaseProc(fReleaseCtx) : void(); }
 
-    /**
-     * After abandon is called the release proc will no longer be called in the destructor. This
-     * does not recurse on child release procs or unref them.
-     */
-    void abandon() {
-        fReleaseProc = nullptr;
-        fReleaseCtx = nullptr;
-    }
-
-    /** Adds another GrRefCntedCallback that this will unref in its destructor. */
-    void addChild(sk_sp<GrRefCntedCallback> next) {
-        if (!fNext) {
-            fNext = std::move(next);
-            return;
-        }
-        fNext->addChild(std::move(next));
-    }
-
     Context context() const { return fReleaseCtx; }
 
 private:
-    sk_sp<GrRefCntedCallback> fNext;
     Callback fReleaseProc;
     Context fReleaseCtx;
 };

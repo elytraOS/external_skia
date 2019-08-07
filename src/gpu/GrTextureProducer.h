@@ -8,10 +8,10 @@
 #ifndef GrTextureProducer_DEFINED
 #define GrTextureProducer_DEFINED
 
-#include "GrResourceKey.h"
-#include "GrSamplerState.h"
-#include "SkImageInfo.h"
-#include "SkNoncopyable.h"
+#include "include/core/SkImageInfo.h"
+#include "include/gpu/GrSamplerState.h"
+#include "include/private/GrResourceKey.h"
+#include "include/private/SkNoncopyable.h"
 
 class GrFragmentProcessor;
 class GrRecordingContext;
@@ -107,6 +107,8 @@ public:
     bool domainNeedsDecal() const { return fDomainNeedsDecal; }
     virtual SkAlphaType alphaType() const = 0;
     virtual SkColorSpace* colorSpace() const = 0;
+    // If the "texture" samples multiple images that have different resolutions (e.g. YUV420)
+    virtual bool hasMixedResolutions() const { return false; }
 
 protected:
     friend class GrTextureProducer_TestAccess;

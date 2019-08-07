@@ -8,14 +8,15 @@
 #ifndef GrDrawingManager_DEFINED
 #define GrDrawingManager_DEFINED
 
-#include "GrBufferAllocPool.h"
-#include "GrDeferredUpload.h"
-#include "GrPathRenderer.h"
-#include "GrPathRendererChain.h"
-#include "GrResourceCache.h"
-#include "SkSurface.h"
-#include "SkTArray.h"
-#include "text/GrTextContext.h"
+#include <set>
+#include "include/core/SkSurface.h"
+#include "include/private/SkTArray.h"
+#include "src/gpu/GrBufferAllocPool.h"
+#include "src/gpu/GrDeferredUpload.h"
+#include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/GrPathRendererChain.h"
+#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/text/GrTextContext.h"
 
 class GrCoverageCountingPathRenderer;
 class GrOnFlushCallbackObject;
@@ -46,12 +47,10 @@ public:
                                                          bool managedOpList = true);
     sk_sp<GrTextureContext> makeTextureContext(sk_sp<GrSurfaceProxy>, sk_sp<SkColorSpace>);
 
-    // The caller automatically gets a ref on the returned opList. It must
-    // be balanced by an unref call.
     // A managed opList is controlled by the drawing manager (i.e., sorted & flushed with the
-    // other). An unmanaged one is created and used by the onFlushCallback.
-    sk_sp<GrRenderTargetOpList> newRTOpList(GrRenderTargetProxy* rtp, bool managedOpList);
-    sk_sp<GrTextureOpList> newTextureOpList(GrTextureProxy* textureProxy);
+    // others). An unmanaged one is created and used by the onFlushCallback.
+    sk_sp<GrRenderTargetOpList> newRTOpList(sk_sp<GrRenderTargetProxy>, bool managedOpList);
+    sk_sp<GrTextureOpList> newTextureOpList(sk_sp<GrTextureProxy>);
 
     GrRecordingContext* getContext() { return fContext; }
 
@@ -72,13 +71,15 @@ public:
 
     static bool ProgramUnitTest(GrContext* context, int maxStages, int maxLevels);
 
-    GrSemaphoresSubmitted prepareSurfaceForExternalIO(GrSurfaceProxy*,
-                                                      SkSurface::BackendSurfaceAccess access,
-                                                      GrFlushFlags flags,
-                                                      int numSemaphores,
-                                                      GrBackendSemaphore backendSemaphores[],
-                                                      GrGpuFinishedProc finishedProc,
-                                                      GrGpuFinishedContext finishedContext);
+    GrSemaphoresSubmitted flushSurfaces(GrSurfaceProxy* proxies[],
+                                        int cnt,
+                                        SkSurface::BackendSurfaceAccess access,
+                                        const GrFlushInfo& info);
+    GrSemaphoresSubmitted flushSurface(GrSurfaceProxy* proxy,
+                                       SkSurface::BackendSurfaceAccess access,
+                                       const GrFlushInfo& info) {
+        return this->flushSurfaces(&proxy, 1, access, info);
+    }
 
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
@@ -93,7 +94,7 @@ private:
     // This class encapsulates maintenance and manipulation of the drawing manager's DAG of opLists.
     class OpListDAG {
     public:
-        OpListDAG(bool explicitlyAllocating, bool sortOpLists);
+        OpListDAG(bool sortOpLists);
         ~OpListDAG();
 
         // Currently, when explicitly allocating resources, this call will topologically sort the
@@ -120,6 +121,8 @@ private:
         bool empty() const { return fOpLists.empty(); }
         int numOpLists() const { return fOpLists.count(); }
 
+        bool isUsed(GrSurfaceProxy*) const;
+
         GrOpList* opList(int index) { return fOpLists[index].get(); }
         const GrOpList* opList(int index) const { return fOpLists[index].get(); }
 
@@ -140,9 +143,8 @@ private:
 
     GrDrawingManager(GrRecordingContext*, const GrPathRendererChain::Options&,
                      const GrTextContext::Options&,
-                     bool explicitlyAllocating,
                      bool sortOpLists,
-                     GrContextOptions::Enable reduceOpListSplitting);
+                     bool reduceOpListSplitting);
 
     bool wasAbandoned() const;
 
@@ -151,13 +153,11 @@ private:
     // return true if any opLists were actually executed; false otherwise
     bool executeOpLists(int startIndex, int stopIndex, GrOpFlushState*, int* numOpListsExecuted);
 
-    GrSemaphoresSubmitted flush(GrSurfaceProxy* proxy,
+    GrSemaphoresSubmitted flush(GrSurfaceProxy* proxies[],
+                                int numProxies,
                                 SkSurface::BackendSurfaceAccess access,
-                                GrFlushFlags flags,
-                                int numSemaphores,
-                                GrBackendSemaphore backendSemaphores[],
-                                GrGpuFinishedProc finishedProc,
-                                GrGpuFinishedContext finishedContext);
+                                const GrFlushInfo&,
+                                const GrPrepareForExternalIORequests&);
 
     SkDEBUGCODE(void validate() const);
 
@@ -194,6 +194,16 @@ private:
     bool                              fReduceOpListSplitting;
 
     SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
+
+    void addDDLTarget(GrSurfaceProxy* proxy) { fDDLTargets.insert(proxy); }
+    bool isDDLTarget(GrSurfaceProxy* proxy) { return fDDLTargets.find(proxy) != fDDLTargets.end(); }
+    void clearDDLTargets() { fDDLTargets.clear(); }
+
+    // We play a trick with lazy proxies to retarget the base target of a DDL to the SkSurface
+    // it is replayed on. Because of this remapping we need to explicitly store the targets of
+    // DDL replaying.
+    // Note: we do not expect a whole lot of these per flush
+    std::set<GrSurfaceProxy*> fDDLTargets;
 };
 
 #endif

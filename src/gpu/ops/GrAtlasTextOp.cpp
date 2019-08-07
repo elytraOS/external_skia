@@ -5,22 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "GrAtlasTextOp.h"
+#include "src/gpu/ops/GrAtlasTextOp.h"
 
-#include "GrCaps.h"
-#include "GrMemoryPool.h"
-#include "GrOpFlushState.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrResourceProvider.h"
-#include "SkMathPriv.h"
-#include "SkMatrixPriv.h"
-#include "SkPoint3.h"
-#include "SkStrikeCache.h"
-#include "effects/GrBitmapTextGeoProc.h"
-#include "effects/GrDistanceFieldGeoProc.h"
-#include "text/GrAtlasManager.h"
-#include "text/GrStrikeCache.h"
+#include "include/core/SkPoint3.h"
+#include "include/private/GrRecordingContext.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/effects/GrBitmapTextGeoProc.h"
+#include "src/gpu/effects/GrDistanceFieldGeoProc.h"
+#include "src/gpu/text/GrAtlasManager.h"
+#include "src/gpu/text/GrStrikeCache.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -113,7 +113,7 @@ void GrAtlasTextOp::init() {
     this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
 }
 
-void GrAtlasTextOp::visitProxies(const VisitProxyFunc& func, VisitorType) const {
+void GrAtlasTextOp::visitProxies(const VisitProxyFunc& func) const {
     fProcessors.visitProxies(func);
 }
 
@@ -390,9 +390,8 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
 }
 
 void GrAtlasTextOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
-    static const uint32_t kPipelineFlags = 0;
     flushState->executeDrawsAndUploadsForMeshDrawOp(
-            this, chainBounds, std::move(fProcessors), kPipelineFlags);
+            this, chainBounds, std::move(fProcessors), GrPipeline::InputFlags::kNone);
 }
 
 void GrAtlasTextOp::flush(GrMeshDrawOp::Target* target, FlushInfo* flushInfo) const {

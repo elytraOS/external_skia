@@ -5,18 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "GrMtlPipelineStateBuilder.h"
+#include "src/gpu/mtl/GrMtlPipelineStateBuilder.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 
-#include "GrMtlGpu.h"
-#include "GrMtlPipelineState.h"
-#include "GrMtlUtil.h"
+#include "src/gpu/mtl/GrMtlGpu.h"
+#include "src/gpu/mtl/GrMtlPipelineState.h"
+#include "src/gpu/mtl/GrMtlUtil.h"
 
-#include "GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTargetPriv.h"
 
 #import <simd/simd.h>
+
+#if !__has_feature(objc_arc)
+#error This file must be compiled with Arc. Use -fobjc-arc flag
+#endif
 
 GrMtlPipelineState* GrMtlPipelineStateBuilder::CreatePipelineState(
         GrMtlGpu* gpu,
@@ -64,16 +68,8 @@ id<MTLLibrary> GrMtlPipelineStateBuilder::createMtlShaderLibrary(
         SkSL::Program::Kind kind,
         const SkSL::Program::Settings& settings,
         GrProgramDesc* desc) {
-    SkString shaderString;
-    for (int i = 0; i < builder.fCompilerStrings.count(); ++i) {
-        if (builder.fCompilerStrings[i]) {
-            shaderString.append(builder.fCompilerStrings[i]);
-            shaderString.append("\n");
-        }
-    }
-
     SkSL::Program::Inputs inputs;
-    id<MTLLibrary> shaderLibrary = GrCompileMtlShaderLibrary(fGpu, shaderString.c_str(),
+    id<MTLLibrary> shaderLibrary = GrCompileMtlShaderLibrary(fGpu, builder.fCompilerString.c_str(),
                                                              kind, settings, &inputs);
     if (shaderLibrary == nil) {
         return nil;
@@ -321,7 +317,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
                                                         const GrPrimitiveProcessor& primProc,
                                                         const GrPipeline& pipeline,
                                                         Desc* desc) {
-    auto pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    auto pipelineDescriptor = [MTLRenderPipelineDescriptor new];
 
     fVS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
     fFS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
@@ -354,6 +350,15 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
 
     id<MTLFunction> vertexFunction = [vertexLibrary newFunctionWithName: @"vertexMain"];
     id<MTLFunction> fragmentFunction = [fragmentLibrary newFunctionWithName: @"fragmentMain"];
+
+    if (vertexFunction == nil) {
+        SkDebugf("Couldn't find vertexMain() in library\n");
+        return nullptr;
+    }
+    if (fragmentFunction == nil) {
+        SkDebugf("Couldn't find fragmentMain() in library\n");
+        return nullptr;
+    }
 
     pipelineDescriptor.vertexFunction = vertexFunction;
     pipelineDescriptor.fragmentFunction = fragmentFunction;
@@ -388,14 +393,8 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
                                   pipelineDescriptor.colorAttachments[0].pixelFormat,
                                   fUniformHandles,
                                   fUniformHandler.fUniforms,
-                                  GrMtlBuffer::Make(fGpu,
-                                                    geomBufferSize,
-                                                    GrGpuBufferType::kVertex,
-                                                    kStatic_GrAccessPattern),
-                                  GrMtlBuffer::Make(fGpu,
-                                                    fragBufferSize,
-                                                    GrGpuBufferType::kVertex,
-                                                    kStatic_GrAccessPattern),
+                                  geomBufferSize,
+                                  fragBufferSize,
                                   (uint32_t)fUniformHandler.numSamplers(),
                                   std::move(fGeometryProcessor),
                                   std::move(fXferProcessor),

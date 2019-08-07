@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrSurfaceContext.h"
-#include "SkCanvas.h"
-#include "SkGr.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/SkGr.h"
+#include "tests/Test.h"
 
 // using anonymous namespace because these functions are used as template params.
 namespace {
@@ -295,9 +295,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SRGBReadWritePixels, reporter, ctxInfo) {
         // Reading untagged back as untagged should do no conversion.
         test_write_read(Encoding::kUntagged, writeEncoding, Encoding::kUntagged, error,
                         check_no_conversion, context, reporter);
-        // Reading untagged back as linear does no conversion.
+        // Reading untagged back as linear does convert (context is source, so treated as sRGB),
+        // dst is tagged.
         test_write_read(Encoding::kUntagged, writeEncoding, Encoding::kLinear, error,
-                        check_no_conversion, context, reporter);
+                        check_srgb_to_linear_conversion, context, reporter);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////

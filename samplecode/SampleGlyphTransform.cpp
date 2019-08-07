@@ -4,15 +4,15 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "sk_tool_utils.h"
+#include "samplecode/Sample.h"
+#include "tools/ToolUtils.h"
 
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRRect.h"
-#include "SkTypeface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkRandom.h"
+#include "tools/timer/AnimTimer.h"
 
 #include <cmath>
 
@@ -26,8 +26,8 @@ public:
 
 protected:
     void onOnceBeforeDraw() override {
-        fEmojiFont.fTypeface = sk_tool_utils::emoji_typeface();
-        fEmojiFont.fText = sk_tool_utils::emoji_sample_text();
+        fEmojiFont.fTypeface = ToolUtils::emoji_typeface();
+        fEmojiFont.fText     = ToolUtils::emoji_sample_text();
     }
 
     bool onQuery(Sample::Event* evt) override {
@@ -55,12 +55,12 @@ protected:
 
         // d3 by default anchors text around the middle
         SkRect bounds;
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
-        canvas->drawSimpleText(text, strlen(text), kUTF8_SkTextEncoding, -bounds.centerX(), -bounds.centerY(),
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
+        canvas->drawSimpleText(text, strlen(text), SkTextEncoding::kUTF8, -bounds.centerX(), -bounds.centerY(),
                                font, paint);
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
+    bool onAnimate(const AnimTimer& timer) override {
         constexpr SkScalar maxt = 100000;
         double t = timer.pingPong(20, 0, 0, maxt); // d3 t is in milliseconds
 

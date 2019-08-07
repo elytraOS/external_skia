@@ -8,8 +8,9 @@
 #ifndef GrFragmentProcessor_DEFINED
 #define GrFragmentProcessor_DEFINED
 
-#include "GrProcessor.h"
-#include "GrProxyRef.h"
+#include "include/private/GrProxyRef.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/ops/GrOp.h"
 
 class GrCoordTransform;
 class GrGLSLFragmentProcessor;
@@ -242,7 +243,7 @@ public:
                                          &GrFragmentProcessor::numTextureSamplers,
                                          &GrFragmentProcessor::textureSampler>;
 
-    void visitProxies(const std::function<void(GrSurfaceProxy*)>& func);
+    void visitProxies(const GrOp::VisitProxyFunc& func);
 
 protected:
     enum OptimizationFlags : uint32_t {
@@ -285,8 +286,8 @@ protected:
     }
 
     GrFragmentProcessor(ClassID classID, OptimizationFlags optimizationFlags)
-    : INHERITED(classID)
-    , fFlags(optimizationFlags) {
+            : INHERITED(classID)
+            , fFlags(optimizationFlags) {
         SkASSERT((fFlags & ~kAll_OptimizationFlags) == 0);
     }
 
@@ -437,8 +438,9 @@ public:
     bool operator!=(const TextureSampler& other) const { return !(*this == other); }
 
     // 'instantiate' should only ever be called at flush time.
+    // TODO: this can go away once explicit allocation has stuck
     bool instantiate(GrResourceProvider* resourceProvider) const {
-        return SkToBool(fProxyRef.get()->instantiate(resourceProvider));
+        return fProxyRef.get()->isInstantiated();
     }
 
     // 'peekTexture' should only ever be called after a successful 'instantiate' call

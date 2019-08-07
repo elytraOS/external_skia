@@ -139,6 +139,14 @@ class DefaultFlavor(object):
     self.m.file.ensure_directory(
         'makedirs %s' % self.m.path.basename(path), path)
 
+  def read_file_on_device(self, path, **kwargs):
+    """Reads the specified file."""
+    return self.m.file.read_text('read %s' % path, path)
+
+  def remove_file_on_device(self, path):
+    """Removes the specified file."""
+    return self.m.file.remove('remove %s' % path, path)
+
   def install(self):
     """Run device-specific installation steps."""
     pass
@@ -155,7 +163,7 @@ class DefaultFlavor(object):
     return self.m.run(self.m.python, title, script=script, args=args,
                infra_step=infra_step)
 
-  def step(self, name, cmd):
+  def step(self, name, cmd, **unused_kwargs):
     app = self.device_dirs.bin_dir.join(cmd[0])
     cmd = [app] + cmd[1:]
     env = self.m.context.env
@@ -249,9 +257,11 @@ class DefaultFlavor(object):
                                                   profname)
 
     if path:
-      env['PATH'] = '%%(PATH)s:%s' % ':'.join('%s' % p for p in path)
+      env['PATH'] = self.m.path.pathsep.join(
+          ['%(PATH)s'] + ['%s' % p for p in path])
     if ld_library_path:
-      env['LD_LIBRARY_PATH'] = ':'.join('%s' % p for p in ld_library_path)
+      env['LD_LIBRARY_PATH'] = self.m.path.pathsep.join(
+          '%s' % p for p in ld_library_path)
 
     to_symbolize = ['dm', 'nanobench']
     if name in to_symbolize and self.m.vars.is_linux:
@@ -263,7 +273,12 @@ class DefaultFlavor(object):
                  self.module.resource('symbolize_stack_trace.py'),
                  args=args,
                  infra_step=False)
-
+    elif 'Win' in self.m.vars.builder_cfg.get('os', ''):
+      with self.m.context(env=env):
+        wrapped_cmd = ['powershell', '-ExecutionPolicy', 'Unrestricted',
+                       '-File',
+                       self.module.resource('win_run_and_check_log.ps1')] + cmd
+        self._run(name, wrapped_cmd)
     else:
       with self.m.context(env=env):
         self._run(name, cmd)

@@ -8,15 +8,15 @@
 #ifndef GrProcessor_DEFINED
 #define GrProcessor_DEFINED
 
-#include "GrColor.h"
-#include "GrGpuBuffer.h"
-#include "GrProcessorUnitTest.h"
-#include "GrSamplerState.h"
-#include "GrShaderVar.h"
-#include "GrSurfaceProxyPriv.h"
-#include "GrTextureProxy.h"
-#include "SkMath.h"
-#include "SkString.h"
+#include "include/core/SkMath.h"
+#include "include/core/SkString.h"
+#include "include/gpu/GrSamplerState.h"
+#include "include/private/GrColor.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/gpu/GrGpuBuffer.h"
+#include "src/gpu/GrProcessorUnitTest.h"
+#include "src/gpu/GrShaderVar.h"
+#include "src/gpu/GrSurfaceProxyPriv.h"
 
 class GrContext;
 class GrResourceProvider;
@@ -83,7 +83,6 @@ public:
         kEllipticalRRectEffect_ClassID,
         kGP_ClassID,
         kVertexColorSpaceBenchGP_ClassID,
-        kGrAAFillRRectOp_Processor_ClassID,
         kGrAARectEffect_ClassID,
         kGrAlphaThresholdFragmentProcessor_ClassID,
         kGrArithmeticFP_ClassID,
@@ -91,12 +90,13 @@ public:
         kGrBitmapTextGeoProc_ClassID,
         kGrBlurredEdgeFragmentProcessor_ClassID,
         kGrCCClipProcessor_ClassID,
-        kGrCCCoverageProcessor_ClassID,
         kGrCCPathProcessor_ClassID,
         kGrCircleBlurFragmentProcessor_ClassID,
         kGrCircleEffect_ClassID,
         kGrClampedGradientEffect_ClassID,
         kGrColorSpaceXformEffect_ClassID,
+        kGrComposeLerpEffect_ClassID,
+        kGrComposeLerpRedEffect_ClassID,
         kGrConfigConversionEffect_ClassID,
         kGrConicEffect_ClassID,
         kGrConstColorProcessor_ClassID,
@@ -110,7 +110,9 @@ public:
         kGrDitherEffect_ClassID,
         kGrDualIntervalGradientColorizer_ClassID,
         kGrEllipseEffect_ClassID,
+        kGrFillRRectOp_Processor_ClassID,
         kGrGaussianConvolutionFragmentProcessor_ClassID,
+        kGrGSCoverageProcessor_ClassID,
         kGrImprovedPerlinNoiseEffect_ClassID,
         kGrLightingEffect_ClassID,
         kGrLinearGradient_ClassID,
@@ -146,6 +148,7 @@ public:
         kGrTwoPointConicalGradientLayout_ClassID,
         kGrUnpremulInputFragmentProcessor_ClassID,
         kGrUnrolledBinaryGradientColorizer_ClassID,
+        kGrVSCoverageProcessor_ClassID,
         kGrYUVtoRGBEffect_ClassID,
         kHighContrastFilterEffect_ClassID,
         kInstanceProcessor_ClassID,

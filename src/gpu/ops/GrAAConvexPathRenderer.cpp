@@ -5,28 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "GrAAConvexPathRenderer.h"
-#include "GrCaps.h"
-#include "GrDrawOpTest.h"
-#include "GrGeometryProcessor.h"
-#include "GrPathUtils.h"
-#include "GrProcessor.h"
-#include "GrRenderTargetContext.h"
-#include "GrShape.h"
-#include "GrSimpleMeshDrawOpHelper.h"
-#include "GrVertexWriter.h"
-#include "SkGeometry.h"
-#include "SkPathPriv.h"
-#include "SkPointPriv.h"
-#include "SkString.h"
-#include "SkTypes.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLVertexGeoBuilder.h"
-#include "ops/GrMeshDrawOp.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkPathPriv.h"
+#include "src/core/SkPointPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDrawOpTest.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrPathUtils.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrShape.h"
+#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
+#include "src/gpu/ops/GrAAConvexPathRenderer.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 GrAAConvexPathRenderer::GrAAConvexPathRenderer() {
 }
@@ -242,8 +242,7 @@ static inline void add_line_to_segment(const SkPoint& pt,
 
 static inline void add_quad_segment(const SkPoint pts[3],
                                     SegmentArray* segments) {
-    if (SkPointPriv::DistanceToSqd(pts[0], pts[1]) < kCloseSqd ||
-        SkPointPriv::DistanceToSqd(pts[1], pts[2]) < kCloseSqd) {
+    if (SkPointPriv::DistanceToLineSegmentBetweenSqd(pts[1], pts[0], pts[2]) < kCloseSqd) {
         if (pts[0] != pts[2]) {
             add_line_to_segment(pts[2], segments);
         }
@@ -654,7 +653,7 @@ sk_sp<GrGeometryProcessor> QuadEdgeEffect::TestCreate(GrProcessorTestData* d) {
 GrPathRenderer::CanDrawPath
 GrAAConvexPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     if (args.fCaps->shaderCaps()->shaderDerivativeSupport() &&
-        (GrAAType::kCoverage == args.fAAType) && args.fShape->style().isSimpleFill() &&
+        (AATypeFlags::kCoverage & args.fAATypeFlags) && args.fShape->style().isSimpleFill() &&
         !args.fShape->inverseFilled() && args.fShape->knownToBeConvex()) {
         return CanDrawPath::kYes;
     }
@@ -685,12 +684,11 @@ public:
             : INHERITED(ClassID()), fHelper(helperArgs, GrAAType::kCoverage, stencilSettings) {
         fPaths.emplace_back(PathData{viewMatrix, path, color});
         this->setTransformedBounds(path.getBounds(), viewMatrix, HasAABloat::kYes, IsZeroArea::kNo);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
     }
 
     const char* name() const override { return "AAConvexPathOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -710,7 +708,7 @@ public:
                                       GrFSAAType fsaaType, GrClampType clampType) override {
         return fHelper.finalizeProcessors(
                 caps, clip, fsaaType, clampType, GrProcessorAnalysisCoverage::kSingleChannel,
-                &fPaths.back().fColor);
+                &fPaths.back().fColor, &fWideColor);
     }
 
 private:

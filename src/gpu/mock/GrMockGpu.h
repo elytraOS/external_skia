@@ -8,11 +8,11 @@
 #ifndef GrMockGpu_DEFINED
 #define GrMockGpu_DEFINED
 
-#include "GrGpu.h"
-#include "GrRenderTarget.h"
-#include "GrSemaphore.h"
-#include "GrTexture.h"
-#include "SkTHash.h"
+#include "include/gpu/GrRenderTarget.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/SkTHash.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrSemaphore.h"
 
 class GrMockGpuRTCommandBuffer;
 struct GrMockOptions;
@@ -47,6 +47,8 @@ public:
 
     void submit(GrGpuCommandBuffer* buffer) override;
 
+    void checkFinishProcs() override {}
+
 private:
     GrMockGpu(GrContext* context, const GrMockOptions&, const GrContextOptions&);
 
@@ -54,8 +56,7 @@ private:
 
     void onResetContext(uint32_t resetBits) override {}
 
-    void querySampleLocations(
-            GrRenderTarget*, const GrStencilSettings&, SkTArray<SkPoint>*) override {
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {
         SkASSERT(!this->caps()->sampleLocationsSupport());
         SK_ABORT("Sample locations not implemented for mock GPU.");
     }
@@ -91,11 +92,15 @@ private:
         return true;
     }
 
-    bool onTransferPixels(GrTexture* texture, int left, int top, int width, int height, GrColorType,
-                          GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) override {
+    bool onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
+                            GrColorType, GrGpuBuffer* transferBuffer, size_t offset,
+                            size_t rowBytes) override {
         return true;
     }
-
+    bool onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
+                              GrColorType, GrGpuBuffer* transferBuffer, size_t offset) override {
+        return true;
+    }
     bool onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin, GrSurface* src,
                        GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
                        const SkIPoint& dstPoint, bool canDiscardOutsideDstRect) override {
@@ -106,24 +111,24 @@ private:
 
     void onResolveRenderTarget(GrRenderTarget* target) override { return; }
 
-    void onFinishFlush(GrSurfaceProxy*, SkSurface::BackendSurfaceAccess access,
-                       GrFlushFlags flags, bool insertedSemaphores,
-                       GrGpuFinishedProc finishedProc,
-                       GrGpuFinishedContext finishedContext) override {
-        if (finishedProc) {
-            finishedProc(finishedContext);
+    void onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
+                       const GrFlushInfo& info, const GrPrepareForExternalIORequests&) override {
+        if (info.fFinishedProc) {
+            info.fFinishedProc(info.fFinishedContext);
         }
     }
 
     GrStencilAttachment* createStencilAttachmentForRenderTarget(const GrRenderTarget*,
                                                                 int width,
                                                                 int height) override;
+    GrBackendTexture createBackendTexture(int w, int h, const GrBackendFormat&,
+                                          GrMipMapped, GrRenderable,
+                                          const void* pixels, size_t rowBytes,
+                                          const SkColor4f& color = SkColors::kTransparent) override;
+    void deleteBackendTexture(const GrBackendTexture&) override;
+
 #if GR_TEST_UTILS
-    GrBackendTexture createTestingOnlyBackendTexture(const void* pixels, int w, int h,
-                                                     GrColorType, bool isRT,
-                                                     GrMipMapped, size_t rowBytes = 0) override;
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
-    void deleteTestingOnlyBackendTexture(const GrBackendTexture&) override;
 
     GrBackendRenderTarget createTestingOnlyBackendRenderTarget(int w, int h, GrColorType) override;
     void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) override;

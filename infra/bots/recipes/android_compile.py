@@ -19,7 +19,8 @@ CF_X86_PHONE_ENG_LUNCH_TARGET = 'cf_x86_phone-eng'
 SDK_LUNCH_TARGET = 'sdk'
 
 LUNCH_TARGET_TO_MMMA_TARGETS = {
-  CF_X86_PHONE_ENG_LUNCH_TARGET: 'frameworks/base/core/jni,external/skia',
+  CF_X86_PHONE_ENG_LUNCH_TARGET: (
+      'frameworks/base/core/jni,frameworks/base/libs/hwui,external/skia'),
   SDK_LUNCH_TARGET: 'external/skia',
 }
 
@@ -72,6 +73,9 @@ def RunSteps(api):
     if task_json.get('nopatch_log'):
       api.step.active_result.presentation.links[
           'nopatch compilation log link'] = task_json['nopatch_log']
+    # Add link to force sync of the Android checkout.
+    api.step.active_result.presentation.links['force sync link'] = (
+        'https://skia-android-compile.corp.goog/')
     raise e
 
 

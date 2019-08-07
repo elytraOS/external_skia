@@ -8,16 +8,18 @@
 #ifndef skiagm_DEFINED
 #define skiagm_DEFINED
 
-#include "../tools/Registry.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkClipOpPriv.h"
-#include "SkMacros.h"
-#include "SkPaint.h"
-#include "SkSize.h"
-#include "SkString.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkMacros.h"
+#include "tools/Registry.h"
 
-class SkAnimTimer;
+class AnimTimer;
+class GrContext;
+class GrRenderTargetContext;
+class SkCanvas;
 class SkMetaData;
 struct GrContextOptions;
 
@@ -142,7 +144,7 @@ namespace skiagm {
             fCanvasIsDeferred = isDeferred;
         }
 
-        bool animate(const SkAnimTimer&);
+        bool animate(const AnimTimer&);
         bool handleKey(SkUnichar uni) {
             return this->onHandleKey(uni);
         }
@@ -160,7 +162,7 @@ namespace skiagm {
         virtual SkISize onISize() = 0;
         virtual SkString onShortName() = 0;
 
-        virtual bool onAnimate(const SkAnimTimer&);
+        virtual bool onAnimate(const AnimTimer&);
         virtual bool onHandleKey(SkUnichar uni);
         virtual bool onGetControls(SkMetaData*);
         virtual void onSetControls(const SkMetaData&);

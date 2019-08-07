@@ -5,23 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkTypes.h"
+#include "tests/Test.h"
 
-#include "GrClip.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrGpuResource.h"
-#include "GrMemoryPool.h"
-#include "GrProxyProvider.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
-#include "GrResourceProvider.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "ops/GrFillRectOp.h"
-#include "ops/GrMeshDrawOp.h"
-#include "TestUtils.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrGpuResource.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/ops/GrFillRectOp.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "tests/TestUtils.h"
 
 #include <atomic>
 #include <random>
@@ -39,7 +39,7 @@ public:
 
     const char* name() const override { return "TestOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fProcessors.visitProxies(func);
     }
 
@@ -227,13 +227,11 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     }
 }
 
-// This test uses the random GrFragmentProcessor test factory, which relies on static initializers.
-#if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
-
-#include "SkCommandLineFlags.h"
-DEFINE_bool(randomProcessorTest, false, "Use non-deterministic seed for random processor tests?");
-DEFINE_uint32(processorSeed, 0, "Use specific seed for processor tests. Overridden by " \
-                                "--randomProcessorTest.");
+#include "tools/flags/CommandLineFlags.h"
+static DEFINE_bool(randomProcessorTest, false,
+                   "Use non-deterministic seed for random processor tests?");
+static DEFINE_int(processorSeed, 0,
+                  "Use specific seed for processor tests. Overridden by --randomProcessorTest.");
 
 #if GR_TEST_UTILS
 
@@ -285,7 +283,9 @@ void render_fp(GrContext* context, GrRenderTargetContext* rtc, GrFragmentProcess
 }
 
 /** Initializes the two test texture proxies that are available to the FP test factories. */
-bool init_test_textures(GrProxyProvider* proxyProvider, SkRandom* random,
+bool init_test_textures(GrResourceProvider* resourceProvider,
+                        GrProxyProvider* proxyProvider,
+                        SkRandom* random,
                         sk_sp<GrTextureProxy> proxies[2]) {
     static const int kTestTextureSize = 256;
 
@@ -305,6 +305,7 @@ bool init_test_textures(GrProxyProvider* proxyProvider, SkRandom* random,
         sk_sp<SkImage> img = SkImage::MakeRasterCopy(pixmap);
         proxies[0] = proxyProvider->createTextureProxy(img, kNone_GrSurfaceFlags, 1,
                                                        SkBudgeted::kYes, SkBackingFit::kExact);
+        proxies[0]->instantiate(resourceProvider);
     }
 
     {
@@ -322,6 +323,7 @@ bool init_test_textures(GrProxyProvider* proxyProvider, SkRandom* random,
         sk_sp<SkImage> img = SkImage::MakeRasterCopy(pixmap);
         proxies[1] = proxyProvider->createTextureProxy(img, kNone_GrSurfaceFlags, 1,
                                                        SkBudgeted::kYes, SkBackingFit::kExact);
+        proxies[1]->instantiate(resourceProvider);
     }
 
     return proxies[0] && proxies[1];
@@ -451,7 +453,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
             nullptr);
 
     sk_sp<GrTextureProxy> proxies[2];
-    if (!init_test_textures(proxyProvider, &random, proxies)) {
+    if (!init_test_textures(resourceProvider, proxyProvider, &random, proxies)) {
         ERRORF(reporter, "Could not create test textures");
         return;
     }
@@ -692,7 +694,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
             nullptr);
 
     sk_sp<GrTextureProxy> proxies[2];
-    if (!init_test_textures(proxyProvider, &random, proxies)) {
+    if (!init_test_textures(resourceProvider, proxyProvider, &random, proxies)) {
         ERRORF(reporter, "Could not create test textures");
         return;
     }
@@ -753,4 +755,3 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
 }
 
 #endif  // GR_TEST_UTILS
-#endif  // SK_ALLOW_STATIC_GLOBAL_INITIALIZERS

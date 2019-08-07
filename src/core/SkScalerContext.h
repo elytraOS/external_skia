@@ -10,19 +10,19 @@
 
 #include <memory>
 
-#include "SkFont.h"
-#include "SkFontTypes.h"
-#include "SkGlyph.h"
-#include "SkMacros.h"
-#include "SkMask.h"
-#include "SkMaskFilter.h"
-#include "SkMaskGamma.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkStrikeInterface.h"
-#include "SkSurfacePriv.h"
-#include "SkTypeface.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkTypeface.h"
+#include "include/private/SkMacros.h"
+#include "src/core/SkGlyph.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkMaskGamma.h"
+#include "src/core/SkStrikeInterface.h"
+#include "src/core/SkSurfacePriv.h"
+#include "src/core/SkWriteBuffer.h"
 
 class SkAutoDescriptor;
 class SkDescriptor;
@@ -202,9 +202,7 @@ public:
 
     // setLuminanceColor forces the alpha to be 0xFF because the blitter that draws the glyph
     // will apply the alpha from the paint. Don't apply the alpha twice.
-    void setLuminanceColor(SkColor c) {
-        fLumBits = SkColorSetRGB(SkColorGetR(c), SkColorGetG(c), SkColorGetB(c));
-    }
+    void setLuminanceColor(SkColor c);
 
 private:
     // TODO: remove
@@ -243,6 +241,7 @@ public:
         // Generate A8 from LCD source (for GDI and CoreGraphics).
         // only meaningful if fMaskFormat is kA8
         kGenA8FromLCD_Flag        = 0x0800, // could be 0x200 (bit meaning dependent on fMaskFormat)
+        kLinearMetrics_Flag       = 0x1000,
     };
 
     // computed values
@@ -263,17 +262,12 @@ public:
         return SkToBool(fRec.fFlags & kSubpixelPositioning_Flag);
     }
 
+     bool isLinearMetrics() const {
+        return SkToBool(fRec.fFlags & kLinearMetrics_Flag);
+    }
+
     // DEPRECATED
     bool isVertical() const { return false; }
-
-    /** Return the corresponding glyph for the specified unichar. Since contexts
-        may be chained (under the hood), the glyphID that is returned may in
-        fact correspond to a different font/context. In that case, we use the
-        base-glyph-count to know how to translate back into local glyph space.
-     */
-    uint16_t charToGlyphID(SkUnichar uni) {
-        return generateCharToGlyph(uni);
-    }
 
     unsigned    getGlyphCount() { return this->generateGlyphCount(); }
     void        getAdvance(SkGlyph*);
@@ -387,16 +381,11 @@ protected:
     /** Returns the number of glyphs in the font. */
     virtual unsigned generateGlyphCount() = 0;
 
-    /** Returns the glyph id for the given unichar.
-     *  If there is no 1:1 mapping from the unichar to a glyph id, returns 0.
-     */
-    virtual uint16_t generateCharToGlyph(SkUnichar unichar) = 0;
-
     void forceGenerateImageFromPath() { fGenerateImageFromPath = true; }
     void forceOffGenerateImageFromPath() { fGenerateImageFromPath = false; }
 
 private:
-    friend class SkRandomScalerContext; // For debug purposes
+    friend class RandomScalerContext;  // For debug purposes
 
     static SkScalerContextRec PreprocessRec(const SkTypeface& typeface,
                                             const SkScalerContextEffects& effects,

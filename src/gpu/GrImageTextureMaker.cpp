@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "GrColorSpaceXform.h"
-#include "GrImageTextureMaker.h"
-#include "SkGr.h"
-#include "SkImage_GpuYUVA.h"
-#include "SkImage_Lazy.h"
-#include "effects/GrYUVtoRGBEffect.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrImageTextureMaker.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrYUVtoRGBEffect.h"
+#include "src/image/SkImage_GpuYUVA.h"
+#include "src/image/SkImage_Lazy.h"
 
 GrImageTextureMaker::GrImageTextureMaker(GrRecordingContext* context, const SkImage* client,
                                          SkImage::CachingHint chint, bool useDecal)
@@ -91,14 +91,9 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
     bool coordsLimitedToConstraintRect,
     const GrSamplerState::Filter* filterOrNullForBicubic) {
 
-    // Check simple cases to see if we need to fall back to flattening the image
-    // TODO: See if we can relax this -- for example, if filterConstraint
-    //       is kYes_FilterConstraint we still may not need a TextureDomain
-    //       in some cases. Or allow YUVtoRGBEffect to take a wrap mode to
-    //       handle ClampToBorder when a decal is needed.
-    if (!textureMatrix.isIdentity() || kNo_FilterConstraint != filterConstraint ||
-        !coordsLimitedToConstraintRect || !filterOrNullForBicubic ||
-        this->domainNeedsDecal()) {
+    // Check simple cases to see if we need to fall back to flattening the image (or whether it's
+    // already been flattened.)
+    if (!filterOrNullForBicubic || this->domainNeedsDecal() || fImage->fRGBProxy) {
         return this->INHERITED::createFragmentProcessor(textureMatrix, constraintRect,
                                                         filterConstraint,
                                                         coordsLimitedToConstraintRect,
@@ -106,18 +101,27 @@ std::unique_ptr<GrFragmentProcessor> GrYUVAImageTextureMaker::createFragmentProc
     }
 
     // Check to see if the client has given us pre-mipped textures or we can generate them
-    // If not, fall back to bilerp
+    // If not, fall back to bilerp. Also fall back to bilerp when a domain is requested
     GrSamplerState::Filter filter = *filterOrNullForBicubic;
     if (GrSamplerState::Filter::kMipMap == filter &&
-        !fImage->setupMipmapsForPlanes(this->context())) {
+        (filterConstraint == GrTextureProducer::kYes_FilterConstraint ||
+         !fImage->setupMipmapsForPlanes(this->context()))) {
         filter = GrSamplerState::Filter::kBilerp;
     }
 
+    // Cannot rely on GrTextureProducer's domain infrastructure since we need to calculate domain's
+    // per plane, which may be different, so respect the filterConstraint without any additional
+    // analysis.
+    const SkRect* domain = nullptr;
+    if (filterConstraint == GrTextureProducer::kYes_FilterConstraint) {
+        domain = &constraintRect;
+    }
+
     auto fp = GrYUVtoRGBEffect::Make(fImage->fProxies, fImage->fYUVAIndices,
-                                     fImage->fYUVColorSpace, filter);
-    if (fImage->fTargetColorSpace) {
-        fp = GrColorSpaceXformEffect::Make(std::move(fp), fImage->fColorSpace.get(),
-                                           fImage->alphaType(), fImage->fTargetColorSpace.get());
+                                     fImage->fYUVColorSpace, filter, textureMatrix, domain);
+    if (fImage->fFromColorSpace) {
+        fp = GrColorSpaceXformEffect::Make(std::move(fp), fImage->fFromColorSpace.get(),
+                                           fImage->alphaType(), fImage->colorSpace());
     }
     return fp;
 }

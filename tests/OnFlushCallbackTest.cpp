@@ -5,23 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
-#include "GrBackendSemaphore.h"
-#include "GrClip.h"
-#include "GrContextPriv.h"
-#include "GrDefaultGeoProcFactory.h"
-#include "GrOnFlushResourceProvider.h"
-#include "GrProxyProvider.h"
-#include "GrQuad.h"
-#include "GrRenderTargetContextPriv.h"
-#include "GrResourceProvider.h"
-#include "GrTexture.h"
+#include "include/gpu/GrBackendSemaphore.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDefaultGeoProcFactory.h"
+#include "src/gpu/GrOnFlushResourceProvider.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrQuad.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/GrResourceProvider.h"
 
-#include "SkBitmap.h"
-#include "SkPointPriv.h"
-#include "effects/GrSimpleTextureEffect.h"
-#include "ops/GrSimpleMeshDrawOpHelper.h"
+#include "include/core/SkBitmap.h"
+#include "src/core/SkPointPriv.h"
+#include "src/gpu/effects/generated/GrSimpleTextureEffect.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 namespace {
 // This is a simplified mesh drawing op that can be used in the atlas generation test.
@@ -66,7 +66,7 @@ public:
 
     const char* name() const override { return "NonAARectOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -304,11 +304,8 @@ public:
         const GrBackendFormat format = caps->getBackendFormatFromColorType(kRGBA_8888_SkColorType);
 
         fAtlasProxy = GrProxyProvider::MakeFullyLazyProxy(
-                [](GrResourceProvider* resourceProvider) {
-                    if (!resourceProvider) {
-                        return sk_sp<GrTexture>();
-                    }
-
+                [](GrResourceProvider* resourceProvider)
+                        -> GrSurfaceProxy::LazyInstantiationResult {
                     GrSurfaceDesc desc;
                     desc.fFlags = kRenderTarget_GrSurfaceFlag;
                     // TODO: until partial flushes in MDB lands we're stuck having
@@ -317,14 +314,17 @@ public:
                     desc.fHeight = kAtlasTileSize;
                     desc.fConfig = kRGBA_8888_GrPixelConfig;
 
-                    return resourceProvider->createTexture(desc, SkBudgeted::kYes,
-                                                           GrResourceProvider::Flags::kNoPendingIO);
+                    auto texture = resourceProvider->createTexture(
+                            desc, SkBudgeted::kYes, GrResourceProvider::Flags::kNoPendingIO);
+                    return std::move(texture);
                 },
                 format,
                 GrProxyProvider::Renderable::kYes,
                 kBottomLeft_GrSurfaceOrigin,
                 kRGBA_8888_GrPixelConfig,
                 *proxyProvider->caps());
+
+        fAtlasProxy->priv().setIgnoredByResourceAllocator();
         return fAtlasProxy;
     }
 
@@ -472,12 +472,12 @@ static sk_sp<GrTextureProxy> make_upstream_image(GrContext* context, AtlasObject
 // Enable this if you want to debug the final draws w/o having the atlasCallback create the
 // atlas
 #if 0
-#include "SkImageEncoder.h"
 #include "SkGrPriv.h"
-#include "sk_tool_utils.h"
+#include "include/core/SkImageEncoder.h"
+#include "tools/ToolUtils.h"
 
 static void save_bm(const SkBitmap& bm, const char name[]) {
-    bool result = sk_tool_utils::EncodeImageToFile(name, bm, SkEncodedImageFormat::kPNG, 100);
+    bool result = ToolUtils::EncodeImageToFile(name, bm, SkEncodedImageFormat::kPNG, 100);
     SkASSERT(result);
 }
 
@@ -582,8 +582,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(OnFlushCallbackTest, reporter, ctxInfo) {
         rtc->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), r);
     }
 
-    rtc->prepareForExternalIO(SkSurface::BackendSurfaceAccess::kNoAccess,
-                              kNone_GrFlushFlags, 0, nullptr, nullptr, nullptr);
+    rtc->flush(SkSurface::BackendSurfaceAccess::kNoAccess, GrFlushInfo());
 
     SkBitmap readBack;
     readBack.allocN32Pixels(kFinalWidth, kFinalHeight);

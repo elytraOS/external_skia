@@ -12,16 +12,16 @@
 #include <memory>
 #include "stdlib.h"
 #include "string.h"
-#include "SkSLLexer.h"
-#include "SkSLDefines.h"
-#include "SkSLString.h"
-#include "SkSLStringStream.h"
+#include "src/sksl/SkSLDefines.h"
+#include "src/sksl/SkSLLexer.h"
+#include "src/sksl/SkSLString.h"
+#include "src/sksl/SkSLStringStream.h"
 
 #ifndef SKSL_STANDALONE
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 #if SK_SUPPORT_GPU
-#include "GrContextOptions.h"
-#include "GrShaderCaps.h"
+#include "include/gpu/GrContextOptions.h"
+#include "src/gpu/GrShaderCaps.h"
 #endif // SK_SUPPORT_GPU
 #endif // SKSL_STANDALONE
 
@@ -31,6 +31,10 @@ namespace SkSL {
 
 class OutputStream;
 class StringStream;
+
+#ifdef SKSL_STANDALONE
+#define SK_API
+#endif
 
 #if defined(SKSL_STANDALONE) || !SK_SUPPORT_GPU
 

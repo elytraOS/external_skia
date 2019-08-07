@@ -8,13 +8,13 @@
 #ifndef GrVkImage_DEFINED
 #define GrVkImage_DEFINED
 
-#include "GrBackendSurface.h"
-#include "GrTexture.h"
-#include "GrTypesPriv.h"
-#include "GrVkImageLayout.h"
-#include "GrVkResource.h"
-#include "SkTypes.h"
-#include "vk/GrVkTypes.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrTexture.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/vk/GrVkImageLayout.h"
+#include "src/gpu/vk/GrVkResource.h"
 
 class GrVkGpu;
 class GrVkTexture;
@@ -97,6 +97,9 @@ public:
     // Returns the image to its original queue family and changes the layout to present if the queue
     // family is not external or foreign.
     void prepareForPresent(GrVkGpu* gpu);
+
+    // Returns the image to its original queue family
+    void prepareForExternal(GrVkGpu* gpu);
 
     // This simply updates our tracking of the image layout and does not actually do any gpu work.
     // This is only used for mip map generation where we are manually changing the layouts as we
@@ -187,12 +190,15 @@ private:
         }
 
         /**
-         * These are used to coordinate calling the idle proc between the GrVkTexture and the
-         * Resource. If the GrVkTexture becomes purgeable and if there are no command buffers
-         * referring to the Resource then it calls the proc. Otherwise, the Resource calls it
-         * when the last command buffer reference goes away and the GrVkTexture is purgeable.
+         * These are used to coordinate calling the "finished" idle procs between the GrVkTexture
+         * and the Resource. If the GrVkTexture becomes purgeable and if there are no command
+         * buffers referring to the Resource then it calls the procs. Otherwise, the Resource calls
+         * them when the last command buffer reference goes away and the GrVkTexture is purgeable.
          */
-        void replaceIdleProc(GrVkTexture* owner, sk_sp<GrRefCntedCallback>) const;
+        void addIdleProc(GrVkTexture*, sk_sp<GrRefCntedCallback>) const;
+        int idleProcCnt() const;
+        sk_sp<GrRefCntedCallback> idleProc(int) const;
+        void resetIdleProcs() const;
         void removeOwningTexture() const;
 
         /**
@@ -225,7 +231,7 @@ private:
         GrVkAlloc      fAlloc;
         VkImageTiling  fImageTiling;
         mutable int fNumCommandBufferOwners = 0;
-        mutable sk_sp<GrRefCntedCallback> fIdleCallback;
+        mutable SkTArray<sk_sp<GrRefCntedCallback>> fIdleProcs;
         mutable GrVkTexture* fOwningTexture = nullptr;
 
         typedef GrVkResource INHERITED;

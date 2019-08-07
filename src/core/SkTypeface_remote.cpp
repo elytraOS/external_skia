@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypeface_remote.h"
-#include "SkPaint.h"
-#include "SkRemoteGlyphCache.h"
-#include "SkStrike.h"
-#include "SkStrikeCache.h"
-#include "SkTraceEvent.h"
+#include "include/core/SkPaint.h"
+#include "src/core/SkRemoteGlyphCache.h"
+#include "src/core/SkStrike.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/core/SkTypeface_remote.h"
 
 SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
                                            const SkScalerContextEffects& effects,
@@ -28,11 +28,6 @@ void SkScalerContextProxy::initCache(SkStrike* cache, SkStrikeCache* strikeCache
 }
 
 unsigned SkScalerContextProxy::generateGlyphCount()  {
-    SK_ABORT("Should never be called.");
-    return 0;
-}
-
-uint16_t SkScalerContextProxy::generateCharToGlyph(SkUnichar) {
     SK_ABORT("Should never be called.");
     return 0;
 }

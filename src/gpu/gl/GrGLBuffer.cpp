@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "GrGLBuffer.h"
-#include "GrGLGpu.h"
-#include "GrGpuResourcePriv.h"
-#include "SkTraceMemoryDump.h"
+#include "include/core/SkTraceMemoryDump.h"
+#include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/gl/GrGLBuffer.h"
+#include "src/gpu/gl/GrGLGpu.h"
 
 #define GL_CALL(X) GR_GL_CALL(this->glGpu()->glInterface(), X)
 #define GL_CALL_RET(RET, X) GR_GL_CALL_RET(this->glGpu()->glInterface(), RET, X)
@@ -159,10 +159,7 @@ void GrGLBuffer::onAbandon() {
 
 void GrGLBuffer::onMap() {
     SkASSERT(fBufferID);
-    if (this->wasDestroyed()) {
-        return;
-    }
-
+    SkASSERT(!this->wasDestroyed());
     VALIDATE();
     SkASSERT(!this->isMapped());
 
@@ -172,12 +169,14 @@ void GrGLBuffer::onMap() {
     // Handling dirty context is done in the bindBuffer call
     switch (this->glCaps().mapBufferType()) {
         case GrGLCaps::kNone_MapBufferType:
-            break;
+            return;
         case GrGLCaps::kMapBuffer_MapBufferType: {
             GrGLenum target = this->glGpu()->bindBuffer(fIntendedType, this);
-            // Let driver know it can discard the old data
-            if (this->glCaps().useBufferDataNullHint() || fGLSizeInBytes != this->size()) {
-                GL_CALL(BufferData(target, this->size(), nullptr, fUsage));
+            if (!readOnly) {
+                // Let driver know it can discard the old data
+                if (this->glCaps().useBufferDataNullHint() || fGLSizeInBytes != this->size()) {
+                    GL_CALL(BufferData(target, this->size(), nullptr, fUsage));
+                }
             }
             GL_CALL_RET(fMapPtr, MapBuffer(target, readOnly ? GR_GL_READ_ONLY : GR_GL_WRITE_ONLY));
             break;
@@ -188,13 +187,17 @@ void GrGLBuffer::onMap() {
             if (fGLSizeInBytes != this->size()) {
                 GL_CALL(BufferData(target, this->size(), nullptr, fUsage));
             }
-            GrGLbitfield writeAccess = GR_GL_MAP_WRITE_BIT;
-            if (GrGpuBufferType::kXferCpuToGpu != fIntendedType) {
-                // TODO: Make this a function parameter.
-                writeAccess |= GR_GL_MAP_INVALIDATE_BUFFER_BIT;
+            GrGLbitfield access;
+            if (readOnly) {
+                access = GR_GL_MAP_READ_BIT;
+            } else {
+                access = GR_GL_MAP_WRITE_BIT;
+                if (GrGpuBufferType::kXferCpuToGpu != fIntendedType) {
+                    // TODO: Make this a function parameter.
+                    access |= GR_GL_MAP_INVALIDATE_BUFFER_BIT;
+                }
             }
-            GL_CALL_RET(fMapPtr, MapBufferRange(target, 0, this->size(),
-                                                readOnly ? GR_GL_MAP_READ_BIT : writeAccess));
+            GL_CALL_RET(fMapPtr, MapBufferRange(target, 0, this->size(), access));
             break;
         }
         case GrGLCaps::kChromium_MapBufferType: {
@@ -214,10 +217,6 @@ void GrGLBuffer::onMap() {
 
 void GrGLBuffer::onUnmap() {
     SkASSERT(fBufferID);
-    if (this->wasDestroyed()) {
-        return;
-    }
-
     VALIDATE();
     SkASSERT(this->isMapped());
     if (0 == fBufferID) {

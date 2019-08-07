@@ -5,27 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "GrOvalOpFactory.h"
-#include "GrCaps.h"
-#include "GrDrawOpTest.h"
-#include "GrGeometryProcessor.h"
-#include "GrOpFlushState.h"
-#include "GrProcessor.h"
-#include "GrResourceProvider.h"
-#include "GrShaderCaps.h"
-#include "GrStyle.h"
-#include "GrVertexWriter.h"
-#include "SkRRectPriv.h"
-#include "SkStrokeRec.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLUtil.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLVertexGeoBuilder.h"
-#include "ops/GrMeshDrawOp.h"
-#include "ops/GrSimpleMeshDrawOpHelper.h"
+#include "include/core/SkStrokeRec.h"
+#include "src/core/SkRRectPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDrawOpTest.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrStyle.h"
+#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLUtil.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/ops/GrOvalOpFactory.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 #include <utility>
 
@@ -1024,7 +1024,6 @@ public:
         SkStrokeRec::Style recStyle = stroke.getStyle();
 
         fRoundCaps = false;
-        fWideColor = !SkPMColor4fFitsInBytes(color);
 
         viewMatrix.mapPoints(&center, 1);
         radius = viewMatrix.mapRadius(radius);
@@ -1070,9 +1069,11 @@ public:
             // The shader operates in a space where the circle is translated to be centered at the
             // origin. Here we compute points on the unit circle at the starting and ending angles.
             SkPoint startPoint, stopPoint;
-            startPoint.fY = SkScalarSinCos(arcParams->fStartAngleRadians, &startPoint.fX);
+            startPoint.fY = SkScalarSin(arcParams->fStartAngleRadians);
+            startPoint.fX = SkScalarCos(arcParams->fStartAngleRadians);
             SkScalar endAngle = arcParams->fStartAngleRadians + arcParams->fSweepAngleRadians;
-            stopPoint.fY = SkScalarSinCos(endAngle, &stopPoint.fX);
+            stopPoint.fY = SkScalarSin(endAngle);
+            stopPoint.fX = SkScalarCos(endAngle);
 
             // Adjust the start and end points based on the view matrix (to handle rotated arcs)
             startPoint = viewMatrix.mapVector(startPoint.fX, startPoint.fY);
@@ -1198,7 +1199,7 @@ public:
 
     const char* name() const override { return "CircleOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -1224,7 +1225,8 @@ public:
                                       GrFSAAType fsaaType, GrClampType clampType) override {
         SkPMColor4f* color = &fCircles.front().fColor;
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, color);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, color,
+                                          &fWideColor);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -1468,7 +1470,8 @@ public:
         if (!startAngle) {
             start = {1, 0};
         } else {
-            start.fY = SkScalarSinCos(startAngle, &start.fX);
+            start.fY = SkScalarSin(startAngle);
+            start.fX = SkScalarCos(startAngle);
         }
         viewMatrix.mapVectors(&start, 1);
         startAngle = SkScalarATan2(start.fY, start.fX);
@@ -1521,12 +1524,11 @@ public:
                 HasAABloat::kYes, IsZeroArea::kNo);
         fVertCount = circle_type_to_vert_count(true);
         fIndexCount = circle_type_to_index_count(true);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
     }
 
     const char* name() const override { return "ButtCappedDashedCircleOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -1554,7 +1556,8 @@ public:
                                       GrFSAAType fsaaType, GrClampType clampType) override {
         SkPMColor4f* color = &fCircles.front().fColor;
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, color);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, color,
+                                          &fWideColor);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -1819,12 +1822,11 @@ public:
 
         fStroked = isStrokeOnly && params.fInnerXRadius > 0 && params.fInnerYRadius > 0;
         fViewMatrixIfUsingLocalCoords = viewMatrix;
-        fWideColor = !SkPMColor4fFitsInBytes(color);
     }
 
     const char* name() const override { return "EllipseOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -1852,7 +1854,8 @@ public:
                     !caps.shaderCaps()->hasLowFragmentPrecision();
         SkPMColor4f* color = &fEllipses.front().fColor;
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, color);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, color,
+                                          &fWideColor);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -2061,12 +2064,11 @@ public:
                                          params.fCenter.fY + params.fYRadius + geoDy)});
         this->setTransformedBounds(fEllipses[0].fBounds, viewMatrix, HasAABloat::kYes,
                                    IsZeroArea::kNo);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
     }
 
     const char* name() const override { return "DIEllipseOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -2094,7 +2096,8 @@ public:
                     !caps.shaderCaps()->hasLowFragmentPrecision();
         SkPMColor4f* color = &fEllipses.front().fColor;
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, color);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, color,
+                                          &fWideColor);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -2385,12 +2388,11 @@ public:
         fVertCount = rrect_type_to_vert_count(type);
         fIndexCount = rrect_type_to_index_count(type);
         fAllFill = (kFill_RRectType == type);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
     }
 
     const char* name() const override { return "CircularRRectOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -2416,7 +2418,8 @@ public:
                                       GrFSAAType fsaaType, GrClampType clampType) override {
         SkPMColor4f* color = &fRRects.front().fColor;
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, color);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, color,
+                                          &fWideColor);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -2724,14 +2727,13 @@ public:
         this->setBounds(bounds, HasAABloat::kYes, IsZeroArea::kNo);
         // Expand the rect for aa in order to generate the correct vertices.
         bounds.outset(SK_ScalarHalf, SK_ScalarHalf);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
         fRRects.emplace_back(
                 RRect{color, devXRadius, devYRadius, innerXRadius, innerYRadius, bounds});
     }
 
     const char* name() const override { return "EllipticalRRectOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -2758,7 +2760,8 @@ public:
         fUseScale = !caps.shaderCaps()->floatIs32Bits();
         SkPMColor4f* color = &fRRects.front().fColor;
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, color);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, color,
+                                          &fWideColor);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -2947,6 +2950,12 @@ static std::unique_ptr<GrDrawOp> make_rrect_op(GrRecordingContext* context,
                             SK_ScalarHalf * scaledStroke.fY > yRadius)) {
             return nullptr;
         }
+    }
+
+    // The matrix may have a rotation by an odd multiple of 90 degrees.
+    if (!isCircular && viewMatrix.getScaleX() == 0) {
+        std::swap(xRadius, yRadius);
+        std::swap(scaledStroke.fX, scaledStroke.fY);
     }
 
     // The way the effect interpolates the offset-to-ellipse/circle-center attribute only works on

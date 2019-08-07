@@ -5,32 +5,32 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "SkAnnotationKeys.h"
-#include "SkCanvas.h"
-#include "SkDashPathEffect.h"
-#include "SkFixed.h"
-#include "SkFontDescriptor.h"
-#include "SkImage.h"
-#include "SkImageSource.h"
-#include "SkLightingShader.h"
-#include "SkMakeUnique.h"
-#include "SkMallocPixelRef.h"
-#include "SkMatrixPriv.h"
-#include "SkNormalSource.h"
-#include "SkOSFile.h"
-#include "SkReadBuffer.h"
-#include "SkPicturePriv.h"
-#include "SkPictureRecorder.h"
-#include "SkShaderBase.h"
-#include "SkTableColorFilter.h"
-#include "SkTemplates.h"
-#include "SkTextBlob.h"
-#include "SkTypeface.h"
-#include "SkWriteBuffer.h"
-#include "SkXfermodeImageFilter.h"
-#include "sk_tool_utils.h"
-#include "Test.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkMallocPixelRef.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkImageSource.h"
+#include "include/effects/SkTableColorFilter.h"
+#include "include/effects/SkXfermodeImageFilter.h"
+#include "include/private/SkFixed.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkAnnotationKeys.h"
+#include "src/core/SkFontDescriptor.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/core/SkNormalSource.h"
+#include "src/core/SkOSFile.h"
+#include "src/core/SkPicturePriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/SkLightingShader.h"
+#include "src/shaders/SkShaderBase.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 static const uint32_t kArraySize = 64;
 static const int kBitmapSize = 256;
@@ -588,11 +588,8 @@ DEF_TEST(Serialization, reporter) {
 
         sk_sp<SkLights> fLights = builder.finish();
 
-        SkBitmap diffuse = sk_tool_utils::create_checkerboard_bitmap(
-                kTexSize, kTexSize,
-                0x00000000,
-                sk_tool_utils::color_to_565(0xFF804020),
-                8);
+        SkBitmap diffuse = ToolUtils::create_checkerboard_bitmap(
+                kTexSize, kTexSize, 0x00000000, ToolUtils::color_to_565(0xFF804020), 8);
 
         SkRect bitmapBounds = SkRect::MakeIWH(diffuse.width(), diffuse.height());
 
@@ -605,13 +602,11 @@ DEF_TEST(Serialization, reporter) {
         SkBitmap normals;
         normals.allocN32Pixels(kTexSize, kTexSize);
 
-        sk_tool_utils::create_frustum_normal_map(&normals, SkIRect::MakeWH(kTexSize, kTexSize));
-        sk_sp<SkShader> normalMap = SkShader::MakeBitmapShader(normals, SkShader::kClamp_TileMode,
-                SkShader::kClamp_TileMode, &matrix);
+        ToolUtils::create_frustum_normal_map(&normals, SkIRect::MakeWH(kTexSize, kTexSize));
+        sk_sp<SkShader> normalMap = normals.makeShader(&matrix);
         sk_sp<SkNormalSource> normalSource = SkNormalSource::MakeFromNormalMap(std::move(normalMap),
                                                                                ctm);
-        sk_sp<SkShader> diffuseShader = SkShader::MakeBitmapShader(diffuse,
-                SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &matrix);
+        sk_sp<SkShader> diffuseShader = diffuse.makeShader(&matrix);
 
         sk_sp<SkShader> lightingShader = SkLightingShader::Make(diffuseShader,
                                                                 normalSource,
@@ -636,7 +631,7 @@ DEF_TEST(Serialization, reporter) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-#include "SkAnnotation.h"
+#include "include/core/SkAnnotation.h"
 
 static sk_sp<SkPicture> copy_picture_via_serialization(SkPicture* src) {
     SkDynamicMemoryWStream wstream;

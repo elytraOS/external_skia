@@ -5,17 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "GrContext_Base.h"
+#include "include/private/GrContext_Base.h"
 
-#include "GrBaseContextPriv.h"
-#include "GrCaps.h"
-#include "GrSkSLFPFactoryCache.h"
-
-#ifdef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
-static const bool kDefaultExplicitlyAllocateGPUResources = false;
-#else
-static const bool kDefaultExplicitlyAllocateGPUResources = true;
-#endif
+#include "include/private/GrSkSLFPFactoryCache.h"
+#include "src/gpu/GrBaseContextPriv.h"
+#include "src/gpu/GrCaps.h"
 
 static int32_t next_id() {
     static std::atomic<int32_t> nextID{1};
@@ -42,18 +36,6 @@ bool GrContext_Base::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> 
     fCaps = caps;
     fFPFactoryCache = FPFactoryCache;
     return true;
-}
-
-bool GrContext_Base::explicitlyAllocateGPUResources() const {
-    if (GrContextOptions::Enable::kNo == fOptions.fExplicitlyAllocateGPUResources) {
-        return false;
-    }
-
-    if (GrContextOptions::Enable::kYes == fOptions.fExplicitlyAllocateGPUResources) {
-        return true;
-    }
-
-    return kDefaultExplicitlyAllocateGPUResources;
 }
 
 const GrCaps* GrContext_Base::caps() const { return fCaps.get(); }

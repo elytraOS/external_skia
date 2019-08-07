@@ -8,17 +8,17 @@
 #ifndef GrResourceCache_DEFINED
 #define GrResourceCache_DEFINED
 
-#include "GrGpuResource.h"
-#include "GrGpuResourceCacheAccess.h"
-#include "GrGpuResourcePriv.h"
-#include "GrResourceKey.h"
-#include "SkMessageBus.h"
-#include "SkRefCnt.h"
-#include "SkTArray.h"
-#include "SkTDPQueue.h"
-#include "SkTHash.h"
-#include "SkTInternalLList.h"
-#include "SkTMultiMap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GrGpuResource.h"
+#include "include/private/GrResourceKey.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTHash.h"
+#include "src/core/SkMessageBus.h"
+#include "src/core/SkTDPQueue.h"
+#include "src/core/SkTInternalLList.h"
+#include "src/core/SkTMultiMap.h"
+#include "src/gpu/GrGpuResourceCacheAccess.h"
+#include "src/gpu/GrGpuResourcePriv.h"
 
 class GrCaps;
 class GrProxyProvider;
@@ -193,7 +193,7 @@ public:
 
     /** Returns true if the cache would like a flush to occur in order to make more resources
         purgeable. */
-    bool requestsFlush() const { return this->overBudget() && !fPurgeableQueue.count(); }
+    bool requestsFlush() const;
 
     /** Maintain a ref to this resource until we receive a GrGpuResourceFreedMessage. */
     void insertDelayedResourceUnref(GrGpuResource* resource);
@@ -265,9 +265,10 @@ private:
     void removeUniqueKey(GrGpuResource*);
     void willRemoveScratchKey(const GrGpuResource*);
     void didChangeBudgetStatus(GrGpuResource*);
-    void refAndMakeResourceMRU(GrGpuResource*);
+    void refResource(GrGpuResource* resource);
     /// @}
 
+    void refAndMakeResourceMRU(GrGpuResource*);
     void processFreedGpuResources();
     void addToNonpurgeableArray(GrGpuResource*);
     void removeFromNonpurgeableArray(GrGpuResource*);
@@ -338,11 +339,11 @@ private:
     typedef SkTDPQueue<GrGpuResource*, CompareTimestamp, AccessResourceIndex> PurgeableQueue;
     typedef SkTDArray<GrGpuResource*> ResourceArray;
 
-    GrProxyProvider*                    fProxyProvider;
+    GrProxyProvider*                    fProxyProvider = nullptr;
     // Whenever a resource is added to the cache or the result of a cache lookup, fTimestamp is
     // assigned as the resource's timestamp and then incremented. fPurgeableQueue orders the
     // purgeable resources by this value, and thus is used to purge resources in LRU order.
-    uint32_t                            fTimestamp;
+    uint32_t                            fTimestamp = 0;
     PurgeableQueue                      fPurgeableQueue;
     ResourceArray                       fNonpurgeableResources;
 
@@ -352,37 +353,38 @@ private:
     UniqueHash                          fUniqueHash;
 
     // our budget, used in purgeAsNeeded()
-    int                                 fMaxCount;
-    size_t                              fMaxBytes;
+    int                                 fMaxCount = kDefaultMaxCount;
+    size_t                              fMaxBytes = kDefaultMaxSize;
 
 #if GR_CACHE_STATS
-    int                                 fHighWaterCount;
-    size_t                              fHighWaterBytes;
-    int                                 fBudgetedHighWaterCount;
-    size_t                              fBudgetedHighWaterBytes;
+    int                                 fHighWaterCount = 0;
+    size_t                              fHighWaterBytes = 0;
+    int                                 fBudgetedHighWaterCount = 0;
+    size_t                              fBudgetedHighWaterBytes = 0;
 #endif
 
     // our current stats for all resources
-    SkDEBUGCODE(int                     fCount;)
-    size_t                              fBytes;
+    SkDEBUGCODE(int                     fCount = 0;)
+    size_t                              fBytes = 0;
 
     // our current stats for resources that count against the budget
-    int                                 fBudgetedCount;
-    size_t                              fBudgetedBytes;
-    size_t                              fPurgeableBytes;
+    int                                 fBudgetedCount = 0;
+    size_t                              fBudgetedBytes = 0;
+    size_t                              fPurgeableBytes = 0;
+    int                                 fNumBudgetedResourcesFlushWillMakePurgeable = 0;
 
     InvalidUniqueKeyInbox               fInvalidUniqueKeyInbox;
     FreedGpuResourceInbox               fFreedGpuResourceInbox;
     ReourcesAwaitingUnref               fResourcesAwaitingUnref;
 
-    uint32_t                            fContextUniqueID;
-    GrSingleOwner*                      fSingleOwner;
+    uint32_t                            fContextUniqueID = SK_InvalidUniqueID;
+    GrSingleOwner*                      fSingleOwner = nullptr;
 
     // This resource is allowed to be in the nonpurgeable array for the sake of validate() because
     // we're in the midst of converting it to purgeable status.
-    SkDEBUGCODE(GrGpuResource*          fNewlyPurgeableResourceForValidation;)
+    SkDEBUGCODE(GrGpuResource*          fNewlyPurgeableResourceForValidation = nullptr;)
 
-    bool                                fPreferVRAMUseOverFlushes;
+    bool                                fPreferVRAMUseOverFlushes = false;
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(GrResourceCache::ScratchFlags);
@@ -402,6 +404,12 @@ private:
      * Removes a resource from the cache.
      */
     void removeResource(GrGpuResource* resource) { fCache->removeResource(resource); }
+
+    /**
+     * Adds a ref to a resource with proper tracking if the resource has 0 refs prior to
+     * adding the ref.
+     */
+    void refResource(GrGpuResource* resource) { fCache->refResource(resource); }
 
     /**
      * Notifications that should be sent to the cache when the ref/io cnt status of resources

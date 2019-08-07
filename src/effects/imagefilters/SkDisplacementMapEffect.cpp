@@ -5,32 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "SkDisplacementMapEffect.h"
+#include "include/effects/SkDisplacementMapEffect.h"
 
-#include "SkBitmap.h"
-#include "SkColorSpaceXformer.h"
-#include "SkImageFilterPriv.h"
-#include "SkReadBuffer.h"
-#include "SkSpecialImage.h"
-#include "SkWriteBuffer.h"
-#include "SkUnPreMultiply.h"
-#include "SkColorData.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "include/private/SkColorData.h"
+#include "src/core/SkImageFilterPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkWriteBuffer.h"
 #if SK_SUPPORT_GPU
-#include "GrCaps.h"
-#include "GrClip.h"
-#include "GrColorSpaceXform.h"
-#include "GrCoordTransform.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrTexture.h"
-#include "GrTextureProxy.h"
-#include "SkGr.h"
-#include "effects/GrTextureDomain.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrCoordTransform.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrTextureDomain.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
 #endif
 
 namespace {
@@ -357,21 +356,6 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffect::onFilterImage(SkSpecialImage* sou
     offset->fY = bounds.top();
     return SkSpecialImage::MakeFromRaster(SkIRect::MakeWH(bounds.width(), bounds.height()),
                                           dst);
-}
-
-sk_sp<SkImageFilter> SkDisplacementMapEffect::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
-    SkASSERT(2 == this->countInputs());
-    // Intentionally avoid xforming the displacement filter.  The values will be used as
-    // offsets, not as colors.
-    sk_sp<SkImageFilter> displacement = sk_ref_sp(const_cast<SkImageFilter*>(this->getInput(0)));
-    sk_sp<SkImageFilter> color = xformer->apply(this->getInput(1));
-
-    if (color.get() != this->getInput(1)) {
-        return SkDisplacementMapEffect::Make(fXChannelSelector, fYChannelSelector, fScale,
-                                             std::move(displacement), std::move(color),
-                                             this->getCropRectIfSet());
-    }
-    return this->refMe();
 }
 
 SkRect SkDisplacementMapEffect::computeFastBounds(const SkRect& src) const {

@@ -5,16 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "GrMtlUtil.h"
+#include "src/gpu/mtl/GrMtlUtil.h"
 
-#include "GrTypesPriv.h"
-#include "GrSurface.h"
-#include "mtl/GrMtlGpu.h"
-#include "mtl/GrMtlTexture.h"
-#include "mtl/GrMtlRenderTarget.h"
-#include "SkSLCompiler.h"
+#include "include/gpu/GrSurface.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/mtl/GrMtlGpu.h"
+#include "src/gpu/mtl/GrMtlRenderTarget.h"
+#include "src/gpu/mtl/GrMtlTexture.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #import <Metal/Metal.h>
+
+#if !__has_feature(objc_arc)
+#error This file must be compiled with Arc. Use -fobjc-arc flag
+#endif
 
 #define PRINT_MSL 0 // print out the MSL code generated
 
@@ -31,14 +35,14 @@ bool GrPixelConfigToMTLFormat(GrPixelConfig config, MTLPixelFormat* format) {
             *format = MTLPixelFormatRGBA8Unorm;
             return true;
         case kRGB_888_GrPixelConfig:
-            // TODO: MTLPixelFormatRGB8Unorm
-            return false;
+            *format = MTLPixelFormatRGBA8Unorm;
+            return true;
         case kRGB_888X_GrPixelConfig:
             *format = MTLPixelFormatRGBA8Unorm;
             return true;
         case kRG_88_GrPixelConfig:
-            // TODO: MTLPixelFormatRG8Unorm
-            return false;
+            *format = MTLPixelFormatRG8Unorm;
+            return true;
         case kBGRA_8888_GrPixelConfig:
             *format = MTLPixelFormatBGRA8Unorm;
             return true;
@@ -105,20 +109,12 @@ bool GrPixelConfigToMTLFormat(GrPixelConfig config, MTLPixelFormat* format) {
     return false;
 }
 
-id<MTLTexture> GrGetMTLTexture(const void* mtlTexture, GrWrapOwnership wrapOwnership) {
-    if (GrWrapOwnership::kAdopt_GrWrapOwnership == wrapOwnership) {
-        return (__bridge_transfer id<MTLTexture>)mtlTexture;
-    } else {
-        return (__bridge id<MTLTexture>)mtlTexture;
-    }
+id<MTLTexture> GrGetMTLTexture(const void* mtlTexture) {
+    return (__bridge id<MTLTexture>)mtlTexture;
 }
 
 const void* GrGetPtrFromId(id idObject) {
     return (__bridge const void*)idObject;
-}
-
-const void* GrReleaseId(id idObject) {
-    return (__bridge_retained const void*)idObject;
 }
 
 MTLTextureDescriptor* GrGetMTLTextureDescriptor(id<MTLTexture> mtlTexture) {
@@ -215,7 +211,6 @@ id<MTLTexture> GrGetMTLTextureFromSurface(GrSurface* surface, bool doResolve) {
 // CPP Utils
 
 GrMTLPixelFormat GrGetMTLPixelFormatFromMtlTextureInfo(const GrMtlTextureInfo& info) {
-    id<MTLTexture> mtlTexture = GrGetMTLTexture(info.fTexture,
-                                                GrWrapOwnership::kBorrow_GrWrapOwnership);
+    id<MTLTexture> mtlTexture = GrGetMTLTexture(info.fTexture);
     return static_cast<GrMTLPixelFormat>(mtlTexture.pixelFormat);
 }

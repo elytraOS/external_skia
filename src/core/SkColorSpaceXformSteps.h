@@ -8,12 +8,16 @@
 #ifndef SkColorSpaceXformSteps_DEFINED
 #define SkColorSpaceXformSteps_DEFINED
 
-#include "SkColorSpace.h"
-#include "SkImageInfo.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImageInfo.h"
 
 class SkRasterPipeline;
 
 struct SkColorSpaceXformSteps {
+    // Returns true if SkColorSpaceXformSteps must be applied
+    // to draw content in `src` into a destination in `dst`.
+    static bool Required(SkColorSpace* src, SkColorSpace* dst);
+
     struct Flags {
         bool unpremul         = false;
         bool linearize        = false;

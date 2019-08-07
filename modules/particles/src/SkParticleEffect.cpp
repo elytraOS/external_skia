@@ -5,15 +5,15 @@
 * found in the LICENSE file.
 */
 
-#include "SkParticleEffect.h"
+#include "modules/particles/include/SkParticleEffect.h"
 
-#include "SkCanvas.h"
-#include "SkColorData.h"
-#include "SkPaint.h"
-#include "SkParticleAffector.h"
-#include "SkParticleDrawable.h"
-#include "SkReflected.h"
-#include "SkRSXform.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRSXform.h"
+#include "include/private/SkColorData.h"
+#include "modules/particles/include/SkParticleAffector.h"
+#include "modules/particles/include/SkParticleDrawable.h"
+#include "modules/particles/include/SkReflected.h"
 
 void SkParticleEffectParams::visitFields(SkFieldVisitor* v) {
     v->visit("MaxCount", fMaxCount);
@@ -141,7 +141,8 @@ void SkParticleEffect::update(double now) {
     for (int i = 0; i < fCount; ++i) {
         fParticles[i].fPose.fPosition += fParticles[i].fVelocity.fLinear * deltaTime;
 
-        SkScalar c, s = SkScalarSinCos(fParticles[i].fVelocity.fAngular * deltaTime, &c);
+        SkScalar s = SkScalarSin(fParticles[i].fVelocity.fAngular * deltaTime),
+                 c = SkScalarCos(fParticles[i].fVelocity.fAngular * deltaTime);
         SkVector oldHeading = fParticles[i].fPose.fHeading;
         fParticles[i].fPose.fHeading = { oldHeading.fX * c - oldHeading.fY * s,
                                          oldHeading.fX * s + oldHeading.fY * c };

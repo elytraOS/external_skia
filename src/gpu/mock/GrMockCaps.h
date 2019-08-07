@@ -8,9 +8,9 @@
 #ifndef GrMockCaps_DEFINED
 #define GrMockCaps_DEFINED
 
-#include "GrCaps.h"
-#include "SkGr.h"
-#include "mock/GrMockTypes.h"
+#include "include/gpu/mock/GrMockTypes.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/SkGr.h"
 
 class GrMockCaps : public GrCaps {
 public:
@@ -31,6 +31,7 @@ public:
         fShaderCaps->fFlatInterpolationSupport = options.fFlatInterpolationSupport;
         fShaderCaps->fMaxFragmentSamplers = options.fMaxFragmentSamplers;
         fShaderCaps->fShaderDerivativeSupport = options.fShaderDerivativeSupport;
+        fShaderCaps->fDualSourceBlendingSupport = options.fDualSourceBlendingSupport;
 
         this->applyOptionsOverrides(contextOptions);
     }
@@ -105,11 +106,22 @@ public:
         return GrBackendFormat::MakeMock(config);
     }
 
+    GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override {
+        return GrSwizzle();
+    }
+    GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override {
+        return GrSwizzle();
+    }
+
 private:
     bool onSurfaceSupportsWritePixels(const GrSurface*) const override { return true; }
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override {
         return true;
+    }
+    size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override {
+        // arbitrary
+        return GrSizeAlignUp(GrColorTypeBytesPerPixel(bufferColorType), 4);
     }
 
     static const int kMaxSampleCnt = 16;

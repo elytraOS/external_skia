@@ -5,28 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "GrAAHairLinePathRenderer.h"
-#include "GrBuffer.h"
-#include "GrCaps.h"
-#include "GrClip.h"
-#include "GrDefaultGeoProcFactory.h"
-#include "GrDrawOpTest.h"
-#include "GrOpFlushState.h"
-#include "GrPathUtils.h"
-#include "GrProcessor.h"
-#include "GrResourceProvider.h"
-#include "GrShape.h"
-#include "GrSimpleMeshDrawOpHelper.h"
-#include "GrStyle.h"
-#include "SkGeometry.h"
-#include "SkMatrixPriv.h"
-#include "SkPoint3.h"
-#include "SkPointPriv.h"
-#include "SkRectPriv.h"
-#include "SkStroke.h"
-#include "SkTemplates.h"
-#include "effects/GrBezierEffect.h"
-#include "ops/GrMeshDrawOp.h"
+#include "include/core/SkPoint3.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/core/SkPointPriv.h"
+#include "src/core/SkRectPriv.h"
+#include "src/core/SkStroke.h"
+#include "src/gpu/GrBuffer.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrDefaultGeoProcFactory.h"
+#include "src/gpu/GrDrawOpTest.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrPathUtils.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrShape.h"
+#include "src/gpu/GrStyle.h"
+#include "src/gpu/effects/GrBezierEffect.h"
+#include "src/gpu/ops/GrAAHairLinePathRenderer.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 #define PREALLOC_PTARRAY(N) SkSTArray<(N),SkPoint, true>
 
@@ -713,7 +713,7 @@ static void add_line(const SkPoint p[2],
 
 GrPathRenderer::CanDrawPath
 GrAAHairLinePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
-    if (GrAAType::kCoverage != args.fAAType) {
+    if (!(AATypeFlags::kCoverage & args.fAATypeFlags)) {
         return CanDrawPath::kNo;
     }
 
@@ -821,7 +821,7 @@ public:
 
     const char* name() const override { return "AAHairlineOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         fHelper.visitProxies(func);
     }
 
@@ -840,8 +840,10 @@ public:
 
     GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
                                       GrFSAAType fsaaType, GrClampType clampType) override {
+        // This Op uses uniform (not vertex) color, so doesn't need to track wide color.
         return fHelper.finalizeProcessors(caps, clip, fsaaType, clampType,
-                                          GrProcessorAnalysisCoverage::kSingleChannel, &fColor);
+                                          GrProcessorAnalysisCoverage::kSingleChannel, &fColor,
+                                          nullptr);
     }
 
 private:

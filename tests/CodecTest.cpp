@@ -5,47 +5,51 @@
  * found in the LICENSE file.
  */
 
-#include "FakeStreams.h"
-#include "Resources.h"
-#include "SkAndroidCodec.h"
-#include "SkAutoMalloc.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkCodec.h"
-#include "SkCodecImageGenerator.h"
-#include "SkColor.h"
-#include "SkColorSpace.h"
-#include "SkColorSpacePriv.h"
-#include "SkData.h"
-#include "SkEncodedImageFormat.h"
-#include "SkFrontBufferedStream.h"
-#include "SkImage.h"
-#include "SkImageGenerator.h"
-#include "SkImageInfo.h"
-#include "SkJpegEncoder.h"
-#include "SkMD5.h"
-#include "SkMakeUnique.h"
-#include "SkMalloc.h"
-#include "SkPixmap.h"
-#include "SkPngChunkReader.h"
-#include "SkPngEncoder.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkSize.h"
-#include "SkStream.h"
-#include "SkStreamPriv.h"
-#include "SkString.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
-#include "SkUnPreMultiply.h"
-#include "SkWebpEncoder.h"
-#include "Test.h"
+#include "include/codec/SkAndroidCodec.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPngChunkReader.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "include/encode/SkJpegEncoder.h"
+#include "include/encode/SkPngEncoder.h"
+#include "include/encode/SkWebpEncoder.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkTemplates.h"
+#include "include/third_party/skcms/skcms.h"
+#include "include/utils/SkFrontBufferedStream.h"
+#include "include/utils/SkRandom.h"
+#include "src/codec/SkCodecImageGenerator.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkMD5.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkStreamPriv.h"
+#include "tests/FakeStreams.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
+
 #include "png.h"
-#include "sk_tool_utils.h"
 
 #include <setjmp.h>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -57,14 +61,14 @@
     #define SK_PNG_DISABLE_TESTS
 #endif
 
-static void md5(const SkBitmap& bm, SkMD5::Digest* digest) {
+static SkMD5::Digest md5(const SkBitmap& bm) {
     SkASSERT(bm.getPixels());
     SkMD5 md5;
     size_t rowLen = bm.info().bytesPerPixel() * bm.width();
     for (int y = 0; y < bm.height(); ++y) {
         md5.write(bm.getAddr(0, y), rowLen);
     }
-    md5.finish(*digest);
+    return md5.finish();
 }
 
 /**
@@ -75,8 +79,7 @@ static void md5(const SkBitmap& bm, SkMD5::Digest* digest) {
  */
 static void compare_to_good_digest(skiatest::Reporter* r, const SkMD5::Digest& goodDigest,
                            const SkBitmap& bm) {
-    SkMD5::Digest digest;
-    md5(bm, &digest);
+    SkMD5::Digest digest = md5(bm);
     REPORTER_ASSERT(r, digest == goodDigest);
 }
 
@@ -178,7 +181,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
     SkCodec::Result result = codec->getPixels(info, bm.getPixels(), bm.rowBytes());
     REPORTER_ASSERT(r, result == expectedResult);
 
-    md5(bm, digest);
+    *digest = md5(bm);
     if (goodDigest) {
         REPORTER_ASSERT(r, *digest == *goodDigest);
     }
@@ -196,8 +199,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
 
             auto actualResult = codec->getPixels(info565, bm565.getPixels(), bm565.rowBytes());
             if (actualResult == expectedResult) {
-                SkMD5::Digest digest565;
-                md5(bm565, &digest565);
+                SkMD5::Digest digest565 = md5(bm565);
 
                 // A request for non-opaque should also succeed.
                 for (auto alpha : { kPremul_SkAlphaType, kUnpremul_SkAlphaType }) {
@@ -225,8 +227,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
         REPORTER_ASSERT(r, expectedResult == codec->getPixels(grayInfo,
                 grayBm.getPixels(), grayBm.rowBytes()));
 
-        SkMD5::Digest grayDigest;
-        md5(grayBm, &grayDigest);
+        SkMD5::Digest grayDigest = md5(grayBm);
 
         for (auto alpha : { kPremul_SkAlphaType, kUnpremul_SkAlphaType }) {
             grayInfo = grayInfo.makeAlphaType(alpha);
@@ -702,8 +703,7 @@ DEF_TEST(Codec_pngChunkReader, r) {
     bm.setInfo(bmInfo);
     bm.allocPixels();
     bm.eraseColor(SK_ColorBLUE);
-    SkMD5::Digest goodDigest;
-    md5(bm, &goodDigest);
+    SkMD5::Digest goodDigest = md5(bm);
 
     // Write to a png file.
     png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -818,7 +818,7 @@ DEF_TEST(Codec_pngChunkReader, r) {
 
     if (decodedBm.colorType() != bm.colorType()) {
         SkBitmap tmp;
-        bool success = sk_tool_utils::copy_to(&tmp, bm.colorType(), decodedBm);
+        bool     success = ToolUtils::copy_to(&tmp, bm.colorType(), decodedBm);
         REPORTER_ASSERT(r, success);
         if (!success) {
             return;
@@ -1080,10 +1080,7 @@ static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const Sk
     result = codec->getPixels(info, bm2.getPixels(), bm2.rowBytes());
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
 
-    SkMD5::Digest d1, d2;
-    md5(bm1, &d1);
-    md5(bm2, &d2);
-    REPORTER_ASSERT(r, d1 == d2);
+    REPORTER_ASSERT(r, md5(bm1) == md5(bm2));
 }
 
 DEF_TEST(Codec_PngRoundTrip, r) {

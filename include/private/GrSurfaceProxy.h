@@ -8,17 +8,16 @@
 #ifndef GrSurfaceProxy_DEFINED
 #define GrSurfaceProxy_DEFINED
 
-#include "../private/SkNoncopyable.h"
-#include "GrBackendSurface.h"
-#include "GrGpuResource.h"
-#include "GrSurface.h"
-
-#include "SkRect.h"
+#include "include/core/SkRect.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrGpuResource.h"
+#include "include/gpu/GrSurface.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/SkNoncopyable.h"
 
 class GrCaps;
 class GrContext_Base;
 class GrOpList;
-class GrProxyProvider;
 class GrRecordingContext;
 class GrRenderTargetOpList;
 class GrRenderTargetProxy;
@@ -152,37 +151,40 @@ protected:
         // have forwarded on the unref call that got us here.
     }
 
+    // Privileged method that allows going from ref count = 0 to ref count = 1.
+    void addInitialRef(GrResourceCache* cache) const {
+        this->validate();
+        ++fRefCnt;
+        if (fTarget) {
+            fTarget->proxyAccess().ref(cache);
+        }
+    }
+
     // This GrIORefProxy was deferred before but has just been instantiated. To
     // make all the reffing & unreffing work out we now need to transfer any deferred
     // refs & unrefs to the new GrSurface
     void transferRefs() {
         SkASSERT(fTarget);
+        // Make sure we're going to take some ownership of our target.
+        SkASSERT(fRefCnt > 0 || fPendingReads > 0 || fPendingWrites > 0);
 
-        SkASSERT(fTarget->fRefCnt > 0);
-        fTarget->fRefCnt += (fRefCnt-1); // don't xfer the proxy's creation ref
+        // Transfer pending read/writes first so that if we decrement the target's ref cnt we don't
+        // cause a purge of the target.
         fTarget->fPendingReads += fPendingReads;
         fTarget->fPendingWrites += fPendingWrites;
-    }
-
-    int32_t internalGetProxyRefCnt() const {
-        return fRefCnt;
-    }
-
-    bool internalHasPendingIO() const {
-        if (fTarget) {
-            return fTarget->internalHasPendingIO();
+        SkASSERT(fTarget->fRefCnt > 0);
+        SkASSERT(fRefCnt >= 0);
+        // Don't xfer the proxy's creation ref. If we're going to subtract a ref do it via unref()
+        // so that proper cache notifications occur.
+        if (!fRefCnt) {
+            fTarget->unref();
+        } else {
+            fTarget->fRefCnt += (fRefCnt - 1);
         }
-
-        return SkToBool(fPendingWrites | fPendingReads);
     }
 
-    bool internalHasPendingWrite() const {
-        if (fTarget) {
-            return fTarget->internalHasPendingWrite();
-        }
-
-        return SkToBool(fPendingWrites);
-    }
+    int32_t internalGetProxyRefCnt() const { return fRefCnt; }
+    int32_t internalGetTotalRefs() const { return fRefCnt + fPendingReads + fPendingWrites; }
 
     // For deferred proxies this will be null. For wrapped proxies it will point to the
     // wrapped resource.
@@ -205,6 +207,45 @@ private:
 
 class GrSurfaceProxy : public GrIORefProxy {
 public:
+    /**
+     * Some lazy proxy callbacks want to set their own (or no key) on the GrSurfaces they return.
+     * Others want the GrSurface's key to be kept in sync with the proxy's key. This enum controls
+     * the key relationship between proxies and their targets.
+     */
+    enum class LazyInstantiationKeyMode {
+        /**
+         * Don't key the GrSurface with the proxy's key. The lazy instantiation callback is free to
+         * return a GrSurface that already has a unique key unrelated to the proxy's key.
+         */
+        kUnsynced,
+        /**
+         * Keep the GrSurface's unique key in sync with the proxy's unique key. The GrSurface
+         * returned from the lazy instantiation callback must not have a unique key or have the same
+         * same unique key as the proxy. If the proxy is later assigned a key it is in turn assigned
+         * to the GrSurface.
+         */
+        kSynced
+    };
+
+    struct LazyInstantiationResult {
+        LazyInstantiationResult() = default;
+        LazyInstantiationResult(const LazyInstantiationResult&) = default;
+        LazyInstantiationResult(LazyInstantiationResult&& that) = default;
+        LazyInstantiationResult(sk_sp<GrSurface> surf,
+                                LazyInstantiationKeyMode mode = LazyInstantiationKeyMode::kSynced)
+                : fSurface(std::move(surf)), fKeyMode(mode) {}
+        LazyInstantiationResult(sk_sp<GrTexture> tex)
+                : LazyInstantiationResult(sk_sp<GrSurface>(std::move(tex))) {}
+
+        LazyInstantiationResult& operator=(const LazyInstantiationResult&) = default;
+        LazyInstantiationResult& operator=(LazyInstantiationResult&&) = default;
+
+        sk_sp<GrSurface> fSurface;
+        LazyInstantiationKeyMode fKeyMode = LazyInstantiationKeyMode::kSynced;
+    };
+
+    using LazyInstantiateCallback = std::function<LazyInstantiationResult(GrResourceProvider*)>;
+
     enum class LazyInstantiationType {
         kSingleUse,      // Instantiation callback is allowed to be called only once.
         kMultipleUse,    // Instantiation callback can be called multiple times.
@@ -322,7 +363,7 @@ public:
         return fUniqueID;
     }
 
-    virtual bool instantiate(GrResourceProvider* resourceProvider) = 0;
+    virtual bool instantiate(GrResourceProvider*) = 0;
 
     void deinstantiate();
 
@@ -418,6 +459,13 @@ public:
     inline GrSurfaceProxyPriv priv();
     inline const GrSurfaceProxyPriv priv() const;
 
+    /**
+     * Provides privileged access to select callers to be able to add a ref to a GrSurfaceProxy
+     * with zero refs.
+     */
+    class FirstRefAccess;
+    inline FirstRefAccess firstRefAccess();
+
     GrInternalSurfaceFlags testingOnly_getFlags() const;
 
 protected:
@@ -429,8 +477,6 @@ protected:
                              budgeted, surfaceFlags) {
         // Note: this ctor pulls a new uniqueID from the same pool at the GrGpuResources
     }
-
-    using LazyInstantiateCallback = std::function<sk_sp<GrSurface>(GrResourceProvider*)>;
 
     // Lazy-callback version
     GrSurfaceProxy(LazyInstantiateCallback&&, LazyInstantiationType,
@@ -445,17 +491,11 @@ protected:
     friend class GrSurfaceProxyPriv;
 
     // Methods made available via GrSurfaceProxyPriv
-    int32_t getProxyRefCnt() const {
-        return this->internalGetProxyRefCnt();
-    }
+    bool ignoredByResourceAllocator() const { return fIgnoredByResourceAllocator; }
+    void setIgnoredByResourceAllocator() { fIgnoredByResourceAllocator = true; }
 
-    bool hasPendingIO() const {
-        return this->internalHasPendingIO();
-    }
-
-    bool hasPendingWrite() const {
-        return this->internalHasPendingWrite();
-    }
+    int32_t getProxyRefCnt() const { return this->internalGetProxyRefCnt(); }
+    int32_t getTotalRefs() const { return this->internalGetTotalRefs(); }
 
     void computeScratchKey(GrScratchKey*) const;
 
@@ -464,6 +504,17 @@ protected:
 
     sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*, int sampleCnt, bool needsStencil,
                                        GrSurfaceDescFlags, GrMipMapped) const;
+
+    // Once the size of a fully-lazy proxy is decided, and before it gets instantiated, the client
+    // can use this optional method to specify the proxy's size. (A proxy's size can be less than
+    // the GPU surface that backs it. e.g., SkBackingFit::kApprox.) Otherwise, the proxy's size will
+    // be set to match the underlying GPU surface upon instantiation.
+    void setLazySize(int width, int height) {
+        SkASSERT(GrSurfaceProxy::LazyState::kFully == this->lazyInstantiationState());
+        SkASSERT(width > 0 && height > 0);
+        fWidth = width;
+        fHeight = height;
+    }
 
     bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt, bool needsStencil,
                          GrSurfaceDescFlags descFlags, GrMipMapped, const GrUniqueKey*);
@@ -509,6 +560,7 @@ private:
     virtual size_t onUninstantiatedGpuMemorySize() const = 0;
 
     bool                   fNeedsClear;
+    bool                   fIgnoredByResourceAllocator = false;
 
     // This entry is lazily evaluated so, when the proxy wraps a resource, the resource
     // will be called but, when the proxy is deferred, it will compute the answer itself.
@@ -527,5 +579,26 @@ private:
 
     typedef GrIORefProxy INHERITED;
 };
+
+class GrSurfaceProxy::FirstRefAccess {
+private:
+    void ref(GrResourceCache* cache) { fProxy->addInitialRef(cache); }
+
+    FirstRefAccess(GrSurfaceProxy* proxy) : fProxy(proxy) {}
+
+    // No taking addresses of this type.
+    const FirstRefAccess* operator&() const = delete;
+    FirstRefAccess* operator&() = delete;
+
+    GrSurfaceProxy* fProxy;
+
+    friend class GrSurfaceProxy;
+    friend class GrProxyProvider;
+    friend class GrDeinstantiateProxyTracker;
+};
+
+inline GrSurfaceProxy::FirstRefAccess GrSurfaceProxy::firstRefAccess() {
+    return FirstRefAccess(this);
+}
 
 #endif

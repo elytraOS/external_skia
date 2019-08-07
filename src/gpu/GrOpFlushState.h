@@ -9,14 +9,14 @@
 #define GrOpFlushState_DEFINED
 
 #include <utility>
-#include "GrAppliedClip.h"
-#include "GrBufferAllocPool.h"
-#include "GrDeferredUpload.h"
-#include "GrDeinstantiateProxyTracker.h"
-#include "GrRenderTargetProxy.h"
-#include "SkArenaAlloc.h"
-#include "SkArenaAllocList.h"
-#include "ops/GrMeshDrawOp.h"
+#include "include/private/GrRenderTargetProxy.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkArenaAllocList.h"
+#include "src/gpu/GrAppliedClip.h"
+#include "src/gpu/GrBufferAllocPool.h"
+#include "src/gpu/GrDeferredUpload.h"
+#include "src/gpu/GrDeinstantiateProxyTracker.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
 
 class GrGpu;
 class GrGpuCommandBuffer;
@@ -29,7 +29,7 @@ public:
     // vertexSpace and indexSpace may either be null or an alloation of size
     // GrBufferAllocPool::kDefaultBufferSize. If the latter, then CPU memory is only allocated for
     // vertices/indices when a buffer larger than kDefaultBufferSize is required.
-    GrOpFlushState(GrGpu*, GrResourceProvider*, GrTokenTracker*,
+    GrOpFlushState(GrGpu*, GrResourceProvider*, GrResourceCache*, GrTokenTracker*,
                    sk_sp<GrBufferAllocPool::CpuBufferCache> = nullptr);
 
     ~GrOpFlushState() final { this->reset(); }
@@ -42,7 +42,8 @@ public:
 
     /** Called as ops are executed. Must be called in the same order as the ops were prepared. */
     void executeDrawsAndUploadsForMeshDrawOp(
-            const GrOp* op, const SkRect& chainBounds, GrProcessorSet&&, uint32_t pipelineFlags = 0,
+            const GrOp* op, const SkRect& chainBounds, GrProcessorSet&&,
+            GrPipeline::InputFlags = GrPipeline::InputFlags::kNone,
             const GrUserStencilSettings* = &GrUserStencilSettings::kUnused);
 
     GrGpuCommandBuffer* commandBuffer() { return fCommandBuffer; }

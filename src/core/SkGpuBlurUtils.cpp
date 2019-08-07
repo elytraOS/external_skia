@@ -5,21 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SkGpuBlurUtils.h"
+#include "src/core/SkGpuBlurUtils.h"
 
-#include "SkRect.h"
+#include "include/core/SkRect.h"
 
 #if SK_SUPPORT_GPU
-#include "GrCaps.h"
-#include "GrFixedClip.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
-#include "effects/GrGaussianConvolutionFragmentProcessor.h"
-#include "effects/GrMatrixConvolutionEffect.h"
+#include "include/private/GrRecordingContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrFixedClip.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/effects/GrGaussianConvolutionFragmentProcessor.h"
+#include "src/gpu/effects/GrMatrixConvolutionEffect.h"
 
-#include "SkGr.h"
+#include "src/gpu/SkGr.h"
 
 #define MAX_BLUR_SIGMA 4.0f
 
@@ -319,8 +319,15 @@ static sk_sp<GrTextureProxy> decimate(GrRecordingContext* context,
                                                                 : mode;
 
             SkRect domain = SkRect::Make(*contentRect);
-            domain.inset((i < scaleFactorX) ? SK_ScalarHalf : 0.0f,
-                         (i < scaleFactorY) ? SK_ScalarHalf : 0.0f);
+            domain.inset((i < scaleFactorX) ? SK_ScalarHalf + SK_ScalarNearlyZero : 0.0f,
+                         (i < scaleFactorY) ? SK_ScalarHalf + SK_ScalarNearlyZero : 0.0f);
+            // Ensure that the insetting doesn't invert the domain rectangle.
+            if (domain.fRight < domain.fLeft) {
+                domain.fLeft = domain.fRight = SkScalarAve(domain.fLeft, domain.fRight);
+            }
+            if (domain.fBottom < domain.fTop) {
+                domain.fTop = domain.fBottom = SkScalarAve(domain.fTop, domain.fBottom);
+            }
             auto fp = GrTextureDomainEffect::Make(std::move(src),
                                                   SkMatrix::I(),
                                                   domain,

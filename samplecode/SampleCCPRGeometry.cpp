@@ -5,29 +5,31 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if SK_SUPPORT_GPU
 
-#include "GrClip.h"
-#include "GrContextPriv.h"
-#include "GrMemoryPool.h"
-#include "GrPathUtils.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
-#include "GrResourceProvider.h"
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkMakeUnique.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRectPriv.h"
-#include "ccpr/GrCCCoverageProcessor.h"
-#include "ccpr/GrCCFillGeometry.h"
-#include "ccpr/GrCCStroker.h"
-#include "gl/GrGLGpu.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "ops/GrDrawOp.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkRectPriv.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrPathUtils.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/ccpr/GrCCCoverageProcessor.h"
+#include "src/gpu/ccpr/GrCCFillGeometry.h"
+#include "src/gpu/ccpr/GrCCStroker.h"
+#include "src/gpu/ccpr/GrGSCoverageProcessor.h"
+#include "src/gpu/ccpr/GrVSCoverageProcessor.h"
+#include "src/gpu/gl/GrGLGpu.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/ops/GrDrawOp.h"
 
 using TriPointInstance = GrCCCoverageProcessor::TriPointInstance;
 using QuadPointInstance = GrCCCoverageProcessor::QuadPointInstance;
@@ -338,9 +340,16 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
 
     GrPipeline pipeline(GrScissorTest::kDisabled, SkBlendMode::kPlus);
 
+    std::unique_ptr<GrCCCoverageProcessor> proc;
+    if (state->caps().shaderCaps()->geometryShaderSupport()) {
+        proc = skstd::make_unique<GrGSCoverageProcessor>();
+    } else {
+        proc = skstd::make_unique<GrVSCoverageProcessor>();
+    }
+
     if (!fView->fDoStroke) {
-        GrCCCoverageProcessor proc(rp, fView->fPrimitiveType);
-        SkDEBUGCODE(proc.enableDebugBloat(kDebugBloat));
+        proc->reset(fView->fPrimitiveType, rp);
+        SkDEBUGCODE(proc->enableDebugBloat(kDebugBloat));
 
         SkSTArray<1, GrMesh> mesh;
         if (PrimitiveType::kCubics == fView->fPrimitiveType ||
@@ -350,7 +359,7 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
                                      GrGpuBufferType::kVertex, kDynamic_GrAccessPattern,
                                      fView->fQuadPointInstances.begin()));
             if (!fView->fQuadPointInstances.empty() && instBuff) {
-                proc.appendMesh(std::move(instBuff), fView->fQuadPointInstances.count(), 0, &mesh);
+                proc->appendMesh(std::move(instBuff), fView->fQuadPointInstances.count(), 0, &mesh);
             }
         } else {
             sk_sp<GrGpuBuffer> instBuff(
@@ -358,13 +367,13 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
                                      GrGpuBufferType::kVertex, kDynamic_GrAccessPattern,
                                      fView->fTriPointInstances.begin()));
             if (!fView->fTriPointInstances.empty() && instBuff) {
-                proc.appendMesh(std::move(instBuff), fView->fTriPointInstances.count(), 0, &mesh);
+                proc->appendMesh(std::move(instBuff), fView->fTriPointInstances.count(), 0, &mesh);
             }
         }
 
         if (!mesh.empty()) {
             SkASSERT(1 == mesh.count());
-            proc.draw(state, pipeline, nullptr, mesh.begin(), 1, this->bounds());
+            proc->draw(state, pipeline, nullptr, mesh.begin(), 1, this->bounds());
         }
     } else if (PrimitiveType::kConics != fView->fPrimitiveType) {  // No conic stroke support yet.
         GrCCStroker stroker(0,0,0);
@@ -385,7 +394,7 @@ void CCPRGeometryView::DrawCoverageCountOp::onExecute(GrOpFlushState* state,
 
         SkIRect ibounds;
         this->bounds().roundOut(&ibounds);
-        stroker.drawStrokes(state, batchID, ibounds);
+        stroker.drawStrokes(state, proc.get(), batchID, ibounds);
     }
 
     if (glGpu) {

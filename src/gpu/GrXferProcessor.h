@@ -8,11 +8,11 @@
 #ifndef GrXferProcessor_DEFINED
 #define GrXferProcessor_DEFINED
 
-#include "GrBlend.h"
-#include "GrNonAtomicRef.h"
-#include "GrProcessor.h"
-#include "GrProcessorAnalysis.h"
-#include "GrTypes.h"
+#include "include/gpu/GrBlend.h"
+#include "include/gpu/GrTypes.h"
+#include "src/gpu/GrNonAtomicRef.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrProcessorAnalysis.h"
 
 class GrGLSLXferProcessor;
 class GrProcessorSet;
@@ -93,10 +93,6 @@ public:
             if (!fProxy) {
                 fOffset = {0, 0};
             }
-        }
-
-        bool instantiate(GrResourceProvider* resourceProvider) {
-            return SkToBool(fProxy->instantiate(resourceProvider));
         }
 
     private:
@@ -264,7 +260,7 @@ public:
         /**
          * The op may apply coverage as alpha and still blend correctly.
          */
-        kCompatibleWithAlphaAsCoverage = 0x2,
+        kCompatibleWithCoverageAsAlpha = 0x2,
         /**
          * The color input to the GrXferProcessor will be ignored.
          */

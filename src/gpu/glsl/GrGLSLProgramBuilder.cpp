@@ -5,18 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 
-#include "GrCaps.h"
-#include "GrPipeline.h"
-#include "GrRenderTarget.h"
-#include "GrShaderCaps.h"
-#include "GrTexturePriv.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLXferProcessor.h"
-#include "SkSLCompiler.h"
+#include "include/gpu/GrRenderTarget.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrPipeline.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/glsl/GrGLSLXferProcessor.h"
+#include "src/sksl/SkSLCompiler.h"
 
 const int GrGLSLProgramBuilder::kVarsPerBlock = 8;
 
@@ -62,7 +62,6 @@ bool GrGLSLProgramBuilder::emitAndInstallProcs() {
     this->emitAndInstallPrimProc(&inputColor, &inputCoverage);
     this->emitAndInstallFragProcs(&inputColor, &inputCoverage);
     this->emitAndInstallXferProc(inputColor, inputCoverage);
-    this->emitFSOutputSwizzle(this->pipeline().getXferProcessor().hasSecondaryOutput());
 
     return this->checkSamplerCounts();
 }
@@ -273,7 +272,8 @@ void GrGLSLProgramBuilder::emitAndInstallXferProc(const SkString& colorIn,
                                        fFS.getPrimaryColorOutputName(),
                                        fFS.getSecondaryColorOutputName(),
                                        dstTextureSamplerHandle,
-                                       dstTextureOrigin);
+                                       dstTextureOrigin,
+                                       this->desc()->header().fOutputSwizzle);
     fXferProcessor->emitCode(args);
 
     // We have to check that effects and the code they emit are consistent, ie if an effect
@@ -287,22 +287,6 @@ GrGLSLProgramBuilder::SamplerHandle GrGLSLProgramBuilder::emitSampler(const GrTe
                                                                       const char* name) {
     ++fNumFragmentSamplers;
     return this->uniformHandler()->addSampler(texture, state, name, this->shaderCaps());
-}
-
-void GrGLSLProgramBuilder::emitFSOutputSwizzle(bool hasSecondaryOutput) {
-    // Swizzle the fragment shader outputs if necessary.
-    GrSwizzle swizzle;
-    swizzle.setFromKey(this->desc()->header().fOutputSwizzle);
-    if (swizzle != GrSwizzle::RGBA()) {
-        fFS.codeAppendf("%s = %s.%s;", fFS.getPrimaryColorOutputName(),
-                        fFS.getPrimaryColorOutputName(),
-                        swizzle.c_str());
-        if (hasSecondaryOutput) {
-            fFS.codeAppendf("%s = %s.%s;", fFS.getSecondaryColorOutputName(),
-                            fFS.getSecondaryColorOutputName(),
-                            swizzle.c_str());
-        }
-    }
 }
 
 bool GrGLSLProgramBuilder::checkSamplerCounts() {

@@ -5,28 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkTypes.h"
+#include "tests/Test.h"
 
-#include "GrClip.h"
-#include "GrContextPriv.h"
-#include "GrDrawingManager.h"
-#include "GrPathRenderer.h"
-#include "GrPaint.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
-#include "GrShape.h"
-#include "GrTexture.h"
-#include "SkExchange.h"
-#include "SkMatrix.h"
-#include "SkPathPriv.h"
-#include "SkRect.h"
-#include "sk_tool_utils.h"
-#include "ccpr/GrCoverageCountingPathRenderer.h"
-#include "ccpr/GrCCPathCache.h"
-#include "mock/GrMockTypes.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/gpu/GrTexture.h"
+#include "include/gpu/mock/GrMockTypes.h"
+#include "include/private/GrRecordingContext.h"
+#include "src/core/SkExchange.h"
+#include "src/core/SkPathPriv.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/GrShape.h"
+#include "src/gpu/ccpr/GrCCPathCache.h"
+#include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
+#include "tools/ToolUtils.h"
 
 #include <cmath>
 
@@ -112,7 +112,7 @@ public:
 
         fCCPR->testingOnly_drawPathDirectly({
                 fCtx.get(), std::move(paint), &GrUserStencilSettings::kUnused, fRTC.get(), &noClip,
-                &clipBounds, &matrix, &shape, GrAAType::kCoverage, false});
+                &clipBounds, &matrix, &shape, GrPathRenderer::AATypeFlags::kCoverage, false});
     }
 
     void clipFullscreenRect(SkPath clipPath, SkPMColor4f color = { 0, 1, 0, 1 }) {
@@ -155,6 +155,7 @@ public:
         mockOptions.fFlatInterpolationSupport = true;
 
         GrContextOptions ctxOptions;
+        ctxOptions.fDisableCoverageCountingPaths = false;
         ctxOptions.fAllowPathMaskCaching = false;
         ctxOptions.fGpuPathRenderers = GpuPathRenderers::kCoverageCounting;
 
@@ -354,7 +355,7 @@ protected:
             do {
                 step = primes[rand.nextU() % SK_ARRAY_COUNT(primes)];
             } while (step == numPts);
-            fPaths[i] = sk_tool_utils::make_star(SkRect::MakeLTRB(0,0,1,1), numPts, step);
+            fPaths[i] = ToolUtils::make_star(SkRect::MakeLTRB(0, 0, 1, 1), numPts, step);
         }
     }
 

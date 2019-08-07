@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkottieSlide.h"
+#include "tools/viewer/SkottieSlide.h"
 
 #if defined(SK_ENABLE_SKOTTIE)
 
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkOSPath.h"
-#include "Skottie.h"
-#include "SkottieUtils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/utils/SkottieUtils.h"
+#include "src/utils/SkOSPath.h"
+#include "tools/timer/AnimTimer.h"
 
 #include <cmath>
 
@@ -136,7 +136,7 @@ void SkottieSlide::draw(SkCanvas* canvas) {
     }
 }
 
-bool SkottieSlide::animate(const SkAnimTimer& timer) {
+bool SkottieSlide::animate(const AnimTimer& timer) {
     if (fTimeBase == 0) {
         // Reset the animation time.
         fTimeBase = timer.msec();

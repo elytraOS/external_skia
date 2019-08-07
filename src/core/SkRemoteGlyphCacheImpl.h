@@ -8,11 +8,11 @@
 #ifndef SkRemoteGlyphCacheImpl_DEFINED
 #define SkRemoteGlyphCacheImpl_DEFINED
 
-#include "SkArenaAlloc.h"
-#include "SkDescriptor.h"
-#include "SkGlyphRun.h"
-#include "SkGlyphRunPainter.h"
-#include "SkRemoteGlyphCache.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkDescriptor.h"
+#include "src/core/SkGlyphRun.h"
+#include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkRemoteGlyphCache.h"
 
 class SkStrikeServer::SkGlyphCacheState : public SkStrikeInterface {
 public:
@@ -43,9 +43,14 @@ public:
 
     const SkGlyph& getGlyphMetrics(SkGlyphID glyphID, SkPoint position) override;
 
-    int glyphMetrics(const SkGlyphID[], const SkPoint[], int n, SkGlyphPos result[]) override;
+    SkSpan<const SkGlyphPos> prepareForDrawing(const SkGlyphID glyphIDs[],
+                                               const SkPoint positions[],
+                                               size_t n,
+                                               int maxDimension,
+                                               PreparationDetail detail,
+                                               SkGlyphPos results[]) override;
 
-    bool decideCouldDrawFromPath(const SkGlyph& glyph) override;
+    void generatePath(const SkGlyph& glyph) override;
 
     void onAboutToExitScope() override {}
 

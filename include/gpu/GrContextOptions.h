@@ -8,11 +8,11 @@
 #ifndef GrContextOptions_DEFINED
 #define GrContextOptions_DEFINED
 
-#include "SkData.h"
-#include "SkTypes.h"
-#include "GrTypes.h"
-#include "../private/GrTypesPriv.h"
-#include "GrDriverBugWorkarounds.h"
+#include "include/core/SkData.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrDriverBugWorkarounds.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/GrTypesPriv.h"
 
 #include <vector>
 
@@ -48,6 +48,17 @@ struct SK_API GrContextOptions {
         virtual void store(const SkData& key, const SkData& data) = 0;
     };
 
+    /**
+     * Abstract class to report errors when compiling shaders. If fShaderErrorHandler is present,
+     * it will be called to report any compilation failures. Otherwise, failures will be reported
+     * via SkDebugf and asserts.
+     */
+    class SK_API ShaderErrorHandler {
+    public:
+        virtual ~ShaderErrorHandler() {}
+        virtual void compileError(const char* shader, const char* errors) = 0;
+    };
+
     GrContextOptions() {}
 
     // Suppress prints for the GrContext.
@@ -78,11 +89,12 @@ struct SK_API GrContextOptions {
     bool fDoManualMipmapping = false;
 
     /**
-     * Disables the coverage counting path renderer. Coverage counting can sometimes cause new
-     * rendering artifacts along shared edges if care isn't taken to ensure both contours wind in
-     * the same direction.
+     * Disables the use of coverage counting shortcuts to render paths. Coverage counting can cause
+     * artifacts along shared edges if care isn't taken to ensure both contours wind in the same
+     * direction.
      */
-    bool fDisableCoverageCountingPaths = false;
+    // FIXME: Once this is removed from Chrome and Android, rename to fEnable"".
+    bool fDisableCoverageCountingPaths = true;
 
     /**
      * Disables distance field rendering for paths. Distance field computation can be expensive,
@@ -145,21 +157,7 @@ struct SK_API GrContextOptions {
     Enable fUseDrawInsteadOfClear = Enable::kDefault;
 
     /**
-     * Allow Ganesh to explicitly allocate resources at flush time rather than incrementally while
-     * drawing. This will eventually just be the way it is but, for now, it is optional.
-     */
-    Enable fExplicitlyAllocateGPUResources = Enable::kDefault;
-
-    /**
-     * Allow Ganesh to sort the opLists prior to allocating resources. This is an optional
-     * behavior that is only relevant when 'fExplicitlyAllocateGPUResources' is enabled.
-     * Eventually this will just be what is done and will not be optional.
-     */
-    Enable fSortRenderTargets = Enable::kDefault;
-
-    /**
-     * Allow Ganesh to more aggressively reorder operations. This is an optional
-     * behavior that is only relevant when 'fSortRenderTargets' is enabled.
+     * Allow Ganesh to more aggressively reorder operations.
      * Eventually this will just be what is done and will not be optional.
      */
     Enable fReduceOpListSplitting = Enable::kDefault;
@@ -191,6 +189,12 @@ struct SK_API GrContextOptions {
      */
      bool fDisallowGLSLBinaryCaching = false;
 
+     /**
+      * If present, use this object to report shader compilation failures. If not, report failures
+      * via SkDebugf and assert.
+      */
+     ShaderErrorHandler* fShaderErrorHandler = nullptr;
+
 #if GR_TEST_UTILS
     /**
      * Private options that are only meant for testing within Skia's tools.
@@ -221,6 +225,11 @@ struct SK_API GrContextOptions {
      * Render everything in wireframe
      */
     bool fWireframeMode = false;
+
+    /**
+     * Similar to fDisallowGLSLBinaryCaching. If set to true, SkSL shader strings will be cached.
+     */
+    bool fCacheSKSL = false;
 
     /**
      * Include or exclude specific GPU path renderers.

@@ -5,33 +5,33 @@
  * found in the LICENSE file.
  */
 
-#include "SkPaint.h"
-#include "SkScalerContext.h"
+#include "include/core/SkPaint.h"
+#include "src/core/SkScalerContext.h"
 
-#include "SkAutoMalloc.h"
-#include "SkAutoPixmapStorage.h"
-#include "SkColorData.h"
-#include "SkDescriptor.h"
-#include "SkDraw.h"
-#include "SkFontMetrics.h"
-#include "SkFontPriv.h"
-#include "SkGlyph.h"
-#include "SkMakeUnique.h"
-#include "SkMaskFilter.h"
-#include "SkMaskGamma.h"
-#include "SkMatrix22.h"
-#include "SkPaintPriv.h"
-#include "SkPathEffect.h"
-#include "SkPathPriv.h"
-#include "SkRasterClip.h"
-#include "SkReadBuffer.h"
-#include "SkRectPriv.h"
-#include "SkStroke.h"
-#include "SkStrokeRec.h"
-#include "SkSurfacePriv.h"
-#include "SkTextFormatParams.h"
-#include "SkTo.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkDescriptor.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkFontPriv.h"
+#include "src/core/SkGlyph.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkMaskGamma.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/core/SkPathPriv.h"
+#include "src/core/SkRasterClip.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkRectPriv.h"
+#include "src/core/SkStroke.h"
+#include "src/core/SkSurfacePriv.h"
+#include "src/core/SkTextFormatParams.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/utils/SkMatrix22.h"
 #include <new>
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -67,7 +67,7 @@ SkScalerContextRec SkScalerContext::PreprocessRec(const SkTypeface& typeface,
     }
 
     // TODO: remove CanonicalColor when we to fix up Chrome layout tests.
-    rec.setLuminanceColor(SkMaskGamma::CanonicalColor(lumColor));
+    rec.setLuminanceColor(lumColor);
 
     return rec;
 }
@@ -244,10 +244,10 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
     }
 
     if (fMaskFilter) {
-        SkMask      src, dst;
+        SkMask      src = glyph->mask(),
+                    dst;
         SkMatrix    matrix;
 
-        glyph->toMask(&src);
         fRec.getMatrixFrom2x2(&matrix);
 
         src.fImage = nullptr;  // only want the bounds from the filter
@@ -521,28 +521,24 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
         generateImage(*glyph);
     } else {
         SkPath devPath;
-        SkMask mask;
+        SkMask mask = glyph->mask();
 
-        glyph->toMask(&mask);
         if (!this->internalGetPath(glyph->getPackedID(), &devPath)) {
             generateImage(*glyph);
         } else {
             SkASSERT(SkMask::kARGB32_Format != origGlyph.fMaskFormat);
             SkASSERT(SkMask::kARGB32_Format != mask.fFormat);
-            // DAA would have over coverage issues with small stroke_and_fill (crbug.com/821353)
-            SkPathPriv::SetIsBadForDAA(devPath, fRec.fFrameWidth > 0 && fRec.fFrameWidth <= 2);
             generateMask(mask, devPath, fPreBlend);
         }
     }
 
     if (fMaskFilter) {
-        SkMask      srcM, dstM;
-        SkMatrix    matrix;
-
         // the src glyph image shouldn't be 3D
         SkASSERT(SkMask::k3D_Format != glyph->fMaskFormat);
 
-        glyph->toMask(&srcM);
+        SkMask      srcM = glyph->mask(),
+                    dstM;
+        SkMatrix    matrix;
 
         fRec.getMatrixFrom2x2(&matrix);
 
@@ -815,6 +811,11 @@ SkAxisAlignment SkScalerContextRec::computeAxisAlignmentForHText() const {
     return kNone_SkAxisAlignment;
 }
 
+void SkScalerContextRec::setLuminanceColor(SkColor c) {
+    fLumBits = SkMaskGamma::CanonicalColor(
+            SkColorSetRGB(SkColorGetR(c), SkColorGetG(c), SkColorGetB(c)));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 class SkScalerContext_Empty : public SkScalerContext {
@@ -825,9 +826,6 @@ public:
 
 protected:
     unsigned generateGlyphCount() override {
-        return 0;
-    }
-    uint16_t generateCharToGlyph(SkUnichar uni) override {
         return 0;
     }
     bool generateAdvance(SkGlyph* glyph) override {
@@ -907,16 +905,6 @@ static bool too_big_for_lcd(const SkScalerContextRec& rec, bool checkPost2x2) {
     } else {
         return rec.fTextSize > SK_MAX_SIZE_FOR_LCDTEXT;
     }
-}
-
-// if linear-text is on, then we force hinting to be off (since that's sort of
-// the point of linear-text.
-static SkFontHinting computeHinting(const SkFont& font) {
-    SkFontHinting h = (SkFontHinting)font.getHinting();
-    if (font.isLinearMetrics()) {
-        h = kNo_SkFontHinting;
-    }
-    return h;
 }
 
 // The only reason this is not file static is because it needs the context of SkScalerContext to
@@ -1037,11 +1025,13 @@ void SkScalerContext::MakeRecAndEffects(const SkFont& font, const SkPaint& paint
     if (font.isForceAutoHinting()) {
         flags |= SkScalerContext::kForceAutohinting_Flag;
     }
+    if (font.isLinearMetrics()) {
+        flags |= SkScalerContext::kLinearMetrics_Flag;
+    }
     rec->fFlags = SkToU16(flags);
 
     // these modify fFlags, so do them after assigning fFlags
-    rec->setHinting(computeHinting(font));
-
+    rec->setHinting(font.getHinting());
     rec->setLuminanceColor(SkPaintPriv::ComputeLuminanceColor(paint));
 
     // For now always set the paint gamma equal to the device gamma.

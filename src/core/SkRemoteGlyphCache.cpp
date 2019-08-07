@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "SkRemoteGlyphCache.h"
+#include "src/core/SkRemoteGlyphCache.h"
 
 #include <iterator>
 #include <memory>
@@ -13,19 +13,19 @@
 #include <string>
 #include <tuple>
 
-#include "SkDevice.h"
-#include "SkDraw.h"
-#include "SkGlyphRun.h"
-#include "SkRemoteGlyphCacheImpl.h"
-#include "SkStrike.h"
-#include "SkStrikeCache.h"
-#include "SkTLazy.h"
-#include "SkTraceEvent.h"
-#include "SkTypeface_remote.h"
+#include "src/core/SkDevice.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkGlyphRun.h"
+#include "src/core/SkRemoteGlyphCacheImpl.h"
+#include "src/core/SkStrike.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTLazy.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/core/SkTypeface_remote.h"
 
 #if SK_SUPPORT_GPU
-#include "GrDrawOpAtlas.h"
-#include "text/GrTextContext.h"
+#include "src/gpu/GrDrawOpAtlas.h"
+#include "src/gpu/text/GrTextContext.h"
 #endif
 
 static SkDescriptor* auto_descriptor_from_desc(const SkDescriptor* source_desc,
@@ -124,15 +124,19 @@ public:
     }
 
     bool readDescriptor(SkAutoDescriptor* ad) {
-        uint32_t desc_length = 0u;
-        if (!read<uint32_t>(&desc_length)) return false;
+        uint32_t descLength = 0u;
+        if (!read<uint32_t>(&descLength)) return false;
+        if (descLength < sizeof(SkDescriptor)) return false;
+        if (descLength != SkAlign4(descLength)) return false;
 
-        auto* result = this->ensureAtLeast(desc_length, alignof(SkDescriptor));
+        auto* result = this->ensureAtLeast(descLength, alignof(SkDescriptor));
         if (!result) return false;
 
-        ad->reset(desc_length);
-        memcpy(ad->getDesc(), const_cast<const char*>(result), desc_length);
-        return true;
+        ad->reset(descLength);
+        memcpy(ad->getDesc(), const_cast<const char*>(result), descLength);
+
+        if (ad->getDesc()->getLength() > descLength) return false;
+        return ad->getDesc()->isValid();
     }
 
     const volatile void* read(size_t size, size_t alignment) {
@@ -143,8 +147,9 @@ private:
     const volatile char* ensureAtLeast(size_t size, size_t alignment) {
         size_t padded = pad(fBytesRead, alignment);
 
-        // Not enough data
-        if (padded + size > fMemorySize) return nullptr;
+        // Not enough data.
+        if (padded > fMemorySize) return nullptr;
+        if (size > fMemorySize - padded) return nullptr;
 
         auto* result = fMemory + padded;
         fBytesRead = padded + size;
@@ -164,10 +169,17 @@ bool read_path(Deserializer* deserializer, SkGlyph* glyph, SkStrike* cache) {
     uint64_t pathSize = 0u;
     if (!deserializer->read<uint64_t>(&pathSize)) return false;
 
-    if (pathSize == 0u) return true;
+    if (pathSize == 0u) {
+        cache->initializePath(glyph, nullptr, 0u);
+        return true;
+    }
 
     auto* path = deserializer->read(pathSize, kPathAlignment);
     if (!path) return false;
+
+    // Don't overwrite the path if we already have one. We could have used a fallback if the
+    // glyph was missing earlier.
+    if (glyph->fPathData != nullptr) return true;
 
     return cache->initializePath(glyph, path, pathSize);
 }
@@ -481,8 +493,9 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
     for (const auto& glyphID : fPendingGlyphImages) {
         SkGlyph glyph{glyphID};
         fContext->getMetrics(&glyph);
-        writeGlyph(&glyph, serializer);
+        SkASSERT(SkMask::IsValidFormat(glyph.fMaskFormat));
 
+        writeGlyph(&glyph, serializer);
         auto imageSize = glyph.computeImageSize();
         if (imageSize == 0u) continue;
 
@@ -498,6 +511,8 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
     for (const auto& glyphID : fPendingGlyphPaths) {
         SkGlyph glyph{glyphID};
         fContext->getMetrics(&glyph);
+        SkASSERT(SkMask::IsValidFormat(glyph.fMaskFormat));
+
         writeGlyph(&glyph, serializer);
         writeGlyphPath(glyphID, serializer);
     }
@@ -563,7 +578,7 @@ const SkGlyph& SkStrikeServer::SkGlyphCacheState::getGlyphMetrics(
 //
 // A key reason for no path is the fact that the glyph is a color image or is a bitmap only
 // font.
-bool SkStrikeServer::SkGlyphCacheState::decideCouldDrawFromPath(const SkGlyph& glyph) {
+void SkStrikeServer::SkGlyphCacheState::generatePath(const SkGlyph& glyph) {
 
     // Check to see if we have processed this glyph for a path before.
     if (glyph.fPathData == nullptr) {
@@ -575,11 +590,8 @@ bool SkStrikeServer::SkGlyphCacheState::decideCouldDrawFromPath(const SkGlyph& g
             // A path was added make sure to send it to the GPU.
             fCachedGlyphPaths.add(glyph.getPackedID());
             fPendingGlyphPaths.push_back(glyph.getPackedID());
-            return true;
         }
     }
-
-    return glyph.path() != nullptr;
 }
 
 void SkStrikeServer::SkGlyphCacheState::writeGlyphPath(const SkPackedGlyphID& glyphID,
@@ -596,15 +608,18 @@ void SkStrikeServer::SkGlyphCacheState::writeGlyphPath(const SkPackedGlyphID& gl
 }
 
 
-// This version of glyphMetrics only adds entries to result if their data need to be sent to the
-// GPU process.
-int SkStrikeServer::SkGlyphCacheState::glyphMetrics(
-        const SkGlyphID glyphIDs[], const SkPoint positions[], int n, SkGlyphPos result[]) {
+// Be sure to read and understand the comment for prepareForDrawing in SkStrikeInterface.h before
+// working on this code.
+SkSpan<const SkGlyphPos> SkStrikeServer::SkGlyphCacheState::prepareForDrawing(
+        const SkGlyphID glyphIDs[],
+        const SkPoint positions[],
+        size_t n,
+        int maxDimension,
+        PreparationDetail detail,
+        SkGlyphPos results[]) {
 
-    int glyphsToSendCount = 0;
-    const SkPoint* posCursor = positions;
-    for (int i = 0; i < n; i++) {
-        SkPoint glyphPos = *posCursor++;
+    for (size_t i = 0; i < n; i++) {
+        SkPoint glyphPos = positions[i];
         SkGlyphID glyphID = glyphIDs[i];
         SkIPoint lookupPoint = SkStrikeCommon::SubpixelLookup(fAxisAlignmentForHText, glyphPos);
         SkPackedGlyphID packedGlyphID = fIsSubpixel ? SkPackedGlyphID{glyphID, lookupPoint}
@@ -622,15 +637,40 @@ int SkStrikeServer::SkGlyphCacheState::glyphMetrics(
             this->ensureScalerContext();
             fContext->getMetrics(glyphPtr);
 
-            result[glyphsToSendCount++] = {glyphPtr, glyphPos};
+            if (glyphPtr->maxDimension() <= maxDimension) {
+                // do nothing
+            } else if (glyphPtr->fMaskFormat != SkMask::kARGB32_Format) {
+
+                // The glyph is too big for the atlas, but it is not color, so it is handled with a
+                // path.
+                if (glyphPtr->fPathData == nullptr) {
+
+                    // Never checked for a path before. Add the path now.
+                    const_cast<SkGlyph&>(*glyphPtr).addPath(fContext.get(), &fAlloc);
+
+                    // Always send the path data, even if its not available, to make sure empty
+                    // paths are not incorrectly assumed to be cache misses.
+                    fCachedGlyphPaths.add(glyphPtr->getPackedID());
+                    fPendingGlyphPaths.push_back(glyphPtr->getPackedID());
+                }
+            } else {
+
+                // This will be handled by the fallback strike.
+                SkASSERT(glyphPtr->maxDimension() > maxDimension
+                         && glyphPtr->fMaskFormat == SkMask::kARGB32_Format);
+            }
 
             // Make sure to send the glyph to the GPU because we always send the image for a glyph.
             fCachedGlyphImages.add(packedGlyphID);
             fPendingGlyphImages.push_back(packedGlyphID);
         }
-    }
 
-    return glyphsToSendCount;
+        // Each glyph needs to be added as per the contract for prepareForDrawing.
+        // TODO(herb): check if the empty glyphs need to be added here. They certainly need to be
+        //             sent, but do the need to be processed by the painter?
+        results[i] = {i, glyphPtr, glyphPos};
+    }
+    return SkSpan<const SkGlyphPos>{results, n};
 }
 
 // SkStrikeClient -----------------------------------------
@@ -657,10 +697,10 @@ SkStrikeClient::SkStrikeClient(sk_sp<DiscardableHandleManager> discardableManage
 
 SkStrikeClient::~SkStrikeClient() = default;
 
-#define READ_FAILURE                      \
-    {                                     \
-        SkDEBUGFAIL("Bad serialization"); \
-        return false;                     \
+#define READ_FAILURE                                                \
+    {                                                               \
+        SkDebugf("Bad font data serialization line: %d", __LINE__); \
+        return false;                                               \
     }
 
 static bool readGlyph(SkTLazy<SkGlyph>& glyph, Deserializer* deserializer) {
@@ -675,6 +715,8 @@ static bool readGlyph(SkTLazy<SkGlyph>& glyph, Deserializer* deserializer) {
     if (!deserializer->read<int16_t>(&glyph->fLeft)) return false;
     if (!deserializer->read<int8_t>(&glyph->fForceBW)) return false;
     if (!deserializer->read<uint8_t>(&glyph->fMaskFormat)) return false;
+    if (!SkMask::IsValidFormat(glyph->fMaskFormat)) return false;
+
     return true;
 }
 
@@ -714,9 +756,10 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
         if (!deserializer.read<SkFontMetrics>(&fontMetrics)) READ_FAILURE
 
         // Get the local typeface from remote fontID.
-        auto* tf = fRemoteFontIdToTypeface.find(spec.typefaceID)->get();
+        auto* tfPtr = fRemoteFontIdToTypeface.find(spec.typefaceID);
         // Received strikes for a typeface which doesn't exist.
-        if (!tf) READ_FAILURE
+        if (!tfPtr) READ_FAILURE
+        auto* tf = tfPtr->get();
 
         // Replace the ContextRec in the desc from the server to create the client
         // side descriptor.
@@ -758,9 +801,14 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             auto imageSize = glyph->computeImageSize();
             if (imageSize == 0u) continue;
 
-            auto* image = deserializer.read(imageSize, allocatedGlyph->formatAlignment());
+            auto* image = deserializer.read(imageSize, glyph->formatAlignment());
             if (!image) READ_FAILURE
-            strike->initializeImage(image, imageSize, allocatedGlyph);
+
+            // Don't overwrite the image if we already have one. We could have used a fallback if
+            // the glyph was missing earlier.
+            if (allocatedGlyph->fImage == nullptr) {
+                strike->initializeImage(image, imageSize, allocatedGlyph);
+            }
         }
 
         uint64_t glyphPathsCount = 0u;

@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkGradientShader.h"
-#include "SkString.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkString.h"
+#include "include/effects/SkGradientShader.h"
+#include "samplecode/Sample.h"
+#include "tools/timer/AnimTimer.h"
 
 static void draw_gradient2(SkCanvas* canvas, const SkRect& rect, SkScalar delta) {
     SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorMAGENTA };
@@ -30,7 +30,7 @@ static void draw_gradient2(SkCanvas* canvas, const SkRect& rect, SkScalar delta)
     SkPaint paint;
     paint.setShader(SkGradientShader::MakeTwoPointConical(c0, r0, c1, r1, colors,
                                                           pos, SK_ARRAY_COUNT(pos),
-                                                          SkShader::kClamp_TileMode));
+                                                          SkTileMode::kClamp));
     canvas->drawRect(rect, paint);
 }
 
@@ -73,7 +73,7 @@ protected:
                            SkFont(), SkPaint());
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
+    bool onAnimate(const AnimTimer& timer) override {
         fTime = SkDoubleToScalar(timer.secs() / 15);
         return true;
     }

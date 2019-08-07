@@ -8,17 +8,17 @@
 #ifndef SkGpuDevice_DEFINED
 #define SkGpuDevice_DEFINED
 
-#include "GrClipStackClip.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrTypes.h"
-#include "SkBitmap.h"
-#include "SkClipStackDevice.h"
-#include "SkGr.h"
-#include "SkPicture.h"
-#include "SkRegion.h"
-#include "SkSurface.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTypes.h"
+#include "src/core/SkClipStackDevice.h"
+#include "src/gpu/GrClipStackClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/SkGr.h"
 
 class GrAccelData;
 class GrTextureMaker;
@@ -65,6 +65,7 @@ public:
     void clearAll();
 
     void replaceRenderTargetContext(bool shouldRetainContent);
+    void replaceRenderTargetContext(sk_sp<GrRenderTargetContext>, bool shouldRetainContent);
 
     GrRenderTargetContext* accessRenderTargetContext() override;
 
@@ -72,8 +73,6 @@ public:
     void drawPoints(SkCanvas::PointMode mode, size_t count, const SkPoint[],
                     const SkPaint& paint) override;
     void drawRect(const SkRect& r, const SkPaint& paint) override;
-    void drawEdgeAARect(const SkRect& r, SkCanvas::QuadAAFlags edgeAA, SkColor color,
-                        SkBlendMode mode) override;
     void drawRRect(const SkRRect& r, const SkPaint& paint) override;
     void drawDRRect(const SkRRect& outer, const SkRRect& inner, const SkPaint& paint) override;
     void drawRegion(const SkRegion& r, const SkPaint& paint) override;
@@ -105,42 +104,28 @@ public:
                           const SkRect& dst, const SkPaint&) override;
     void drawBitmapLattice(const SkBitmap&, const SkCanvas::Lattice&,
                            const SkRect& dst, const SkPaint&) override;
-    void drawImageSet(const SkCanvas::ImageSetEntry[], int count, SkFilterQuality,
-                      SkBlendMode) override;
 
     void drawDrawable(SkDrawable*, const SkMatrix*, SkCanvas* canvas) override;
 
     void drawSpecial(SkSpecialImage*, int left, int top, const SkPaint& paint,
                      SkImage*, const SkMatrix&) override;
+
+    void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4],
+                        SkCanvas::QuadAAFlags aaFlags, SkColor color, SkBlendMode mode) override;
+    void drawEdgeAAImageSet(const SkCanvas::ImageSetEntry[], int count, const SkPoint dstClips[],
+                            const SkMatrix[], const SkPaint&, SkCanvas::SrcRectConstraint) override;
+
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
     sk_sp<SkSpecialImage> snapSpecial() override;
     sk_sp<SkSpecialImage> snapBackImage(const SkIRect&) override;
 
     void flush() override;
-    GrSemaphoresSubmitted flush(SkSurface::BackendSurfaceAccess access,
-                                GrFlushFlags flags,
-                                int numSemaphores,
-                                GrBackendSemaphore signalSemaphores[],
-                                GrGpuFinishedProc finishedProc,
-                                GrGpuFinishedContext finishedContext);
+    GrSemaphoresSubmitted flush(SkSurface::BackendSurfaceAccess access, const GrFlushInfo&);
     bool wait(int numSemaphores, const GrBackendSemaphore* waitSemaphores);
 
     bool onAccessPixels(SkPixmap*) override;
 
-    // Temporary interface until it gets lifted up to SkDevice and exposed in SkCanvas
-
-    /*
-     * dstClipCounts[] is a parallel array to the image entries, acting like the intended
-     * dstClipCount field in ImageSetEntry. Similarly, preViewMatrixIdx is parallel and will
-     * become an index field in ImageSetEntry that specifies an entry in the matrix array.
-     */
-    void tmp_drawImageSetV3(const SkCanvas::ImageSetEntry[],
-            int dstClipCounts[], int preViewMatrixIdx[], int count,
-            const SkPoint dstClips[], const SkMatrix preViewMatrices[], const SkPaint& paint,
-            SkCanvas::SrcRectConstraint constraint = SkCanvas::kStrict_SrcRectConstraint);
-    void tmp_drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[], int clipCount,
-                            SkCanvas::QuadAAFlags aaFlags, SkColor color, SkBlendMode mode);
 protected:
     bool onReadPixels(const SkPixmap&, int, int) override;
     bool onWritePixels(const SkPixmap&, int, int) override;

@@ -5,40 +5,39 @@
  * found in the LICENSE file.
  */
 
-#include "SkArithmeticImageFilter.h"
-#include "SkCanvas.h"
-#include "SkColorSpaceXformer.h"
-#include "SkImageFilterPriv.h"
-#include "SkNx.h"
-#include "SkReadBuffer.h"
-#include "SkSpecialImage.h"
-#include "SkSpecialSurface.h"
-#include "SkWriteBuffer.h"
-#include "SkXfermodeImageFilter.h"
+#include "include/core/SkCanvas.h"
+#include "include/effects/SkArithmeticImageFilter.h"
+#include "include/effects/SkXfermodeImageFilter.h"
+#include "include/private/SkNx.h"
+#include "src/core/SkImageFilterPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkSpecialSurface.h"
+#include "src/core/SkWriteBuffer.h"
 #if SK_SUPPORT_GPU
-#include "GrClip.h"
-#include "GrColorSpaceXform.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrTextureProxy.h"
-#include "SkGr.h"
-#include "effects/GrConstColorProcessor.h"
-#include "effects/GrSkSLFP.h"
-#include "effects/GrTextureDomain.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLUniformHandler.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrSkSLFP.h"
+#include "src/gpu/effects/GrTextureDomain.h"
+#include "src/gpu/effects/generated/GrConstColorProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 GR_FP_SRC_STRING SKSL_ARITHMETIC_SRC = R"(
-in uniform half4 k;
+in uniform float4 k;
 layout(key) const in bool enforcePMColor;
 in fragmentProcessor child;
 
 void main(inout half4 color) {
     half4 dst = process(child);
-    color = saturate(k.x * color * dst + k.y * color + k.z * dst + k.w);
+    color = saturate(half(k.x) * color * dst + half(k.y) * color + half(k.z) * dst + half(k.w));
     if (enforcePMColor) {
         color.rgb = min(color.rgb, color.a);
     }
@@ -78,8 +77,6 @@ protected:
     }
 
     void drawForeground(SkCanvas* canvas, SkSpecialImage*, const SkIRect&) const;
-
-    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override;
 
 private:
     SK_FLATTENABLE_HOOKS(ArithmeticImageFilterImpl)
@@ -431,19 +428,6 @@ void ArithmeticImageFilterImpl::drawForeground(SkCanvas* canvas, SkSpecialImage*
             proc(fK, dst.writable_addr32(r.fLeft, y), r.width());
         }
     }
-}
-
-sk_sp<SkImageFilter> ArithmeticImageFilterImpl::onMakeColorSpace(SkColorSpaceXformer* xformer)
-const {
-    SkASSERT(2 == this->countInputs());
-    auto background = xformer->apply(this->getInput(0));
-    auto foreground = xformer->apply(this->getInput(1));
-    if (background.get() != this->getInput(0) || foreground.get() != this->getInput(1)) {
-        return SkArithmeticImageFilter::Make(fK[0], fK[1], fK[2], fK[3], fEnforcePMColor,
-                                             std::move(background), std::move(foreground),
-                                             getCropRectIfSet());
-    }
-    return this->refMe();
 }
 
 sk_sp<SkImageFilter> SkArithmeticImageFilter::Make(float k1, float k2, float k3, float k4,

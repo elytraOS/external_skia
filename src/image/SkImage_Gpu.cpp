@@ -9,60 +9,68 @@
 #include <cstring>
 #include <type_traits>
 
-#include "GrAHardwareBufferImageGenerator.h"
-#include "GrAHardwareBufferUtils.h"
-#include "GrBackendSurface.h"
-#include "GrBackendTextureImageGenerator.h"
-#include "GrBitmapTextureMaker.h"
-#include "GrCaps.h"
-#include "GrClip.h"
-#include "GrColorSpaceXform.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrDrawingManager.h"
-#include "GrGpu.h"
-#include "GrImageTextureMaker.h"
-#include "GrProxyProvider.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrResourceProvider.h"
-#include "GrResourceProviderPriv.h"
-#include "GrSemaphore.h"
-#include "GrSurfacePriv.h"
-#include "GrTexture.h"
-#include "GrTextureAdjuster.h"
-#include "GrTextureContext.h"
-#include "GrTexturePriv.h"
-#include "GrTextureProxy.h"
-#include "GrTextureProxyPriv.h"
-#include "SkAutoPixmapStorage.h"
-#include "SkBitmapCache.h"
-#include "SkCanvas.h"
-#include "SkGr.h"
-#include "SkImageInfoPriv.h"
-#include "SkImage_Gpu.h"
-#include "SkMipMap.h"
-#include "SkScopeExit.h"
-#include "SkTraceEvent.h"
-#include "effects/GrYUVtoRGBEffect.h"
-#include "gl/GrGLTexture.h"
+#include "include/core/SkCanvas.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "include/private/SkImageInfoPriv.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkBitmapCache.h"
+#include "src/core/SkMipMap.h"
+#include "src/core/SkScopeExit.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrAHardwareBufferImageGenerator.h"
+#include "src/gpu/GrAHardwareBufferUtils.h"
+#include "src/gpu/GrBackendTextureImageGenerator.h"
+#include "src/gpu/GrBitmapTextureMaker.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrColorSpaceXform.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrImageTextureMaker.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrResourceProviderPriv.h"
+#include "src/gpu/GrSemaphore.h"
+#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrTextureAdjuster.h"
+#include "src/gpu/GrTextureContext.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/GrTextureProxyPriv.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrYUVtoRGBEffect.h"
+#include "src/gpu/gl/GrGLTexture.h"
+#include "src/image/SkImage_Gpu.h"
+
+static SkColorType proxy_color_type(GrTextureProxy* proxy) {
+    SkColorType colorType;
+    if (!GrPixelConfigToColorType(proxy->config(), &colorType)) {
+        colorType = kUnknown_SkColorType;
+    }
+    return colorType;
+}
 
 SkImage_Gpu::SkImage_Gpu(sk_sp<GrContext> context, uint32_t uniqueID, SkAlphaType at,
                          sk_sp<GrTextureProxy> proxy, sk_sp<SkColorSpace> colorSpace)
         : INHERITED(std::move(context), proxy->worstCaseWidth(), proxy->worstCaseHeight(), uniqueID,
-                    at, colorSpace)
+                    proxy_color_type(proxy.get()), at, colorSpace)
         , fProxy(std::move(proxy)) {}
 
 SkImage_Gpu::~SkImage_Gpu() {}
 
-SkImageInfo SkImage_Gpu::onImageInfo() const {
-    SkColorType colorType;
-    if (!GrPixelConfigToColorType(fProxy->config(), &colorType)) {
-        colorType = kUnknown_SkColorType;
+GrSemaphoresSubmitted SkImage_Gpu::onFlush(GrContext* context, const GrFlushInfo& info) {
+    if (!context || !fContext->priv().matches(context) || fContext->abandoned()) {
+        return GrSemaphoresSubmitted::kNo;
     }
 
-    return SkImageInfo::Make(fProxy->width(), fProxy->height(), colorType, fAlphaType, fColorSpace);
+    GrSurfaceProxy* p[1] = {fProxy.get()};
+    return context->priv().flushSurfaces(p, 1, info);
 }
 
 sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* context,
@@ -72,8 +80,8 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* con
         return nullptr;
     }
 
-    auto xform = GrColorSpaceXformEffect::Make(fColorSpace.get(), fAlphaType,
-                                               targetCS.get(), fAlphaType);
+    auto xform = GrColorSpaceXformEffect::Make(this->colorSpace(), this->alphaType(),
+                                               targetCS.get(), this->alphaType());
     SkASSERT(xform || targetCT != this->colorType());
 
     sk_sp<GrTextureProxy> proxy = this->asTextureProxyRef(context);
@@ -105,7 +113,7 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorTypeAndColorSpace(GrRecordingContext* con
     }
 
     // MDB: this call is okay bc we know 'renderTargetContext' was exact
-    return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID, fAlphaType,
+    return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID, this->alphaType(),
                                    renderTargetContext->asTextureProxyRef(), std::move(targetCS));
 }
 
@@ -405,7 +413,8 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
                                                PromiseImageTextureFulfillProc textureFulfillProc,
                                                PromiseImageTextureReleaseProc textureReleaseProc,
                                                PromiseImageTextureDoneProc textureDoneProc,
-                                               PromiseImageTextureContext textureContext) {
+                                               PromiseImageTextureContext textureContext,
+                                               PromiseImageApiVersion version) {
     // The contract here is that if 'promiseDoneProc' is passed in it should always be called,
     // even if creation of the SkImage fails. Once we call MakePromiseImageLazyProxy it takes
     // responsibility for calling the done proc.
@@ -436,7 +445,7 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
     callDone.clear();
     auto proxy = MakePromiseImageLazyProxy(context, width, height, origin, config, backendFormat,
                                            mipMapped, textureFulfillProc, textureReleaseProc,
-                                           textureDoneProc, textureContext);
+                                           textureDoneProc, textureContext, version);
     if (!proxy) {
         return nullptr;
     }
@@ -468,7 +477,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
     if (limitToMaxTextureSize &&
         (codecImage->width() > maxTextureSize || codecImage->height() > maxTextureSize)) {
         SkAutoPixmapStorage pmap;
-        SkImageInfo info = as_IB(codecImage)->onImageInfo();
+        SkImageInfo info = codecImage->imageInfo();
         if (!dstColorSpace) {
             info = info.makeColorSpace(nullptr);
         }
@@ -492,22 +501,20 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
         return codecImage;
     }
 
-    if (!proxy->instantiate(context->priv().resourceProvider())) {
+    // Flush any writes or uploads
+    context->priv().flushSurface(proxy.get());
+    if (!proxy->isInstantiated()) {
         return codecImage;
     }
-    sk_sp<GrTexture> texture = sk_ref_sp(proxy->peekTexture());
 
-    // Flush any writes or uploads
-    context->priv().prepareSurfaceForExternalIO(proxy.get());
+    sk_sp<GrTexture> texture = sk_ref_sp(proxy->peekTexture());
 
     GrGpu* gpu = context->priv().getGpu();
     sk_sp<GrSemaphore> sema = gpu->prepareTextureForCrossContextUsage(texture.get());
 
-    auto gen = GrBackendTextureImageGenerator::Make(std::move(texture), proxy->origin(),
-                                                    std::move(sema),
-                                                    as_IB(codecImage)->onImageInfo().colorType(),
-                                                    codecImage->alphaType(),
-                                                    codecImage->refColorSpace());
+    auto gen = GrBackendTextureImageGenerator::Make(
+            std::move(texture), proxy->origin(), std::move(sema), codecImage->colorType(),
+            codecImage->alphaType(), codecImage->refColorSpace());
     return SkImage::MakeFromGenerator(std::move(gen));
 }
 
@@ -548,23 +555,10 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrContext* context,
     }
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     // Turn the pixmap into a GrTextureProxy
-    sk_sp<GrTextureProxy> proxy;
-    if (buildMips) {
-        SkBitmap bmp;
-        bmp.installPixels(*pixmap);
-        proxy = proxyProvider->createMipMapProxyFromBitmap(bmp);
-    } else {
-        if (SkImageInfoIsValid(pixmap->info())) {
-            ATRACE_ANDROID_FRAMEWORK("Upload Texture [%ux%u]", pixmap->width(), pixmap->height());
-            // We don't need a release proc on the data in pixmap since we know we are in a
-            // GrContext that has a resource provider. Thus the createTextureProxy call will
-            // immediately upload the data.
-            sk_sp<SkImage> image = SkImage::MakeFromRaster(*pixmap, nullptr, nullptr);
-            proxy = proxyProvider->createTextureProxy(std::move(image), kNone_GrSurfaceFlags, 1,
-                                                      SkBudgeted::kYes, SkBackingFit::kExact);
-        }
-    }
-
+    SkBitmap bmp;
+    bmp.installPixels(*pixmap);
+    GrMipMapped mipMapped = buildMips ? GrMipMapped::kYes : GrMipMapped::kNo;
+    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxyFromBitmap(bmp, mipMapped);
     if (!proxy) {
         return SkImage::MakeRasterCopy(*pixmap);
     }
@@ -572,7 +566,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrContext* context,
     sk_sp<GrTexture> texture = sk_ref_sp(proxy->peekTexture());
 
     // Flush any writes or uploads
-    context->priv().prepareSurfaceForExternalIO(proxy.get());
+    context->priv().flushSurface(proxy.get());
     GrGpu* gpu = context->priv().getGpu();
 
     sk_sp<GrSemaphore> sema = gpu->prepareTextureForCrossContextUsage(texture.get());
@@ -669,8 +663,11 @@ sk_sp<SkImage> SkImage::MakeFromAHardwareBufferWithData(GrContext* context,
                                             std::move(cs));
     texContext->writePixels(srcInfo, pixmap.addr(0, 0), pixmap.rowBytes(), 0, 0);
 
-    drawingManager->flush(proxy.get(), SkSurface::BackendSurfaceAccess::kNoAccess,
-                          kSyncCpu_GrFlushFlag, 0, nullptr, nullptr, nullptr);
+    GrFlushInfo info;
+    info.fFlags = kSyncCpu_GrFlushFlag;
+    GrSurfaceProxy* p[1] = {proxy.get()};
+    drawingManager->flush(p, 1, SkSurface::BackendSurfaceAccess::kNoAccess, info,
+                          GrPrepareForExternalIORequests());
 
     return image;
 }
@@ -705,7 +702,7 @@ bool SkImage::MakeBackendTextureFromSkImage(GrContext* ctx,
     }
 
     // Flush any pending IO on the texture.
-    ctx->priv().prepareSurfaceForExternalIO(as_IB(image)->peekProxy());
+    ctx->priv().flushSurface(as_IB(image)->peekProxy());
     SkASSERT(!texture->surfacePriv().hasPendingIO());
 
     // We must make a copy of the image if the image is not unique, if the GrTexture owned by the
@@ -724,7 +721,7 @@ bool SkImage::MakeBackendTextureFromSkImage(GrContext* ctx,
         }
 
         // Flush to ensure that the copy is completed before we return the texture.
-        ctx->priv().prepareSurfaceForExternalIO(as_IB(image)->peekProxy());
+        ctx->priv().flushSurface(as_IB(image)->peekProxy());
         SkASSERT(!texture->surfacePriv().hasPendingIO());
     }
 

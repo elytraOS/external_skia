@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkLinearGradient.h"
+#include "src/shaders/gradients/SkLinearGradient.h"
 
-#include "Sk4fLinearGradient.h"
-#include "SkColorSpaceXformer.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/gradients/Sk4fLinearGradient.h"
 
 static SkMatrix pts_to_unit_matrix(const SkPoint pts[2]) {
     SkVector    vec = pts[1] - pts[0];
@@ -65,7 +64,7 @@ SkShaderBase::Context* SkLinearGradient::onMakeContext(
         return nullptr;
     }
 
-    return fTileMode != kDecal_TileMode
+    return fTileMode != SkTileMode::kDecal
         ? CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec)
         : nullptr;
 }
@@ -73,7 +72,7 @@ SkShaderBase::Context* SkLinearGradient::onMakeContext(
 SkShaderBase::Context* SkLinearGradient::onMakeBurstPipelineContext(
     const ContextRec& rec, SkArenaAlloc* alloc) const {
 
-    if (fTileMode == SkShader::kDecal_TileMode) {
+    if (fTileMode == SkTileMode::kDecal) {
         // we only support decal w/ stages
         return nullptr;
     }
@@ -86,13 +85,6 @@ SkShaderBase::Context* SkLinearGradient::onMakeBurstPipelineContext(
 void SkLinearGradient::appendGradientStages(SkArenaAlloc*, SkRasterPipeline*,
                                             SkRasterPipeline*) const {
     // No extra stage needed for linear gradients.
-}
-
-sk_sp<SkShader> SkLinearGradient::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
-    const AutoXformColors xformedColors(*this, xformer);
-    SkPoint pts[2] = { fStart, fEnd };
-    return SkGradientShader::MakeLinear(pts, xformedColors.fColors.get(), fOrigPos, fColorCount,
-                                        fTileMode, fGradFlags, &this->getLocalMatrix());
 }
 
 SkShader::GradientType SkLinearGradient::asAGradient(GradientInfo* info) const {
@@ -108,7 +100,7 @@ SkShader::GradientType SkLinearGradient::asAGradient(GradientInfo* info) const {
 
 #if SK_SUPPORT_GPU
 
-#include "gradients/GrGradientShader.h"
+#include "src/gpu/gradients/GrGradientShader.h"
 
 std::unique_ptr<GrFragmentProcessor> SkLinearGradient::asFragmentProcessor(
         const GrFPArgs& args) const {

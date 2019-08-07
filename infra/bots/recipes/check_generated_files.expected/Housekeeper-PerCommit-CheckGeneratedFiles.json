@@ -124,6 +124,22 @@
   },
   {
     "cmd": [
+      "make",
+      "-C",
+      "tools/gpu/gl/interface",
+      "generate"
+    ],
+    "cwd": "[START_DIR]/cache/work/skia",
+    "env": {
+      "GOCACHE": "[START_DIR]/cache/go_cache",
+      "GOPATH": "[START_DIR]/cache/gopath",
+      "GOROOT": "[START_DIR]/go/go",
+      "PATH": "[START_DIR]/go/go/bin:[START_DIR]/cache/gopath/bin:<PATH>"
+    },
+    "name": "generate gl interfaces"
+  },
+  {
+    "cmd": [
       "python",
       "-u",
       "import os\nimport subprocess\n\nfor r, d, files in os.walk('[START_DIR]/cache/work/skia'):\n  for f in files:\n    if f.endswith('.fp'):\n      path = os.path.join(r, f)\n      print 'touch %s' % path\n      subprocess.check_call(['touch', path])\n"
@@ -180,7 +196,7 @@
       "[START_DIR]/cache/work/skia/bin/gn",
       "gen",
       "[START_DIR]/build/out/Release",
-      "--args=is_debug=false skia_compile_processors=true skia_generate_workarounds=true"
+      "--args=is_debug=false skia_compile_processors=true skia_generate_workarounds=true werror=true"
     ],
     "cwd": "[START_DIR]/cache/work/skia",
     "env": {

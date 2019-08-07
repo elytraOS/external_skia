@@ -281,15 +281,12 @@
     },
     "name": "symbolized dm",
     "~followup_annotations": [
-      "step returned non-zero exit code: 1",
       "@@@STEP_FAILURE@@@"
     ]
   },
   {
     "failure": {
-      "failure": {
-        "step": ""
-      },
+      "failure": {},
       "humanReason": "Failed build steps: symbolized dm, symbolized dm"
     },
     "name": "$result"

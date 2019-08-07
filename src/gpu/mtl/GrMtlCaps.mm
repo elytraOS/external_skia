@@ -5,14 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "GrMtlCaps.h"
+#include "src/gpu/mtl/GrMtlCaps.h"
 
-#include "GrBackendSurface.h"
-#include "GrMtlUtil.h"
-#include "GrRenderTargetProxy.h"
-#include "GrShaderCaps.h"
-#include "GrSurfaceProxy.h"
-#include "SkRect.h"
+#include "include/core/SkRect.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrRenderTarget.h"
+#include "include/private/GrRenderTargetProxy.h"
+#include "include/private/GrSurfaceProxy.h"
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/mtl/GrMtlUtil.h"
+
+#if !__has_feature(objc_arc)
+#error This file must be compiled with Arc. Use -fobjc-arc flag
+#endif
 
 GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice> device,
                      MTLFeatureSet featureSet)
@@ -30,9 +35,8 @@ GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice>
 
     // The following are disabled due to the unfinished Metal backend, not because Metal itself
     // doesn't support it.
-    fBlacklistCoverageCounting = true;   // CCPR shaders have some incompatabilities with SkSLC
     fFenceSyncSupport = false;           // Fences are not implemented yet
-    fMipMapSupport = false;              // GrMtlGpu::onRegenerateMipMapLevels() not implemented
+    fSemaphoreSupport = false;           // Semaphores are not implemented yet
     fMultisampleDisableSupport = true;   // MSAA and resolving not implemented yet
     fDiscardRenderTargetSupport = false; // GrMtlGpuCommandBuffer::discard() not implemented
     fCrossContextTextureSupport = false; // GrMtlGpu::prepareTextureForCrossContextUsage() not impl
@@ -304,7 +308,7 @@ void GrMtlCaps::initShaderCaps() {
         } else {
             if (kGray_8_GrPixelConfig == config) {
                 shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RRRA();
-            } else if (kRGB_888X_GrPixelConfig == config) {
+            } else if (kRGB_888X_GrPixelConfig == config || kRGB_888_GrPixelConfig == config ) {
                 shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGB1();
             } else {
                 shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGBA();
@@ -360,8 +364,16 @@ void GrMtlCaps::initConfigTable() {
     info = &fConfigTable[kAlpha_8_GrPixelConfig];
     info->fFlags = ConfigInfo::kAllFlags;
 
+    // Alpha_8_as_Red uses R8Unorm
+    info = &fConfigTable[kAlpha_8_as_Red_GrPixelConfig];
+    info->fFlags = ConfigInfo::kAllFlags;
+
     // Gray_8 uses R8Unorm
     info = &fConfigTable[kGray_8_GrPixelConfig];
+    info->fFlags = ConfigInfo::kAllFlags;
+
+    // Gray_8_as_Red uses R8Unorm
+    info = &fConfigTable[kGray_8_as_Red_GrPixelConfig];
     info->fFlags = ConfigInfo::kAllFlags;
 
     // RGB_565 uses B5G6R5Unorm, even though written opposite this format packs how we want
@@ -386,6 +398,14 @@ void GrMtlCaps::initConfigTable() {
 
     // RGB_888X uses RGBA8Unorm and we will swizzle the 1
     info = &fConfigTable[kRGB_888X_GrPixelConfig];
+    info->fFlags = ConfigInfo::kTextureable_Flag;
+
+    // RGB_888 uses RGBA8Unorm and we will swizzle the 1
+    info = &fConfigTable[kRGB_888_GrPixelConfig];
+    info->fFlags = ConfigInfo::kTextureable_Flag;
+
+    // RG_88 uses RG8Unorm
+    info = &fConfigTable[kRG_88_GrPixelConfig];
     info->fFlags = ConfigInfo::kTextureable_Flag;
 
     // BGRA_8888 uses BGRA8Unorm
@@ -413,7 +433,7 @@ void GrMtlCaps::initConfigTable() {
     if (this->isMac()) {
         info->fFlags = ConfigInfo::kAllFlags;
     } else {
-        info->fFlags = ConfigInfo::kRenderable_Flag;
+        info->fFlags = ConfigInfo::kTextureable_Flag | ConfigInfo::kRenderable_Flag;
     }
 
     // Alpha_half uses R16Float
@@ -430,6 +450,13 @@ void GrMtlCaps::initConfigTable() {
 
 void GrMtlCaps::initStencilFormat(id<MTLDevice> physDev) {
     fPreferredStencilFormat = StencilFormat{ MTLPixelFormatStencil8, 8, 8, true };
+}
+
+bool GrMtlCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
+    if (auto rt = surface->asRenderTarget()) {
+        return rt->numColorSamples() <= 1 && SkToBool(surface->asTexture());
+    }
+    return true;
 }
 
 GrPixelConfig validate_sized_format(GrMTLPixelFormat grFormat, SkColorType ct) {
@@ -542,7 +569,9 @@ static GrPixelConfig get_yuva_config(GrMTLPixelFormat grFormat) {
         case MTLPixelFormatR8Unorm:
             return kAlpha_8_as_Red_GrPixelConfig;
             break;
-        // TODO: Add RG_88 format here
+        case MTLPixelFormatRG8Unorm:
+            return kRG_88_GrPixelConfig;
+            break;
         case MTLPixelFormatRGBA8Unorm:
             return kRGBA_8888_GrPixelConfig;
             break;
@@ -574,5 +603,106 @@ GrBackendFormat GrMtlCaps::getBackendFormatFromGrColorType(GrColorType ct,
         return GrBackendFormat();
     }
     return GrBackendFormat::MakeMtl(format);
+}
+
+#ifdef SK_DEBUG
+static bool format_color_type_valid_pair(MTLPixelFormat format, GrColorType colorType) {
+    switch (colorType) {
+        case GrColorType::kUnknown:
+            return false;
+        case GrColorType::kAlpha_8:
+            return MTLPixelFormatA8Unorm == format || MTLPixelFormatR8Unorm == format;
+        case GrColorType::kRGB_565:
+#ifdef SK_BUILD_FOR_MAC
+            return false;
+#else
+            return MTLPixelFormatB5G6R5Unorm == format;
+#endif
+        case GrColorType::kABGR_4444:
+#ifdef SK_BUILD_FOR_MAC
+            return false;
+#else
+            return MTLPixelFormatABGR4Unorm == format;
+#endif
+        case GrColorType::kRGBA_8888:
+            return MTLPixelFormatRGBA8Unorm == format || MTLPixelFormatRGBA8Unorm_sRGB == format;
+        case GrColorType::kRGB_888x:
+            return MTLPixelFormatRGBA8Unorm == format;
+        case GrColorType::kRG_88:
+            return MTLPixelFormatRG8Unorm == format;
+        case GrColorType::kBGRA_8888:
+            return MTLPixelFormatBGRA8Unorm == format || MTLPixelFormatBGRA8Unorm_sRGB == format;
+        case GrColorType::kRGBA_1010102:
+            return MTLPixelFormatRGB10A2Unorm == format;
+        case GrColorType::kGray_8:
+            return MTLPixelFormatR8Unorm == format;
+        case GrColorType::kAlpha_F16:
+            return MTLPixelFormatR16Float == format;
+        case GrColorType::kRGBA_F16:
+            return MTLPixelFormatRGBA16Float == format;
+        case GrColorType::kRGBA_F16_Clamped:
+            return MTLPixelFormatRGBA16Float == format;
+        case GrColorType::kRG_F32:
+            return MTLPixelFormatRG32Float == format;
+        case GrColorType::kRGBA_F32:
+            return MTLPixelFormatRGBA32Float == format;
+        case GrColorType::kRGB_ETC1:
+#ifdef SK_BUILD_FOR_MAC
+            return false;
+#else
+            return MTLPixelFormatETC2_RGB8 == format;
+#endif
+    }
+    SK_ABORT("Unknown color type");
+    return false;
+}
+#endif
+
+static GrSwizzle get_swizzle(const GrBackendFormat& format, GrColorType colorType,
+                             bool forOutput) {
+    SkASSERT(format.getMtlFormat());
+    MTLPixelFormat mtlFormat = static_cast<MTLPixelFormat>(*format.getVkFormat());
+
+    SkASSERT(format_color_type_valid_pair(mtlFormat, colorType));
+
+    switch (colorType) {
+        case GrColorType::kAlpha_8:
+            if (mtlFormat == MTLPixelFormatA8Unorm) {
+                if (!forOutput) {
+                    return GrSwizzle::AAAA();
+                }
+            } else {
+                SkASSERT(mtlFormat == MTLPixelFormatR8Unorm);
+                if (forOutput) {
+                    return GrSwizzle::AAAA();
+                } else {
+                    return GrSwizzle::RRRR();
+                }
+            }
+            break;
+        case GrColorType::kAlpha_F16:
+            if (forOutput) {
+                return GrSwizzle::AAAA();
+            } else {
+                return GrSwizzle::RRRR();
+            }
+        case GrColorType::kGray_8:
+            if (!forOutput) {
+                return GrSwizzle::RRRA();
+            }
+            break;
+        case GrColorType::kRGB_888x:
+            return GrSwizzle::RGB1();
+        default:
+            return GrSwizzle::RGBA();
+    }
+    return GrSwizzle::RGBA();
+}
+
+GrSwizzle GrMtlCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+    return get_swizzle(format, colorType, false);
+}
+GrSwizzle GrMtlCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+    return get_swizzle(format, colorType, true);
 }
 

@@ -5,19 +5,20 @@
 * found in the LICENSE file.
 */
 
-#include "SkHighContrastFilter.h"
-#include "SkArenaAlloc.h"
-#include "SkColorData.h"
-#include "SkRasterPipeline.h"
-#include "SkReadBuffer.h"
-#include "SkString.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkString.h"
+#include "include/effects/SkHighContrastFilter.h"
+#include "include/private/SkColorData.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkEffectPriv.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "GrColorSpaceInfo.h"
-#include "GrContext.h"
-#include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrColorSpaceInfo.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #endif
 
 using InvertStyle = SkHighContrastConfig::InvertStyle;
@@ -39,10 +40,7 @@ public:
             GrRecordingContext*, const GrColorSpaceInfo&) const override;
  #endif
 
-    void onAppendStages(SkRasterPipeline* p,
-                        SkColorSpace* dst,
-                        SkArenaAlloc* scratch,
-                        bool shaderIsOpaque) const override;
+    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
 
 protected:
     void flatten(SkWriteBuffer&) const override;
@@ -57,18 +55,18 @@ private:
     typedef SkColorFilter INHERITED;
 };
 
-void SkHighContrast_Filter::onAppendStages(SkRasterPipeline* p,
-                                           SkColorSpace* dstCS,
-                                           SkArenaAlloc* alloc,
-                                           bool shaderIsOpaque) const {
+bool SkHighContrast_Filter::onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
+    SkRasterPipeline* p = rec.fPipeline;
+    SkArenaAlloc* alloc = rec.fAlloc;
+
     if (!shaderIsOpaque) {
         p->append(SkRasterPipeline::unpremul);
     }
 
     // Linearize before applying high-contrast filter.
     auto tf = alloc->make<skcms_TransferFunction>();
-    if (dstCS) {
-        dstCS->transferFn(&tf->g);
+    if (rec.fDstCS) {
+        rec.fDstCS->transferFn(&tf->g);
     } else {
         // Historically we approximate untagged destinations as gamma 2.
         // TODO: sRGB?
@@ -116,8 +114,8 @@ void SkHighContrast_Filter::onAppendStages(SkRasterPipeline* p,
 
     // Re-encode back from linear.
     auto invTF = alloc->make<skcms_TransferFunction>();
-    if (dstCS) {
-        dstCS->invTransferFn(&invTF->g);
+    if (rec.fDstCS) {
+        rec.fDstCS->invTransferFn(&invTF->g);
     } else {
         // See above... historically untagged == gamma 2 in this filter.
         *invTF ={0.5f,1, 0,0,0,0,0};
@@ -127,6 +125,7 @@ void SkHighContrast_Filter::onAppendStages(SkRasterPipeline* p,
     if (!shaderIsOpaque) {
         p->append(SkRasterPipeline::premul);
     }
+    return true;
 }
 
 void SkHighContrast_Filter::flatten(SkWriteBuffer& buffer) const {

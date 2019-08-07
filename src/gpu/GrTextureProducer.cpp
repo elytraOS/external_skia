@@ -5,20 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "GrTextureProducer.h"
-#include "GrClip.h"
-#include "GrContextPriv.h"
-#include "GrProxyProvider.h"
-#include "GrRecordingContext.h"
-#include "GrRecordingContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrTextureProxy.h"
-#include "SkGr.h"
-#include "SkMipMap.h"
-#include "SkRectPriv.h"
-#include "effects/GrBicubicEffect.h"
-#include "effects/GrSimpleTextureEffect.h"
-#include "effects/GrTextureDomain.h"
+#include "include/private/GrRecordingContext.h"
+#include "include/private/GrTextureProxy.h"
+#include "src/core/SkMipMap.h"
+#include "src/core/SkRectPriv.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrTextureProducer.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrBicubicEffect.h"
+#include "src/gpu/effects/GrTextureDomain.h"
+#include "src/gpu/effects/generated/GrSimpleTextureEffect.h"
 
 sk_sp<GrTextureProxy> GrTextureProducer::CopyOnGpu(GrRecordingContext* context,
                                                    sk_sp<GrTextureProxy> inputProxy,
@@ -229,11 +229,12 @@ std::unique_ptr<GrFragmentProcessor> GrTextureProducer::createFragmentProcessorF
             GrTextureDomain::Mode wrapMode = fDomainNeedsDecal ? GrTextureDomain::kDecal_Mode
                                          : GrTextureDomain::kClamp_Mode;
             return GrBicubicEffect::Make(std::move(proxy), textureMatrix, kClampClamp,
-                                         wrapMode, wrapMode,
+                                         wrapMode, wrapMode, this->alphaType(),
                                          kDomain_DomainMode == domainMode ? &domain : nullptr);
         } else {
             return GrBicubicEffect::Make(std::move(proxy), textureMatrix,
-                                         fDomainNeedsDecal ? kDecalDecal : kClampClamp);
+                                         fDomainNeedsDecal ? kDecalDecal : kClampClamp,
+                                         this->alphaType());
         }
     }
 }

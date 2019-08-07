@@ -8,9 +8,9 @@
 #ifndef GrMtlCaps_DEFINED
 #define GrMtlCaps_DEFINED
 
-#include "GrCaps.h"
-#include "GrMtlStencilAttachment.h"
-#include "SkTDArray.h"
+#include "include/private/SkTDArray.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/mtl/GrMtlStencilAttachment.h"
 
 #import <Metal/Metal.h>
 
@@ -72,6 +72,9 @@ public:
     GrBackendFormat getBackendFormatFromGrColorType(GrColorType ct,
                                                     GrSRGBEncoded srgbEncoded) const override;
 
+    GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
+
 private:
     void initFeatureSet(MTLFeatureSet featureSet);
 
@@ -82,9 +85,13 @@ private:
 
     void initConfigTable();
 
-    bool onSurfaceSupportsWritePixels(const GrSurface*) const override { return true; }
+    bool onSurfaceSupportsWritePixels(const GrSurface*) const override;
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
+    size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override {
+        // Transfer buffers not yet supported.
+        return 0;
+    }
 
     struct ConfigInfo {
         ConfigInfo() : fFlags(0) {}

@@ -8,11 +8,11 @@
 #ifndef GrOnFlushResourceProvider_DEFINED
 #define GrOnFlushResourceProvider_DEFINED
 
-#include "GrDeferredUpload.h"
-#include "GrOpFlushState.h"
-#include "GrResourceProvider.h"
-#include "SkRefCnt.h"
-#include "SkTArray.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkTArray.h"
+#include "src/gpu/GrDeferredUpload.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrResourceProvider.h"
 
 class GrDrawingManager;
 class GrOpList;
@@ -65,13 +65,6 @@ public:
 class GrOnFlushResourceProvider {
 public:
     explicit GrOnFlushResourceProvider(GrDrawingManager* drawingMgr) : fDrawingMgr(drawingMgr) {}
-
-#if 0
-    sk_sp<GrRenderTargetContext> makeRenderTargetContext(const GrSurfaceDesc&,
-                                                         GrSurfaceOrigin,
-                                                         sk_sp<SkColorSpace>,
-                                                         const SkSurfaceProps*);
-#endif
 
     sk_sp<GrRenderTargetContext> makeRenderTargetContext(sk_sp<GrSurfaceProxy>,
                                                          sk_sp<SkColorSpace>,

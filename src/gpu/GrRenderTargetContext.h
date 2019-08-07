@@ -8,17 +8,17 @@
 #ifndef GrRenderTargetContext_DEFINED
 #define GrRenderTargetContext_DEFINED
 
-#include "../private/GrRenderTargetProxy.h"
-#include "GrPaint.h"
-#include "GrSurfaceContext.h"
-#include "GrTypesPriv.h"
-#include "GrXferProcessor.h"
-#include "SkCanvas.h"
-#include "SkDrawable.h"
-#include "SkRefCnt.h"
-#include "SkSurface.h"
-#include "SkSurfaceProps.h"
-#include "text/GrTextTarget.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/private/GrRenderTargetProxy.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/text/GrTextTarget.h"
 
 class GrBackendSemaphore;
 class GrClip;
@@ -209,8 +209,8 @@ public:
      * fDstClipCount, so the pointer can become invalid after this returns.
      */
     void drawTextureSet(const GrClip&, const TextureSetEntry[], int cnt, GrSamplerState::Filter,
-                        SkBlendMode mode, GrAA aa, const SkMatrix& viewMatrix,
-                        sk_sp<GrColorSpaceXform> texXform);
+                        SkBlendMode mode, GrAA aa, SkCanvas::SrcRectConstraint,
+                        const SkMatrix& viewMatrix, sk_sp<GrColorSpaceXform> texXform);
 
     /**
      * Draw a roundrect using a paint.
@@ -402,15 +402,29 @@ public:
      */
     void drawDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler>, const SkRect& bounds);
 
+    using ReadPixelsCallback = SkSurface::ReadPixelsCallback;
+    using ReadPixelsContext = SkSurface::ReadPixelsContext;
+    /**
+     * Performs an asynchronous read (if possible) into a transfer buffer and then calls callback
+     * with context. If asynchronous reads are not supported then this is done as a synchronous
+     * read via readPixels(). The callback is called with the data pointer equal to nullptr on
+     * failure.
+     */
+    void asyncReadPixels(const SkImageInfo& info, int x, int y, ReadPixelsCallback callback,
+                         ReadPixelsContext context);
+    /**
+     * Like asyncReadPixels but first rescales the contents before read back.
+     */
+    void asyncRescaleAndReadPixels(const SkImageInfo& info, const SkIRect& srcRect,
+                                   SkSurface::RescaleGamma rescaleGamma,
+                                   SkFilterQuality rescaleQuality, ReadPixelsCallback callback,
+                                   ReadPixelsContext context);
+
     /**
      * After this returns any pending surface IO will be issued to the backend 3D API and
      * if the surface has MSAA it will be resolved.
      */
-    GrSemaphoresSubmitted prepareForExternalIO(SkSurface::BackendSurfaceAccess access,
-                                               GrFlushFlags flags, int numSemaphores,
-                                               GrBackendSemaphore backendSemaphores[],
-                                               GrGpuFinishedProc finishedProc,
-                                               GrGpuFinishedContext finishedContext);
+    GrSemaphoresSubmitted flush(SkSurface::BackendSurfaceAccess access, const GrFlushInfo&);
 
     /**
      *  The next time this GrRenderTargetContext is flushed, the gpu will wait on the passed in
@@ -468,9 +482,7 @@ protected:
 private:
     class TextTarget;
 
-    inline GrAAType chooseAAType(GrAA aa, GrAllowMixedSamples allowMixedSamples) {
-        return GrChooseAAType(aa, this->fsaaType(), allowMixedSamples, *this->caps());
-    }
+    GrAAType chooseAAType(GrAA);
 
     friend class GrAtlasTextBlob;               // for access to add[Mesh]DrawOp
     friend class GrClipStackClip;               // for access to getOpList
@@ -540,6 +552,11 @@ private:
                                              const GrClip&,
                                              const GrOp& op,
                                              GrXferProcessor::DstProxy* result);
+
+    // The rescaling step of asyncRescaleAndReadPixels().
+    sk_sp<GrRenderTargetContext> rescale(const SkImageInfo& info, const SkIRect& srcRect,
+                                         SkSurface::RescaleGamma rescaleGamma,
+                                         SkFilterQuality rescaleQuality);
 
     GrRenderTargetOpList* getRTOpList();
     GrOpList* getOpList() override;

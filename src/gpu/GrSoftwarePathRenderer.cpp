@@ -5,26 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "GrSoftwarePathRenderer.h"
-#include "GrAuditTrail.h"
-#include "GrCaps.h"
-#include "GrClip.h"
-#include "GrContextPriv.h"
-#include "GrDeferredProxyUploader.h"
-#include "GrGpuResourcePriv.h"
-#include "GrOpFlushState.h"
-#include "GrOpList.h"
-#include "GrProxyProvider.h"
-#include "GrRecordingContextPriv.h"
-#include "GrSWMaskHelper.h"
-#include "GrShape.h"
-#include "GrSurfaceContextPriv.h"
-#include "SkMakeUnique.h"
-#include "SkSemaphore.h"
-#include "SkTaskGroup.h"
-#include "SkTraceEvent.h"
-#include "ops/GrDrawOp.h"
-#include "ops/GrFillRectOp.h"
+#include "include/private/GrAuditTrail.h"
+#include "include/private/GrOpList.h"
+#include "include/private/SkSemaphore.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkTaskGroup.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDeferredProxyUploader.h"
+#include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrSWMaskHelper.h"
+#include "src/gpu/GrShape.h"
+#include "src/gpu/GrSoftwarePathRenderer.h"
+#include "src/gpu/GrSurfaceContextPriv.h"
+#include "src/gpu/ops/GrDrawOp.h"
+#include "src/gpu/ops/GrFillRectOp.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 GrPathRenderer::CanDrawPath
@@ -32,7 +32,7 @@ GrSoftwarePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // Pass on any style that applies. The caller will apply the style if a suitable renderer is
     // not found and try again with the new GrShape.
     if (!args.fShape->style().applies() && SkToBool(fProxyProvider) &&
-        (args.fAAType == GrAAType::kCoverage || args.fAAType == GrAAType::kNone)) {
+        ((args.fAATypeFlags & AATypeFlags::kCoverage) || args.fAATypeFlags == AATypeFlags::kNone)) {
         // This is the fallback renderer for when a path is too complicated for the GPU ones.
         return CanDrawPath::kAsBackup;
     }
@@ -187,10 +187,8 @@ static sk_sp<GrTextureProxy> make_deferred_mask_texture_proxy(GrRecordingContext
     const GrBackendFormat format =
             context->priv().caps()->getBackendFormatFromColorType(kAlpha_8_SkColorType);
 
-    // MDB TODO: We're going to fill this proxy with an ASAP upload (which is out of order wrt to
-    // ops), so it can't have any pending IO.
-    return proxyProvider->createProxy(format, desc, kTopLeft_GrSurfaceOrigin, fit, SkBudgeted::kYes,
-                                      GrInternalSurfaceFlags::kNoPendingIO);
+    return proxyProvider->createProxy(format, desc, kTopLeft_GrSurfaceOrigin, fit,
+                                      SkBudgeted::kYes);
 }
 
 namespace {
@@ -257,7 +255,7 @@ bool GrSoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
     // To prevent overloading the cache with entries during animations we limit the cache of masks
     // to cases where the matrix preserves axis alignment.
     bool useCache = fAllowCaching && !inverseFilled && args.fViewMatrix->preservesAxisAlignment() &&
-                    args.fShape->hasUnstyledKey() && GrAAType::kCoverage == args.fAAType;
+                    args.fShape->hasUnstyledKey() && (AATypeFlags::kCoverage & args.fAATypeFlags);
 
     if (!GetShapeAndClipBounds(args.fRenderTargetContext,
                                *args.fClip, *args.fShape,
@@ -332,7 +330,7 @@ bool GrSoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
     if (!proxy) {
         SkBackingFit fit = useCache ? SkBackingFit::kExact : SkBackingFit::kApprox;
-        GrAA aa = GrAAType::kCoverage == args.fAAType ? GrAA::kYes : GrAA::kNo;
+        GrAA aa = GrAA(SkToBool(AATypeFlags::kCoverage & args.fAATypeFlags));
 
         SkTaskGroup* taskGroup = nullptr;
         if (auto direct = args.fContext->priv().asDirectContext()) {

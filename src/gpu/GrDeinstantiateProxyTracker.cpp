@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "GrDeinstantiateProxyTracker.h"
+#include "src/gpu/GrDeinstantiateProxyTracker.h"
 
-#include "GrSurfaceProxy.h"
-#include "GrSurfaceProxyPriv.h"
+#include "include/private/GrSurfaceProxy.h"
+#include "src/gpu/GrSurfaceProxyPriv.h"
 
 void GrDeinstantiateProxyTracker::addProxy(GrSurfaceProxy* proxy) {
 #ifdef SK_DEBUG
@@ -18,7 +18,8 @@ void GrDeinstantiateProxyTracker::addProxy(GrSurfaceProxy* proxy) {
         SkASSERT(proxy != fProxies[i].get());
     }
 #endif
-    fProxies.push_back(sk_ref_sp(proxy));
+    proxy->firstRefAccess().ref(fCache);
+    fProxies.push_back(sk_sp<GrSurfaceProxy>(proxy));
 }
 
 void GrDeinstantiateProxyTracker::deinstantiateAllProxies() {

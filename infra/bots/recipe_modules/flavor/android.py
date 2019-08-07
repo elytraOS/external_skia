@@ -39,7 +39,7 @@ class AndroidFlavor(default.DefaultFlavor):
     # A list of devices we can't root.  If rooting fails and a device is not
     # on the list, we fail the task to avoid perf inconsistencies.
     self.rootable_blacklist = ['GalaxyS6', 'GalaxyS7_G930FD', 'GalaxyS9',
-                               'MotoG4', 'NVIDIA_Shield']
+                               'MotoG4', 'NVIDIA_Shield', 'P30']
 
     # Maps device type -> CPU ids that should be scaled for nanobench.
     # Many devices have two (or more) different CPUs (e.g. big.LITTLE
@@ -489,13 +489,14 @@ time.sleep(60)
       self._adb('kill adb server', 'kill-server')
 
   def step(self, name, cmd, **kwargs):
-    if (cmd[0] == 'nanobench'):
-      self._scale_for_nanobench()
-    else:
-      self._scale_for_dm()
-    app = self.host_dirs.bin_dir.join(cmd[0])
-    self._adb('push %s' % cmd[0],
-              'push', app, self.device_dirs.bin_dir)
+    if not kwargs.get('skip_binary_push', False):
+      if (cmd[0] == 'nanobench'):
+        self._scale_for_nanobench()
+      else:
+        self._scale_for_dm()
+      app = self.host_dirs.bin_dir.join(cmd[0])
+      self._adb('push %s' % cmd[0],
+                'push', app, self.device_dirs.bin_dir)
 
     sh = '%s.sh' % cmd[0]
     self.m.run.writefile(self.m.vars.tmp_dir.join(sh),

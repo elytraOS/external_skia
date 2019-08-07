@@ -5,23 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "GrLatticeOp.h"
-#include "GrDefaultGeoProcFactory.h"
-#include "GrDrawOpTest.h"
-#include "GrGpu.h"
-#include "GrMeshDrawOp.h"
-#include "GrOpFlushState.h"
-#include "GrResourceProvider.h"
-#include "GrResourceProviderPriv.h"
-#include "GrSimpleMeshDrawOpHelper.h"
-#include "GrVertexWriter.h"
-#include "SkBitmap.h"
-#include "SkLatticeIter.h"
-#include "SkMatrixPriv.h"
-#include "SkRect.h"
-#include "glsl/GrGLSLColorSpaceXformHelper.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLVarying.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkRect.h"
+#include "src/core/SkLatticeIter.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/gpu/GrDefaultGeoProcFactory.h"
+#include "src/gpu/GrDrawOpTest.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrResourceProviderPriv.h"
+#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
+#include "src/gpu/ops/GrLatticeOp.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 namespace {
 
@@ -165,13 +166,13 @@ public:
 
         // setup bounds
         this->setTransformedBounds(patch.fDst, viewMatrix, HasAABloat::kNo, IsZeroArea::kNo);
-        fWideColor = !SkPMColor4fFitsInBytes(color);
     }
 
     const char* name() const override { return "NonAALatticeOp"; }
 
-    void visitProxies(const VisitProxyFunc& func, VisitorType) const override {
-        func(fProxy.get());
+    void visitProxies(const VisitProxyFunc& func) const override {
+        bool mipped = (GrSamplerState::Filter::kMipMap == fFilter);
+        func(fProxy.get(), GrMipMapped(mipped));
         fHelper.visitProxies(func);
     }
 
@@ -203,6 +204,7 @@ public:
                                                  GrProcessorAnalysisCoverage::kNone,
                                                  &analysisColor);
         analysisColor.isConstant(&fPatches[0].fColor);
+        fWideColor = SkPMColor4fNeedsWideColor(fPatches[0].fColor, clampType, caps);
         return result;
     }
 
@@ -349,8 +351,8 @@ std::unique_ptr<GrDrawOp> MakeNonAA(GrRecordingContext* context,
 };
 
 #if GR_TEST_UTILS
-#include "GrProxyProvider.h"
-#include "GrRecordingContextPriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 
 /** Randomly divides subset into count divs. */
 static void init_random_divs(int divs[], int count, int subsetStart, int subsetStop,

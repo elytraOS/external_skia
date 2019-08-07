@@ -5,33 +5,33 @@
  * found in the LICENSE file.
  */
 
-#include "GrPipeline.h"
+#include "src/gpu/GrPipeline.h"
 
-#include "GrAppliedClip.h"
-#include "GrCaps.h"
-#include "GrGpu.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetOpList.h"
-#include "GrXferProcessor.h"
+#include "src/gpu/GrAppliedClip.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetOpList.h"
+#include "src/gpu/GrXferProcessor.h"
 
-#include "ops/GrOp.h"
+#include "src/gpu/ops/GrOp.h"
 
 GrPipeline::GrPipeline(const InitArgs& args,
                        GrProcessorSet&& processors,
                        GrAppliedClip&& appliedClip) {
     SkASSERT(processors.isFinalized());
 
-    fFlags = args.fFlags;
+    fFlags = (Flags)args.fInputFlags;
     if (appliedClip.hasStencilClip()) {
-        fFlags |= kHasStencilClip_Flag;
+        fFlags |= Flags::kHasStencilClip;
     }
     if (appliedClip.scissorState().enabled()) {
-        fFlags |= kScissorEnabled_Flag;
+        fFlags |= Flags::kScissorEnabled;
     }
 
     fWindowRectsState = appliedClip.windowRectsState();
-    if (!args.fUserStencil->isDisabled(fFlags & kHasStencilClip_Flag)) {
-        fFlags |= kStencilEnabled_Flag;
+    if (!args.fUserStencil->isDisabled(fFlags & Flags::kHasStencilClip)) {
+        fFlags |= Flags::kStencilEnabled;
     }
 
     fUserStencilSettings = args.fUserStencil;
@@ -39,9 +39,7 @@ GrPipeline::GrPipeline(const InitArgs& args,
     fXferProcessor = processors.refXferProcessor();
 
     if (args.fDstProxy.proxy()) {
-        if (!args.fDstProxy.proxy()->instantiate(args.fResourceProvider)) {
-            this->markAsBad();
-        }
+        SkASSERT(args.fDstProxy.proxy()->isInstantiated());
 
         fDstTextureProxy.reset(args.fDstProxy.proxy());
         fDstTextureOffset = args.fDstProxy.offset();
@@ -95,19 +93,19 @@ GrXferBarrierType GrPipeline::xferBarrierType(GrTexture* texture, const GrCaps& 
     return this->getXferProcessor().xferBarrierType(caps);
 }
 
-GrPipeline::GrPipeline(GrScissorTest scissorTest, SkBlendMode blendmode, uint32_t flags,
+GrPipeline::GrPipeline(GrScissorTest scissorTest, SkBlendMode blendmode, InputFlags inputFlags,
                        const GrUserStencilSettings* userStencil)
         : fWindowRectsState()
         , fUserStencilSettings(userStencil)
-        , fFlags(flags)
+        , fFlags((Flags)inputFlags)
         , fXferProcessor(GrPorterDuffXPFactory::MakeNoCoverageXP(blendmode))
         , fFragmentProcessors()
         , fNumColorProcessors(0) {
     if (GrScissorTest::kEnabled == scissorTest) {
-        fFlags |= kScissorEnabled_Flag;
+        fFlags |= Flags::kScissorEnabled;
     }
     if (!userStencil->isDisabled(false)) {
-        fFlags |= kStencilEnabled_Flag;
+        fFlags |= Flags::kStencilEnabled;
     }
 }
 

@@ -7,17 +7,17 @@
 #ifndef SkStrike_DEFINED
 #define SkStrike_DEFINED
 
-#include "SkArenaAlloc.h"
-#include "SkDescriptor.h"
-#include "SkFontMetrics.h"
-#include "SkFontTypes.h"
-#include "SkGlyph.h"
-#include "SkGlyphRunPainter.h"
-#include "SkPaint.h"
-#include "SkTHash.h"
-#include "SkScalerContext.h"
-#include "SkStrikeInterface.h"
-#include "SkTemplates.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkPaint.h"
+#include "include/private/SkTHash.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkDescriptor.h"
+#include "src/core/SkGlyph.h"
+#include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkScalerContext.h"
+#include "src/core/SkStrikeInterface.h"
 #include <memory>
 
 /** \class SkGlyphCache
@@ -63,6 +63,8 @@ public:
         w/o the extra params, though a tiny bit slower.
     */
     const SkGlyph& getGlyphIDMetrics(uint16_t, SkFixed x, SkFixed y);
+
+    const SkGlyph& getGlyphIDMetrics(SkPackedGlyphID id);
 
     void getAdvances(SkSpan<const SkGlyphID>, SkPoint[]);
 
@@ -126,7 +128,7 @@ public:
 
     const SkGlyph& getGlyphMetrics(SkGlyphID glyphID, SkPoint position) override;
 
-    bool decideCouldDrawFromPath(const SkGlyph& glyph) override;
+    void generatePath(const SkGlyph& glyph) override;
 
     const SkDescriptor& getDescriptor() const override;
 
@@ -136,7 +138,12 @@ public:
                             this->getScalerContext()->getEffects()};
     }
 
-    int glyphMetrics(const SkGlyphID[], const SkPoint[], int n, SkGlyphPos result[]) override;
+    SkSpan<const SkGlyphPos> prepareForDrawing(const SkGlyphID glyphIDs[],
+                                               const SkPoint positions[],
+                                               size_t n,
+                                               int maxDimension,
+                                               PreparationDetail detail,
+                                               SkGlyphPos results[]) override;
 
     void onAboutToExitScope() override;
 

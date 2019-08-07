@@ -5,31 +5,33 @@
  * found in the LICENSE file.
  */
 
-#include "SkSVGDevice.h"
+#include "src/svg/SkSVGDevice.h"
 
-#include "SkAnnotationKeys.h"
-#include "SkBase64.h"
-#include "SkBitmap.h"
-#include "SkBlendMode.h"
-#include "SkChecksum.h"
-#include "SkClipOpPriv.h"
-#include "SkClipStack.h"
-#include "SkColorFilter.h"
-#include "SkData.h"
-#include "SkDraw.h"
-#include "SkImage.h"
-#include "SkImageEncoder.h"
-#include "SkJpegCodec.h"
-#include "SkPaint.h"
-#include "SkParsePath.h"
-#include "SkPngCodec.h"
-#include "SkShader.h"
-#include "SkStream.h"
-#include "SkTHash.h"
-#include "SkTo.h"
-#include "SkTypeface.h"
-#include "SkUtils.h"
-#include "SkXMLWriter.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "include/private/SkChecksum.h"
+#include "include/private/SkTHash.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkBase64.h"
+#include "include/utils/SkParsePath.h"
+#include "src/codec/SkJpegCodec.h"
+#include "src/codec/SkPngCodec.h"
+#include "src/core/SkAnnotationKeys.h"
+#include "src/core/SkClipOpPriv.h"
+#include "src/core/SkClipStack.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkFontPriv.h"
+#include "src/core/SkUtils.h"
+#include "src/shaders/SkShaderBase.h"
+#include "src/xml/SkXMLWriter.h"
 
 namespace {
 
@@ -116,14 +118,14 @@ bool RequiresViewportReset(const SkPaint& paint) {
   if (!shader)
     return false;
 
-  SkShader::TileMode xy[2];
+  SkTileMode xy[2];
   SkImage* image = shader->isAImage(nullptr, xy);
 
   if (!image)
     return false;
 
   for (int i = 0; i < 2; i++) {
-    if (xy[i] == SkShader::kRepeat_TileMode)
+    if (xy[i] == SkTileMode::kRepeat)
       return true;
   }
   return false;
@@ -337,7 +339,7 @@ Resources SkSVGDevice::AutoElement::addResources(const MxCp& mc, const SkPaint& 
     if (const SkColorFilter* cf = paint.getColorFilter()) {
         // TODO: Implement skia color filters for blend modes other than SrcIn
         SkBlendMode mode;
-        if (cf->asColorMode(nullptr, &mode) && mode == SkBlendMode::kSrcIn) {
+        if (cf->asAColorMode(nullptr, &mode) && mode == SkBlendMode::kSrcIn) {
             this->addColorFilterResources(*cf, &resources);
         }
     }
@@ -380,8 +382,8 @@ void SkSVGDevice::AutoElement::addColorFilterResources(const SkColorFilter& cf,
 
         SkColor filterColor;
         SkBlendMode mode;
-        bool asColorMode = cf.asColorMode(&filterColor, &mode);
-        SkAssertResult(asColorMode);
+        bool asAColorMode = cf.asAColorMode(&filterColor, &mode);
+        SkAssertResult(asAColorMode);
         SkASSERT(mode == SkBlendMode::kSrcIn);
 
         {
@@ -442,7 +444,7 @@ void SkSVGDevice::AutoElement::addImageShaderResources(const SkShader* shader, c
                                                        Resources* resources) {
     SkMatrix outMatrix;
 
-    SkShader::TileMode xy[2];
+    SkTileMode xy[2];
     SkImage* image = shader->isAImage(&outMatrix, xy);
     SkASSERT(image);
 
@@ -456,7 +458,7 @@ void SkSVGDevice::AutoElement::addImageShaderResources(const SkShader* shader, c
     for (int i = 0; i < 2; i++) {
         int imageDimension = i == 0 ? imageSize.width() : imageSize.height();
         switch (xy[i]) {
-            case SkShader::kRepeat_TileMode:
+            case SkTileMode::kRepeat:
                 patternDims[i].appendScalar(imageDimension);
             break;
             default:
@@ -547,8 +549,8 @@ SkString SkSVGDevice::AutoElement::addLinearGradientDef(const SkShader::Gradient
         gradient.addAttribute("x2", info.fPoint[1].x());
         gradient.addAttribute("y2", info.fPoint[1].y());
 
-        if (!shader->getLocalMatrix().isIdentity()) {
-            this->addAttribute("gradientTransform", svg_transform(shader->getLocalMatrix()));
+        if (!as_SB(shader)->getLocalMatrix().isIdentity()) {
+            this->addAttribute("gradientTransform", svg_transform(as_SB(shader)->getLocalMatrix()));
         }
 
         SkASSERT(info.fColorCount >= 2);
@@ -842,7 +844,8 @@ public:
             , fLastCharWasWhitespace(true) { // start off in whitespace mode to strip all leadingspace
         auto runSize = glyphRun.runSize();
         SkAutoSTArray<64, SkUnichar> unichars(runSize);
-        glyphRun.font().glyphsToUnichars(glyphRun.glyphsIDs().data(), runSize, unichars.get());
+        SkFontPriv::GlyphsToUnichars(glyphRun.font(), glyphRun.glyphsIDs().data(),
+                                     runSize, unichars.get());
         auto positions = glyphRun.positions();
         for (size_t i = 0; i < runSize; ++i) {
             this->appendUnichar(unichars[i], positions[i]);

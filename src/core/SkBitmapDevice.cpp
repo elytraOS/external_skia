@@ -5,24 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmapDevice.h"
-#include "SkDraw.h"
-#include "SkGlyphRun.h"
-#include "SkImageFilter.h"
-#include "SkImageFilterCache.h"
-#include "SkMakeUnique.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPixmap.h"
-#include "SkRasterClip.h"
-#include "SkRasterHandleAllocator.h"
-#include "SkShader.h"
-#include "SkSpecialImage.h"
-#include "SkStrikeCache.h"
-#include "SkSurface.h"
-#include "SkTLazy.h"
-#include "SkVertices.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRasterHandleAllocator.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkVertices.h"
+#include "src/core/SkBitmapDevice.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkGlyphRun.h"
+#include "src/core/SkImageFilterCache.h"
+#include "src/core/SkMakeUnique.h"
+#include "src/core/SkRasterClip.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTLazy.h"
 
 struct Bounder {
     SkRect  fBounds;
@@ -518,15 +518,15 @@ void SkBitmapDevice::drawBitmapRect(const SkBitmap& bitmap,
     // if its mutable, since that precaution is not needed (give the short lifetime of the shader).
 
     // construct a shader, so we can call drawRect with the dst
-    auto s = SkMakeBitmapShader(*bitmapPtr, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode,
-                                &matrix, kNever_SkCopyPixelsMode);
+    auto s = SkMakeBitmapShaderForPaint(paint, *bitmapPtr, SkTileMode::kClamp,
+                                        SkTileMode::kClamp, &matrix, kNever_SkCopyPixelsMode);
     if (!s) {
         return;
     }
 
     SkPaint paintWithShader(paint);
     paintWithShader.setStyle(SkPaint::kFill_Style);
-    paintWithShader.setShader(s);
+    paintWithShader.setShader(std::move(s));
 
     // Call ourself, in case the subclass wanted to share this setup code
     // but handle the drawRect code themselves.
@@ -566,8 +566,7 @@ void SkBitmapDevice::drawDevice(SkBaseDevice* device, int x, int y, const SkPain
         draw.fMatrix = &SkMatrix::I();
         draw.fRC = &fRCStack.rc();
         SkPaint paint(origPaint);
-        paint.setShader(SkShader::MakeBitmapShader(src->fBitmap, SkShader::kClamp_TileMode,
-                                                   SkShader::kClamp_TileMode, nullptr));
+        paint.setShader(src->fBitmap.makeShader());
         draw.drawBitmap(*src->fCoverage.get(),
                         SkMatrix::MakeTrans(SkIntToScalar(x),SkIntToScalar(y)), nullptr, paint);
     } else {

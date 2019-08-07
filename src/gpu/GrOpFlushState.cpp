@@ -5,24 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "GrOpFlushState.h"
+#include "src/gpu/GrOpFlushState.h"
 
-#include "GrContextPriv.h"
-#include "GrDrawOpAtlas.h"
-#include "GrGpu.h"
-#include "GrResourceProvider.h"
-#include "GrTexture.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDrawOpAtlas.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrResourceProvider.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
 GrOpFlushState::GrOpFlushState(GrGpu* gpu, GrResourceProvider* resourceProvider,
-                               GrTokenTracker* tokenTracker,
+                               GrResourceCache* cache, GrTokenTracker* tokenTracker,
                                sk_sp<GrBufferAllocPool::CpuBufferCache> cpuBufferCache)
         : fVertexPool(gpu, cpuBufferCache)
         , fIndexPool(gpu, std::move(cpuBufferCache))
         , fGpu(gpu)
         , fResourceProvider(resourceProvider)
-        , fTokenTracker(tokenTracker) {}
+        , fTokenTracker(tokenTracker)
+        , fDeinstantiateProxyTracker(cache) {}
 
 const GrCaps& GrOpFlushState::caps() const {
     return *fGpu->caps();
@@ -34,11 +35,11 @@ GrGpuRTCommandBuffer* GrOpFlushState::rtCommandBuffer() {
 
 void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
         const GrOp* op, const SkRect& chainBounds, GrProcessorSet&& processorSet,
-        uint32_t pipelineFlags, const GrUserStencilSettings* stencilSettings) {
+        GrPipeline::InputFlags pipelineFlags, const GrUserStencilSettings* stencilSettings) {
     SkASSERT(this->rtCommandBuffer());
 
     GrPipeline::InitArgs pipelineArgs;
-    pipelineArgs.fFlags = pipelineFlags;
+    pipelineArgs.fInputFlags = pipelineFlags;
     pipelineArgs.fDstProxy = this->dstProxy();
     pipelineArgs.fCaps = &this->caps();
     pipelineArgs.fResourceProvider = this->resourceProvider();

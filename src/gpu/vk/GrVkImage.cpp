@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "GrVkImage.h"
-#include "GrGpuResourcePriv.h"
-#include "GrVkGpu.h"
-#include "GrVkMemory.h"
-#include "GrVkTexture.h"
-#include "GrVkUtil.h"
+#include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/vk/GrVkGpu.h"
+#include "src/gpu/vk/GrVkImage.h"
+#include "src/gpu/vk/GrVkMemory.h"
+#include "src/gpu/vk/GrVkTexture.h"
+#include "src/gpu/vk/GrVkUtil.h"
 
 #define VK_CALL(GPU, X) GR_VK_CALL(GPU->vkInterface(), X)
 
@@ -99,9 +99,10 @@ void GrVkImage::setImageLayout(const GrVkGpu* gpu, VkImageLayout newLayout,
     }
 
     // If the old and new layout are the same and the layout is a read only layout, there is no need
-    // to put in a barrier.
-    if (newLayout == currentLayout &&
-        !releaseFamilyQueue &&
+    // to put in a barrier unless we also need to switch queues.
+    if (newLayout == currentLayout && !releaseFamilyQueue &&
+        (fInfo.fCurrentQueueFamily == VK_QUEUE_FAMILY_IGNORED ||
+         fInfo.fCurrentQueueFamily == gpu->queueIndex()) &&
         (VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL == currentLayout ||
          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL == currentLayout ||
          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL == currentLayout)) {
@@ -128,7 +129,6 @@ void GrVkImage::setImageLayout(const GrVkGpu* gpu, VkImageLayout newLayout,
     } else if (releaseFamilyQueue) {
         // We are releasing the image so we must transfer the image back to its original queue
         // family.
-        SkASSERT(fInfo.fCurrentQueueFamily == gpu->queueIndex());
         srcQueueFamilyIndex = fInfo.fCurrentQueueFamily;
         dstQueueFamilyIndex = fInitialQueueFamily;
         fInfo.fCurrentQueueFamily = fInitialQueueFamily;
@@ -231,6 +231,11 @@ void GrVkImage::prepareForPresent(GrVkGpu* gpu) {
     this->setImageLayout(gpu, layout, 0, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, false, true);
 }
 
+void GrVkImage::prepareForExternal(GrVkGpu* gpu) {
+    this->setImageLayout(gpu, this->currentLayout(), 0, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, false,
+                         true);
+}
+
 void GrVkImage::releaseImage(GrVkGpu* gpu) {
     if (fInfo.fCurrentQueueFamily != fInitialQueueFamily) {
         // The Vulkan spec is vague on what to put for the dstStageMask here. The spec for image
@@ -269,11 +274,18 @@ void GrVkImage::Resource::freeGPUData(GrVkGpu* gpu) const {
     GrVkMemory::FreeImageMemory(gpu, isLinear, fAlloc);
 }
 
-void GrVkImage::Resource::replaceIdleProc(
-        GrVkTexture* owner, sk_sp<GrRefCntedCallback> idleCallback) const {
-    fOwningTexture = owner;
-    fIdleCallback = std::move(idleCallback);
+void GrVkImage::Resource::addIdleProc(GrVkTexture* owningTexture,
+                                      sk_sp<GrRefCntedCallback> idleProc) const {
+    SkASSERT(!fOwningTexture || fOwningTexture == owningTexture);
+    fOwningTexture = owningTexture;
+    fIdleProcs.push_back(std::move(idleProc));
 }
+
+int GrVkImage::Resource::idleProcCnt() const { return fIdleProcs.count(); }
+
+sk_sp<GrRefCntedCallback> GrVkImage::Resource::idleProc(int i) const { return fIdleProcs[i]; }
+
+void GrVkImage::Resource::resetIdleProcs() const { fIdleProcs.reset(); }
 
 void GrVkImage::Resource::removeOwningTexture() const { fOwningTexture = nullptr; }
 
@@ -281,16 +293,18 @@ void GrVkImage::Resource::notifyAddedToCommandBuffer() const { ++fNumCommandBuff
 
 void GrVkImage::Resource::notifyRemovedFromCommandBuffer() const {
     SkASSERT(fNumCommandBufferOwners);
-    if (--fNumCommandBufferOwners || !fIdleCallback) {
+    if (--fNumCommandBufferOwners || !fIdleProcs.count()) {
         return;
     }
     if (fOwningTexture) {
         if (fOwningTexture->resourcePriv().hasRefOrPendingIO()) {
+            // Wait for the texture to become idle in the cache to call the procs.
             return;
         }
-        fOwningTexture->removeIdleProc();
+        fOwningTexture->callIdleProcsOnBehalfOfResource();
+    } else {
+        fIdleProcs.reset();
     }
-    fIdleCallback.reset();
 }
 
 void GrVkImage::BorrowedResource::freeGPUData(GrVkGpu* gpu) const {

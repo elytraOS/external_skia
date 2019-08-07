@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "GrOpList.h"
+#include "include/private/GrOpList.h"
 
-#include "GrContext.h"
-#include "GrDeferredProxyUploader.h"
-#include "GrMemoryPool.h"
-#include "GrRenderTargetPriv.h"
-#include "GrSurfaceProxy.h"
-#include "GrTextureProxyPriv.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/GrSurfaceProxy.h"
+#include "src/gpu/GrDeferredProxyUploader.h"
+#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrTextureProxyPriv.h"
 #include <atomic>
 
 uint32_t GrOpList::CreateUniqueID() {
@@ -24,25 +24,16 @@ uint32_t GrOpList::CreateUniqueID() {
     return id;
 }
 
-GrOpList::GrOpList(GrResourceProvider* resourceProvider, sk_sp<GrOpMemoryPool> opMemoryPool,
-                   GrSurfaceProxy* surfaceProxy, GrAuditTrail* auditTrail)
+GrOpList::GrOpList(sk_sp<GrOpMemoryPool> opMemoryPool,
+                   sk_sp<GrSurfaceProxy> surfaceProxy,
+                   GrAuditTrail* auditTrail)
         : fOpMemoryPool(std::move(opMemoryPool))
         , fAuditTrail(auditTrail)
         , fUniqueID(CreateUniqueID())
         , fFlags(0) {
     SkASSERT(fOpMemoryPool);
-    fTarget.setProxy(sk_ref_sp(surfaceProxy), kWrite_GrIOType);
+    fTarget.setProxy(std::move(surfaceProxy), kWrite_GrIOType);
     fTarget.get()->setLastOpList(this);
-
-    if (resourceProvider && !resourceProvider->explicitlyAllocateGPUResources()) {
-        // MDB TODO: remove this! We are currently moving to having all the ops that target
-        // the RT as a dest (e.g., clear, etc.) rely on the opList's 'fTarget' pointer
-        // for the IO Ref. This works well but until they are all swapped over (and none
-        // are pre-emptively instantiating proxies themselves) we need to instantiate
-        // here so that the GrSurfaces are created in an order that preserves the GrSurface
-        // re-use assumptions.
-        fTarget.get()->instantiate(resourceProvider);
-    }
 
     fTarget.markPendingIO();
 }
@@ -54,8 +45,10 @@ GrOpList::~GrOpList() {
     }
 }
 
+// TODO: this can go away when explicit allocation has stuck
 bool GrOpList::instantiate(GrResourceProvider* resourceProvider) {
-    return SkToBool(fTarget.get()->instantiate(resourceProvider));
+    SkASSERT(fTarget.get()->isInstantiated());
+    return true;
 }
 
 void GrOpList::endFlush() {
@@ -70,11 +63,7 @@ void GrOpList::endFlush() {
 
 void GrOpList::instantiateDeferredProxies(GrResourceProvider* resourceProvider) {
     for (int i = 0; i < fDeferredProxies.count(); ++i) {
-        if (resourceProvider->explicitlyAllocateGPUResources()) {
-            SkASSERT(fDeferredProxies[i]->isInstantiated());
-        } else {
-            fDeferredProxies[i]->instantiate(resourceProvider);
-        }
+        SkASSERT(fDeferredProxies[i]->isInstantiated());
     }
 }
 

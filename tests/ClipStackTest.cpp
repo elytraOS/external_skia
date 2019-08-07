@@ -5,45 +5,47 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkClipOp.h"
-#include "SkClipOpPriv.h"
-#include "SkClipStack.h"
-#include "SkImageInfo.h"
-#include "SkMatrix.h"
-#include "SkPath.h"
-#include "SkPoint.h"
-#include "SkRRect.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkRegion.h"
-#include "SkScalar.h"
-#include "SkSize.h"
-#include "SkString.h"
-#include "SkSurface.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
-#include "Test.h"
-
-#include "GrCaps.h"
-#include "GrClip.h"
-#include "GrClipStackClip.h"
-#include "GrConfig.h"
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrReducedClip.h"
-#include "GrResourceCache.h"
-#include "GrResourceKey.h"
-#include "GrSurfaceProxyPriv.h"
-#include "GrTexture.h"
-#include "GrTextureProxy.h"
-typedef GrReducedClip::ElementList ElementList;
-typedef GrReducedClip::InitialState InitialState;
+#include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrConfig.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
+#include "include/private/GrResourceKey.h"
+#include "include/private/GrTextureProxy.h"
+#include "include/private/SkTemplates.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkClipOpPriv.h"
+#include "src/core/SkClipStack.h"
+#include "src/core/SkTLList.h"
+#include "src/gpu/GrClip.h"
+#include "src/gpu/GrClipStackClip.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrReducedClip.h"
+#include "src/gpu/GrResourceCache.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
 #include <cstring>
+#include <initializer_list>
 #include <new>
+
+class GrCaps;
+
+typedef GrReducedClip::ElementList ElementList;
+typedef GrReducedClip::InitialState InitialState;
 
 static void test_assign_and_comparison(skiatest::Reporter* reporter) {
     SkClipStack s;

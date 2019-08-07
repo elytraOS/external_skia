@@ -25,6 +25,8 @@ SKIA_TREE_STATUS_URL = 'http://skia-tree-status.appspot.com'
 
 # Please add the complete email address here (and not just 'xyz@' or 'xyz').
 PUBLIC_API_OWNERS = (
+    'mtklein@chromium.org',
+    'mtklein@google.com',
     'reed@chromium.org',
     'reed@google.com',
     'bsalomon@chromium.org',
@@ -43,7 +45,7 @@ GOLD_TRYBOT_URL = 'https://gold.skia.org/search?issue='
 SERVICE_ACCOUNT_SUFFIX = [
     '@%s.iam.gserviceaccount.com' % project for project in [
         'skia-buildbots.google.com', 'skia-swarming-bots', 'skia-public',
-        'skia-corp.google.com']]
+        'skia-corp.google.com', 'chops-service-accounts']]
 
 
 def _CheckChangeHasEol(input_api, output_api, source_file_filter=None):
