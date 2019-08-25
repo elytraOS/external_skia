@@ -540,8 +540,14 @@ SI F F_from_U8(U8 v) {
 SI F F_from_U16_BE(U16 v) {
     // All 16-bit ICC values are big-endian, so we byte swap before converting to float.
     // MSVC catches the "loss" of data here in the portable path, so we also make sure to mask.
-    v = (U16)( ((v<<8)|(v>>8)) & 0xffff );
-    return cast<F>(v) * (1/65535.0f);
+    U16 lo = (v >> 8),
+        hi = (v << 8) & 0xffff;
+    return cast<F>(lo|hi) * (1/65535.0f);
+}
+
+SI U16 U16_from_F(F v) {
+    // 65535 == inf in FP16, so promote to FP32 before converting.
+    return cast<U16>(cast<V<float>>(v) * 65535 + 0.5f);
 }
 
 SI F minus_1_ulp(F v) {
@@ -603,8 +609,9 @@ SI void sample_clut_16(const skcms_A2B* a2b, I32 ix, F* r, F* g, F* b) {
 }
 
 // GCC 7.2.0 hits an internal compiler error with -finline-functions (or -O3)
-// when targeting MIPS 64,  I think attempting to inline clut() into exec_ops().
-#if 1 && defined(__GNUC__) && !defined(__clang__) && defined(__mips64)
+// when targeting MIPS 64, i386, or s390x,  I think attempting to inline clut() into exec_ops().
+#if 1 && defined(__GNUC__) && !defined(__clang__) \
+      && (defined(__mips64) || defined(__i386) || defined(__s390x__))
     #define MAYBE_NOINLINE __attribute__((noinline))
 #else
     #define MAYBE_NOINLINE
@@ -1166,22 +1173,22 @@ static void exec_ops(const Op* ops, const void** args,
                 uint16_t* rgb = (uint16_t*)ptr;          // for this cast to uint16_t* to be safe.
             #if defined(USING_NEON_FP16)
                 uint16x8x3_t v = {{
-                    (uint16x8_t)to_fixed(r * 65535),
-                    (uint16x8_t)to_fixed(g * 65535),
-                    (uint16x8_t)to_fixed(b * 65535),
+                    (uint16x8_t)U16_from_F(r),
+                    (uint16x8_t)U16_from_F(g),
+                    (uint16x8_t)U16_from_F(b),
                 }};
                 vst3q_u16(rgb, v);
             #elif defined(USING_NEON)
                 uint16x4x3_t v = {{
-                    (uint16x4_t)cast<U16>(to_fixed(r * 65535)),
-                    (uint16x4_t)cast<U16>(to_fixed(g * 65535)),
-                    (uint16x4_t)cast<U16>(to_fixed(b * 65535)),
+                    (uint16x4_t)U16_from_F(r),
+                    (uint16x4_t)U16_from_F(g),
+                    (uint16x4_t)U16_from_F(b),
                 }};
                 vst3_u16(rgb, v);
             #else
-                store_3(rgb+0, cast<U16>(to_fixed(r * 65535)));
-                store_3(rgb+1, cast<U16>(to_fixed(g * 65535)));
-                store_3(rgb+2, cast<U16>(to_fixed(b * 65535)));
+                store_3(rgb+0, U16_from_F(r));
+                store_3(rgb+1, U16_from_F(g));
+                store_3(rgb+2, U16_from_F(b));
             #endif
 
             } return;
@@ -1192,18 +1199,18 @@ static void exec_ops(const Op* ops, const void** args,
                 uint16_t* rgba = (uint16_t*)ptr;        // for this cast to uint16_t* to be safe.
             #if defined(USING_NEON_FP16)
                 uint16x8x4_t v = {{
-                    (uint16x8_t)to_fixed(r * 65535),
-                    (uint16x8_t)to_fixed(g * 65535),
-                    (uint16x8_t)to_fixed(b * 65535),
-                    (uint16x8_t)to_fixed(a * 65535),
+                    (uint16x8_t)U16_from_F(r),
+                    (uint16x8_t)U16_from_F(g),
+                    (uint16x8_t)U16_from_F(b),
+                    (uint16x8_t)U16_from_F(a),
                 }};
                 vst4q_u16(rgba, v);
             #elif defined(USING_NEON)
                 uint16x4x4_t v = {{
-                    (uint16x4_t)cast<U16>(to_fixed(r * 65535)),
-                    (uint16x4_t)cast<U16>(to_fixed(g * 65535)),
-                    (uint16x4_t)cast<U16>(to_fixed(b * 65535)),
-                    (uint16x4_t)cast<U16>(to_fixed(a * 65535)),
+                    (uint16x4_t)U16_from_F(r),
+                    (uint16x4_t)U16_from_F(g),
+                    (uint16x4_t)U16_from_F(b),
+                    (uint16x4_t)U16_from_F(a),
                 }};
                 vst4_u16(rgba, v);
             #else
@@ -1221,16 +1228,16 @@ static void exec_ops(const Op* ops, const void** args,
                 uint16_t* rgb = (uint16_t*)ptr;          // for this cast to uint16_t* to be safe.
             #if defined(USING_NEON_FP16)
                 uint16x8x3_t v = {{
-                    (uint16x8_t)swap_endian_16(to_fixed(r * 65535)),
-                    (uint16x8_t)swap_endian_16(to_fixed(g * 65535)),
-                    (uint16x8_t)swap_endian_16(to_fixed(b * 65535)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(r)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(g)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(b)),
                 }};
                 vst3q_u16(rgb, v);
             #elif defined(USING_NEON)
                 uint16x4x3_t v = {{
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(r * 65535))),
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(g * 65535))),
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(b * 65535))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(r))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(g))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(b))),
                 }};
                 vst3_u16(rgb, v);
             #else
@@ -1250,18 +1257,18 @@ static void exec_ops(const Op* ops, const void** args,
                 uint16_t* rgba = (uint16_t*)ptr;        // for this cast to uint16_t* to be safe.
             #if defined(USING_NEON_FP16)
                 uint16x8x4_t v = {{
-                    (uint16x8_t)swap_endian_16(to_fixed(r * 65535)),
-                    (uint16x8_t)swap_endian_16(to_fixed(g * 65535)),
-                    (uint16x8_t)swap_endian_16(to_fixed(b * 65535)),
-                    (uint16x8_t)swap_endian_16(to_fixed(a * 65535)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(r)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(g)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(b)),
+                    (uint16x8_t)swap_endian_16(U16_from_F(a)),
                 }};
                 vst4q_u16(rgba, v);
             #elif defined(USING_NEON)
                 uint16x4x4_t v = {{
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(r * 65535))),
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(g * 65535))),
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(b * 65535))),
-                    (uint16x4_t)swap_endian_16(cast<U16>(to_fixed(a * 65535))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(r))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(g))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(b))),
+                    (uint16x4_t)swap_endian_16(cast<U16>(U16_from_F(a))),
                 }};
                 vst4_u16(rgba, v);
             #else

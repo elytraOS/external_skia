@@ -28,8 +28,8 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/docs/SkPDFDocument.h"
-#include "include/effects/SkBlurImageFilter.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/effects/SkImageFilters.h"
 #include "include/private/SkTo.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/core/SkMakeUnique.h"
@@ -814,7 +814,6 @@ static int lpaint_getEffects(lua_State* L) {
     const SkPaint* paint = get_obj<SkPaint>(L, 1);
 
     lua_newtable(L);
-    setfield_bool_if(L, "looper",      !!paint->getLooper());
     setfield_bool_if(L, "pathEffect",  !!paint->getPathEffect());
     setfield_bool_if(L, "maskFilter",  !!paint->getMaskFilter());
     setfield_bool_if(L, "shader",      !!paint->getShader());
@@ -1310,9 +1309,19 @@ static int lpath_getSegmentTypes(lua_State* L) {
     return 1;
 }
 
+bool SkPath_isNumericallyUnstable(const SkPath* p) {
+    return p->isNumericallyUnstable();
+}
+
 static int lpath_isConvex(lua_State* L) {
     bool isConvex = SkPath::kConvex_Convexity == get_obj<SkPath>(L, 1)->getConvexity();
     SkLua(L).pushBool(isConvex);
+    return 1;
+}
+
+static int lpath_isNumericallyUnstable(lua_State* L) {
+    bool isUnstable = SkPath_isNumericallyUnstable(get_obj<SkPath>(L, 1));
+    SkLua(L).pushBool(isUnstable);
     return 1;
 }
 
@@ -1373,7 +1382,7 @@ static int lpath_getVerbs(lua_State* L) {
     bool done = false;
     int i = 0;
     do {
-        switch (iter.next(pts, true)) {
+        switch (iter.next(pts)) {
             case SkPath::kMove_Verb:
                 setarray_string(L, ++i, "move");
                 break;
@@ -1446,6 +1455,7 @@ static const struct luaL_Reg gSkPath_Methods[] = {
     { "getSegmentTypes", lpath_getSegmentTypes },
     { "getVerbs", lpath_getVerbs },
     { "isConvex", lpath_isConvex },
+    { "isUnstable", lpath_isNumericallyUnstable },
     { "isEmpty", lpath_isEmpty },
     { "isRect", lpath_isRect },
     { "isNestedFillRects", lpath_isNestedFillRects },
@@ -1813,7 +1823,7 @@ static int lsk_newDocumentPDF(lua_State* L) {
 static int lsk_newBlurImageFilter(lua_State* L) {
     SkScalar sigmaX = lua2scalar_def(L, 1, 0);
     SkScalar sigmaY = lua2scalar_def(L, 2, 0);
-    sk_sp<SkImageFilter> imf(SkBlurImageFilter::Make(sigmaX, sigmaY, nullptr));
+    sk_sp<SkImageFilter> imf(SkImageFilters::Blur(sigmaX, sigmaY, nullptr));
     if (!imf) {
         lua_pushnil(L);
     } else {

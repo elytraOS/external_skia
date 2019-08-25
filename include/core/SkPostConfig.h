@@ -99,6 +99,14 @@
 #  endif
 #endif
 
+#if !defined(SkUNREACHABLE)
+#  if defined(_MSC_VER) && !defined(__clang__)
+#    define SkUNREACHABLE __assume(false)
+#  else
+#    define SkUNREACHABLE __builtin_unreachable()
+#  endif
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #if defined(SK_BUILD_FOR_GOOGLE3)
@@ -125,6 +133,7 @@
        SK_DUMP_LINE_FORMAT(message); \
        SK_DUMP_GOOGLE3_STACK(); \
        sk_abort_no_print(); \
+       SkUNREACHABLE; \
     } while (false)
 #endif
 

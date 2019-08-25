@@ -18,7 +18,8 @@
 
 GrPipeline::GrPipeline(const InitArgs& args,
                        GrProcessorSet&& processors,
-                       GrAppliedClip&& appliedClip) {
+                       GrAppliedClip&& appliedClip)
+        : fOutputSwizzle(args.fOutputSwizzle) {
     SkASSERT(processors.isFinalized());
 
     fFlags = (Flags)args.fInputFlags;
@@ -41,7 +42,7 @@ GrPipeline::GrPipeline(const InitArgs& args,
     if (args.fDstProxy.proxy()) {
         SkASSERT(args.fDstProxy.proxy()->isInstantiated());
 
-        fDstTextureProxy.reset(args.fDstProxy.proxy());
+        fDstTextureProxy = args.fDstProxy.refProxy();
         fDstTextureOffset = args.fDstProxy.offset();
     }
 
@@ -51,56 +52,45 @@ GrPipeline::GrPipeline(const InitArgs& args,
                              processors.numCoverageFragmentProcessors() +
                              appliedClip.numClipCoverageFragmentProcessors();
     fFragmentProcessors.reset(numTotalProcessors);
+
     int currFPIdx = 0;
     for (int i = 0; i < processors.numColorFragmentProcessors(); ++i, ++currFPIdx) {
         fFragmentProcessors[currFPIdx] = processors.detachColorFragmentProcessor(i);
-        if (!fFragmentProcessors[currFPIdx]->instantiate(args.fResourceProvider)) {
-            this->markAsBad();
-        }
     }
     for (int i = 0; i < processors.numCoverageFragmentProcessors(); ++i, ++currFPIdx) {
         fFragmentProcessors[currFPIdx] = processors.detachCoverageFragmentProcessor(i);
-        if (!fFragmentProcessors[currFPIdx]->instantiate(args.fResourceProvider)) {
-            this->markAsBad();
-        }
     }
     for (int i = 0; i < appliedClip.numClipCoverageFragmentProcessors(); ++i, ++currFPIdx) {
         fFragmentProcessors[currFPIdx] = appliedClip.detachClipCoverageFragmentProcessor(i);
-        if (!fFragmentProcessors[currFPIdx]->instantiate(args.fResourceProvider)) {
+    }
+
+#ifdef SK_DEBUG
+    for (int i = 0; i < numTotalProcessors; ++i) {
+        if (!fFragmentProcessors[i]->isInstantiated()) {
             this->markAsBad();
+            break;
         }
     }
-}
-
-void GrPipeline::addDependenciesTo(GrOpList* opList, const GrCaps& caps) const {
-    for (int i = 0; i < fFragmentProcessors.count(); ++i) {
-        GrFragmentProcessor::TextureAccessIter iter(fFragmentProcessors[i].get());
-        while (const GrFragmentProcessor::TextureSampler* sampler = iter.next()) {
-            opList->addDependency(sampler->proxy(), caps);
-        }
-    }
-
-    if (fDstTextureProxy) {
-        opList->addDependency(fDstTextureProxy.get(), caps);
-    }
-
+#endif
 }
 
 GrXferBarrierType GrPipeline::xferBarrierType(GrTexture* texture, const GrCaps& caps) const {
-    if (fDstTextureProxy.get() && fDstTextureProxy.get()->peekTexture() == texture) {
+    if (fDstTextureProxy && fDstTextureProxy->peekTexture() == texture) {
         return kTexture_GrXferBarrierType;
     }
     return this->getXferProcessor().xferBarrierType(caps);
 }
 
-GrPipeline::GrPipeline(GrScissorTest scissorTest, SkBlendMode blendmode, InputFlags inputFlags,
+GrPipeline::GrPipeline(GrScissorTest scissorTest, sk_sp<const GrXferProcessor> xp,
+                       const GrSwizzle& outputSwizzle, InputFlags inputFlags,
                        const GrUserStencilSettings* userStencil)
         : fWindowRectsState()
         , fUserStencilSettings(userStencil)
         , fFlags((Flags)inputFlags)
-        , fXferProcessor(GrPorterDuffXPFactory::MakeNoCoverageXP(blendmode))
+        , fXferProcessor(std::move(xp))
         , fFragmentProcessors()
-        , fNumColorProcessors(0) {
+        , fNumColorProcessors(0)
+        , fOutputSwizzle(outputSwizzle) {
     if (GrScissorTest::kEnabled == scissorTest) {
         fFlags |= Flags::kScissorEnabled;
     }
@@ -110,8 +100,7 @@ GrPipeline::GrPipeline(GrScissorTest scissorTest, SkBlendMode blendmode, InputFl
 }
 
 uint32_t GrPipeline::getBlendInfoKey() const {
-    GrXferProcessor::BlendInfo blendInfo;
-    this->getXferProcessor().getBlendInfo(&blendInfo);
+    const GrXferProcessor::BlendInfo& blendInfo = this->getXferProcessor().getBlendInfo();
 
     static const uint32_t kBlendWriteShift = 1;
     static const uint32_t kBlendCoeffShift = 5;

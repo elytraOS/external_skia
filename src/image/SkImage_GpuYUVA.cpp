@@ -140,14 +140,10 @@ sk_sp<GrTextureProxy> SkImage_GpuYUVA::asTextureProxyRef(GrRecordingContext* con
         return nullptr;
     }
 
-    const GrBackendFormat format =
-        fContext->priv().caps()->getBackendFormatFromColorType(kAssumedColorType);
-
     // Needs to create a render target in order to draw to it for the yuv->rgb conversion.
-    sk_sp<GrRenderTargetContext> renderTargetContext(
-            context->priv().makeDeferredRenderTargetContext(
-                    format, SkBackingFit::kExact, this->width(), this->height(),
-                    kRGBA_8888_GrPixelConfig, this->refColorSpace(), 1, GrMipMapped::kNo, fOrigin));
+    auto renderTargetContext = context->priv().makeDeferredRenderTargetContext(
+            SkBackingFit::kExact, this->width(), this->height(), GrColorType::kRGBA_8888,
+            this->refColorSpace(), 1, GrMipMapped::kNo, fOrigin);
     if (!renderTargetContext) {
         return nullptr;
     }
@@ -209,6 +205,12 @@ sk_sp<SkImage> SkImage_GpuYUVA::onMakeColorTypeAndColorSpace(GrRecordingContext*
         fOnMakeColorSpaceResult = result;
     }
     return result;
+}
+
+sk_sp<SkImage> SkImage_GpuYUVA::onReinterpretColorSpace(sk_sp<SkColorSpace> newCS) const {
+    return sk_make_sp<SkImage_GpuYUVA>(fContext, this->width(), this->height(),
+                                       kNeedNewImageUniqueID, fYUVColorSpace, fProxies, fNumProxies,
+                                       fYUVAIndices, fOrigin, std::move(newCS));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -357,15 +359,17 @@ sk_sp<SkImage> SkImage_GpuYUVA::MakePromiseYUVATexture(
     // Get lazy proxies
     sk_sp<GrTextureProxy> proxies[4];
     for (int texIdx = 0; texIdx < numTextures; ++texIdx) {
-        GrPixelConfig config =
-                context->priv().caps()->getYUVAConfigFromBackendFormat(yuvaFormats[texIdx]);
-        if (config == kUnknown_GrPixelConfig) {
+        GrColorType colorType = context->priv().caps()->getYUVAColorTypeFromBackendFormat(
+                                                                yuvaFormats[texIdx],
+                                                                yuvaIndices[3].fIndex == texIdx);
+        if (GrColorType::kUnknown == colorType) {
             return nullptr;
         }
+
         proxies[texIdx] = MakePromiseImageLazyProxy(
-                context, yuvaSizes[texIdx].width(), yuvaSizes[texIdx].height(), imageOrigin, config,
-                yuvaFormats[texIdx], GrMipMapped::kNo, textureFulfillProc, textureReleaseProc,
-                promiseDoneProc, textureContexts[texIdx], version);
+                context, yuvaSizes[texIdx].width(), yuvaSizes[texIdx].height(), imageOrigin,
+                colorType, yuvaFormats[texIdx], GrMipMapped::kNo, textureFulfillProc,
+                textureReleaseProc, promiseDoneProc, textureContexts[texIdx], version);
         ++proxiesCreated;
         if (!proxies[texIdx]) {
             return nullptr;
