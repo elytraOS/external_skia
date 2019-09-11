@@ -1203,7 +1203,8 @@ void SkARGB32_Shader_Blitter::blitRect(int x, int y, int width, int height) {
     size_t     deviceRB = fDevice.rowBytes();
     auto*      shaderContext = fShaderContext;
 
-    if (((height * width) > (750 * 400)) && (width <= BUF_MAX) && height >= 4) {
+    //Disable this since some issue found
+    if (false && ((height * width) > (750 * 400)) && (width <= BUF_MAX) && height >= 4) {
         if (__atomic_inc(&worker_thread_busy_ARGB32) == 0) {
             if (!worker_thread_inited_ARGB32) {
                 if (__atomic_inc(&worker_thread_inited_ARGB32) == 0) {

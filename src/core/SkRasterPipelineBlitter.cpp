@@ -358,7 +358,8 @@ void SkRasterPipelineBlitter::blitRect(int x, int y, int w, int h) {
         fBlitRect = p.compile();
     }
 
-    if ((w * h) > (750 * 400) && h >= 4) {
+    //Disable this since some issue found
+    if (false && (w * h) > (750 * 400) && h >= 4) {
         if (__atomic_inc(&worker_thread_busy) == 0) {
             if (!worker_thread_inited) {
                 if (__atomic_inc(&worker_thread_inited) == 0) {
