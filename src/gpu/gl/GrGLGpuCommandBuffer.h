@@ -21,17 +21,6 @@ class GrGLGpuTextureCommandBuffer : public GrGpuTextureCommandBuffer {
 public:
     GrGLGpuTextureCommandBuffer(GrGLGpu* gpu) : fGpu(gpu) {}
 
-    void copy(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
-              const SkIPoint& dstPoint) override {
-        fGpu->copySurface(fTexture, fOrigin, src, srcOrigin, srcRect, dstPoint);
-    }
-
-    void transferFrom(const SkIRect& srcRect, GrColorType bufferColorType,
-                      GrGpuBuffer* transferBuffer, size_t offset) override {
-        fGpu->transferPixelsFrom(fTexture, srcRect.fLeft, srcRect.fTop, srcRect.width(),
-                                 srcRect.height(), bufferColorType, transferBuffer, offset);
-    }
-
     void insertEventMarker(const char* msg) override {
         fGpu->insertEventMarker(msg);
     }
@@ -58,25 +47,12 @@ public:
     void begin() override;
     void end() override {}
 
-    void discard() override { }
-
     void insertEventMarker(const char* msg) override {
         fGpu->insertEventMarker(msg);
     }
 
     void inlineUpload(GrOpFlushState* state, GrDeferredTextureUploadFn& upload) override {
         state->doUpload(upload);
-    }
-
-    void copy(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
-              const SkIPoint& dstPoint) override {
-        fGpu->copySurface(fRenderTarget, fOrigin, src, srcOrigin, srcRect, dstPoint);
-    }
-
-    void transferFrom(const SkIRect& srcRect, GrColorType bufferColorType,
-                      GrGpuBuffer* transferBuffer, size_t offset) override {
-        fGpu->transferPixelsFrom(fRenderTarget, srcRect.fLeft, srcRect.fTop, srcRect.width(),
-                                 srcRect.height(), bufferColorType, transferBuffer, offset);
     }
 
     void set(GrRenderTarget*, GrSurfaceOrigin,

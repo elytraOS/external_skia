@@ -229,8 +229,9 @@ GrCCPathCache::OnFlushEntryRef GrCCPathCache::find(
             SkASSERT(SkToBool(entry->fCachedAtlas->peekOnFlushRefCnt()) ==
                      SkToBool(entry->fCachedAtlas->getOnFlushProxy()));
             if (!entry->fCachedAtlas->getOnFlushProxy()) {
+                auto ct = GrCCAtlas::CoverageTypeToColorType(entry->fCachedAtlas->coverageType());
                 if (sk_sp<GrTextureProxy> onFlushProxy = onFlushRP->findOrCreateProxyByUniqueKey(
-                        entry->fCachedAtlas->textureKey(), GrCCAtlas::kTextureOrigin)) {
+                            entry->fCachedAtlas->textureKey(), ct, GrCCAtlas::kTextureOrigin)) {
                     onFlushProxy->priv().setIgnoredByResourceAllocator();
                     entry->fCachedAtlas->setOnFlushProxy(std::move(onFlushProxy));
                 }
@@ -380,7 +381,7 @@ GrCCPathCacheEntry::ReleaseAtlasResult GrCCPathCacheEntry::upgradeToLiteralCover
     SkASSERT(!this->hasBeenEvicted());
     SkASSERT(fOnFlushRefCnt > 0);
     SkASSERT(fCachedAtlas);
-    SkASSERT(GrCCAtlas::CoverageType::kFP16_CoverageCount == fCachedAtlas->coverageType());
+    SkASSERT(GrCCAtlas::CoverageType::kA8_LiteralCoverage != fCachedAtlas->coverageType());
 
     ReleaseAtlasResult releaseAtlasResult = this->releaseCachedAtlas(pathCache);
 

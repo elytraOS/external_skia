@@ -8,25 +8,26 @@
 #include "src/gpu/GrTextureOpList.h"
 
 #include "include/gpu/GrContext.h"
-#include "include/private/GrAuditTrail.h"
 #include "include/private/GrRecordingContext.h"
-#include "include/private/GrTextureProxy.h"
 #include "src/core/SkStringUtils.h"
+#include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrResourceAllocator.h"
-#include "src/gpu/ops/GrCopySurfaceOp.h"
+#include "src/gpu/GrTexturePriv.h"
+#include "src/gpu/GrTextureProxy.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
 GrTextureOpList::GrTextureOpList(sk_sp<GrOpMemoryPool> opMemoryPool,
                                  sk_sp<GrTextureProxy> proxy,
                                  GrAuditTrail* auditTrail)
-        : INHERITED(std::move(opMemoryPool), proxy, auditTrail) {
+        : INHERITED(std::move(opMemoryPool), std::move(proxy), auditTrail) {
     SkASSERT(fOpMemoryPool);
-    SkASSERT(!proxy->readOnly());
+    SkASSERT(!fTarget->readOnly());
+    fTarget->setLastRenderTask(this);
 }
 
 void GrTextureOpList::deleteOp(int index) {
@@ -74,7 +75,7 @@ void GrTextureOpList::dump(bool printDependencies) const {
 #endif
 
 void GrTextureOpList::onPrepare(GrOpFlushState* flushState) {
-    SkASSERT(fTarget.get()->peekTexture());
+    SkASSERT(fTarget->peekTexture());
     SkASSERT(this->isClosed());
 
     // Loop over the ops that haven't yet generated their geometry
@@ -85,6 +86,7 @@ void GrTextureOpList::onPrepare(GrOpFlushState* flushState) {
                 fRecordedOps[i].get(),
                 nullptr,
                 nullptr,
+                GrSwizzle(),
                 GrXferProcessor::DstProxy()
             };
             flushState->setOpArgs(&opArgs);
@@ -95,15 +97,15 @@ void GrTextureOpList::onPrepare(GrOpFlushState* flushState) {
 }
 
 bool GrTextureOpList::onExecute(GrOpFlushState* flushState) {
-    if (0 == fRecordedOps.count()) {
+    if (fRecordedOps.empty()) {
         return false;
     }
 
-    SkASSERT(fTarget.get()->peekTexture());
+    SkASSERT(fTarget->peekTexture());
 
     GrGpuTextureCommandBuffer* commandBuffer(
-                         flushState->gpu()->getCommandBuffer(fTarget.get()->peekTexture(),
-                                                             fTarget.get()->origin()));
+                         flushState->gpu()->getCommandBuffer(fTarget->peekTexture(),
+                                                             fTarget->origin()));
     flushState->setCommandBuffer(commandBuffer);
 
     for (int i = 0; i < fRecordedOps.count(); ++i) {
@@ -115,6 +117,7 @@ bool GrTextureOpList::onExecute(GrOpFlushState* flushState) {
             fRecordedOps[i].get(),
             nullptr,
             nullptr,
+            GrSwizzle(),
             GrXferProcessor::DstProxy()
         };
         flushState->setOpArgs(&opArgs);
@@ -135,31 +138,7 @@ void GrTextureOpList::endFlush() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// This closely parallels GrRenderTargetOpList::copySurface but renderTargetOpList
-// stores extra data with the op
-bool GrTextureOpList::copySurface(GrRecordingContext* context,
-                                  GrSurfaceProxy* dst,
-                                  GrSurfaceProxy* src,
-                                  const SkIRect& srcRect,
-                                  const SkIPoint& dstPoint) {
-    SkASSERT(dst == fTarget.get());
-
-    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(context, dst, src, srcRect, dstPoint);
-    if (!op) {
-        return false;
-    }
-
-    const GrCaps* caps = context->priv().caps();
-    auto addDependency = [ caps, this ] (GrSurfaceProxy* p, GrMipMapped) {
-        this->addDependency(p, *caps);
-    };
-    op->visitProxies(addDependency);
-
-    this->recordOp(std::move(op));
-    return true;
-}
-
-void GrTextureOpList::purgeOpsWithUninstantiatedProxies() {
+void GrTextureOpList::handleInternalAllocationFailure() {
     bool hasUninstantiatedProxy = false;
     auto checkInstantiation = [&hasUninstantiatedProxy](GrSurfaceProxy* p, GrMipMapped) {
         if (!p->isInstantiated()) {
@@ -231,11 +210,11 @@ void GrTextureOpList::gatherProxyIntervals(GrResourceAllocator* alloc) const {
 }
 
 void GrTextureOpList::recordOp(std::unique_ptr<GrOp> op) {
-    SkASSERT(fTarget.get());
+    SkASSERT(fTarget);
     // A closed GrOpList should never receive new/more ops
     SkASSERT(!this->isClosed());
 
-    GR_AUDIT_TRAIL_ADD_OP(fAuditTrail, op.get(), fTarget.get()->uniqueID());
+    GR_AUDIT_TRAIL_ADD_OP(fAuditTrail, op.get(), fTarget->uniqueID());
     GrOP_INFO("Re-Recording (%s, opID: %u)\n"
         "\tBounds LRTB (%f, %f, %f, %f)\n",
         op->name(),

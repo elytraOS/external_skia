@@ -11,13 +11,13 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkTypes.h"
-#include "include/private/GrOpList.h"
 #include "include/private/SkTArray.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkClipStack.h"
 #include "src/core/SkStringUtils.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrAppliedClip.h"
+#include "src/gpu/GrOpList.h"
 #include "src/gpu/GrPathRendering.h"
 #include "src/gpu/GrPrimitiveProcessor.h"
 #include "src/gpu/ops/GrDrawOp.h"
@@ -37,16 +37,6 @@ public:
 
     ~GrRenderTargetOpList() override;
 
-    void makeClosed(const GrCaps& caps) override {
-        if (this->isClosed()) {
-            return;
-        }
-
-        this->forwardCombine(caps);
-
-        INHERITED::makeClosed(caps);
-    }
-
     bool isEmpty() const { return fOpChains.empty(); }
 
     /**
@@ -61,9 +51,11 @@ public:
     void onPrepare(GrOpFlushState* flushState) override;
     bool onExecute(GrOpFlushState* flushState) override;
 
-    void addOp(std::unique_ptr<GrOp> op, const GrCaps& caps) {
-        auto addDependency = [ &caps, this ] (GrSurfaceProxy* p, GrMipMapped) {
-            this->addDependency(p, caps);
+    void addOp(std::unique_ptr<GrOp> op, GrTextureResolveManager textureResolveManager,
+               const GrCaps& caps) {
+        auto addDependency = [ textureResolveManager, &caps, this ] (
+                GrSurfaceProxy* p, GrMipMapped mipmapped) {
+            this->addDependency(p, mipmapped, textureResolveManager, caps);
         };
 
         op->visitProxies(addDependency);
@@ -71,15 +63,18 @@ public:
         this->recordOp(std::move(op), GrProcessorSet::EmptySetAnalysis(), nullptr, nullptr, caps);
     }
 
-    void addWaitOp(std::unique_ptr<GrOp> op, const GrCaps& caps) {
-        fHasWaitOp= true;
-        this->addOp(std::move(op), caps);
+    void addWaitOp(std::unique_ptr<GrOp> op, GrTextureResolveManager textureResolveManager,
+                   const GrCaps& caps) {
+        fHasWaitOp = true;
+        this->addOp(std::move(op), textureResolveManager, caps);
     }
 
     void addDrawOp(std::unique_ptr<GrDrawOp> op, const GrProcessorSet::Analysis& processorAnalysis,
-                   GrAppliedClip&& clip, const DstProxy& dstProxy, const GrCaps& caps) {
-        auto addDependency = [ &caps, this ] (GrSurfaceProxy* p, GrMipMapped) {
-            this->addDependency(p, caps);
+                   GrAppliedClip&& clip, const DstProxy& dstProxy,
+                   GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
+        auto addDependency = [ textureResolveManager, &caps, this ] (
+                GrSurfaceProxy* p, GrMipMapped mipmapped) {
+            this->addDependency(p, mipmapped, textureResolveManager, caps);
         };
 
         op->visitProxies(addDependency);
@@ -93,22 +88,6 @@ public:
     }
 
     void discard();
-
-    /**
-     * Copies a pixel rectangle from one surface to another. This call may finalize
-     * reserved vertex/index data (as though a draw call was made). The src pixels
-     * copied are specified by srcRect. They are copied to a rect of the same
-     * size in dst with top left at dstPoint. If the src rect is clipped by the
-     * src bounds then  pixel values in the dst rect corresponding to area clipped
-     * by the src rect are not overwritten. This method is not guaranteed to succeed
-     * depending on the type of surface, configs, etc, and the backend-specific
-     * limitations.
-     */
-    bool copySurface(GrRecordingContext*,
-                     GrSurfaceProxy* dst,
-                     GrSurfaceProxy* src,
-                     const SkIRect& srcRect,
-                     const SkIPoint& dstPoint) override;
 
     GrRenderTargetOpList* asRenderTargetOpList() override { return this; }
 
@@ -125,10 +104,24 @@ private:
     // however, requires that the RTC be able to coordinate with the op list to achieve similar ends
     friend class GrRenderTargetContext;
 
+    bool isNoOp() const {
+        // TODO: GrLoadOp::kDiscard -> [empty opList] -> GrStoreOp::kStore should also be a no-op.
+        // We don't count it as a no-op right now because of Vulkan. There are real cases where we
+        // store a discard, and if we skip that render pass, then the next time we load the render
+        // target, Vulkan detects loading of uninitialized memory and complains. If we don't skip
+        // storing the discard, then we trick Vulkan and it doesn't notice us doing anything wrong.
+        // We should definitely address this issue properly.
+        //
+        // TODO: We should also consider stencil load/store here. We get away with it for now
+        // because we never discard stencil buffers.
+        return fOpChains.empty() && GrLoadOp::kClear != fColorLoadOp &&
+               GrLoadOp::kDiscard != fColorLoadOp;
+    }
+
     bool onIsUsed(GrSurfaceProxy*) const override;
 
     // Must only be called if native stencil buffer clearing is enabled
-    void setStencilLoadOp(GrLoadOp op);
+    void setStencilLoadOp(GrLoadOp op) { fStencilLoadOp = op; }
     // Must only be called if native color buffer clearing is enabled.
     void setColorLoadOp(GrLoadOp op, const SkPMColor4f& color);
     // Sets the clear color to transparent black
@@ -137,10 +130,15 @@ private:
         this->setColorLoadOp(op, kDefaultClearColor);
     }
 
+    enum class CanDiscardPreviousOps : bool {
+        kYes = true,
+        kNo = false
+    };
+
     // Perform book-keeping for a fullscreen clear, regardless of how the clear is implemented later
     // (i.e. setColorLoadOp(), adding a ClearOp, or adding a GrFillRectOp that covers the device).
     // Returns true if the clear can be converted into a load op (barring device caps).
-    bool resetForFullscreenClear();
+    bool resetForFullscreenClear(CanDiscardPreviousOps);
 
     void deleteOps();
 
@@ -215,7 +213,7 @@ private:
         SkRect fBounds;
     };
 
-    void purgeOpsWithUninstantiatedProxies() override;
+    void handleInternalAllocationFailure() override;
 
     void gatherProxyIntervals(GrResourceAllocator*) const override;
 
@@ -223,6 +221,15 @@ private:
                   const GrCaps& caps);
 
     void forwardCombine(const GrCaps&);
+
+    ExpectedOutcome onMakeClosed(const GrCaps& caps) override {
+        this->forwardCombine(caps);
+        return (this->isNoOp()) ? ExpectedOutcome::kTargetUnchanged : ExpectedOutcome::kTargetDirty;
+    }
+
+    GrLoadOp                       fColorLoadOp    = GrLoadOp::kLoad;
+    SkPMColor4f                    fLoadClearColor = SK_PMColor4fTRANSPARENT;
+    GrLoadOp                       fStencilLoadOp  = GrLoadOp::kLoad;
 
     uint32_t                       fLastClipStackGenID;
     SkIRect                        fLastDevClipBounds;
@@ -232,7 +239,7 @@ private:
     bool fHasWaitOp = false;;
 
     // For ops/opList we have mean: 5 stdDev: 28
-    SkSTArray<25, OpChain, true> fOpChains;
+    SkSTArray<25, OpChain, true>   fOpChains;
 
     // MDB TODO: 4096 for the first allocation of the clip space will be huge overkill.
     // Gather statistics to determine the correct size.

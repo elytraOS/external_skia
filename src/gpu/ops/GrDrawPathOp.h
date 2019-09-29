@@ -29,9 +29,10 @@ protected:
                 ? FixedFunctionFlags::kUsesHWAA | FixedFunctionFlags::kUsesStencil
                 : FixedFunctionFlags::kUsesStencil;
     }
-    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
-                                      GrFSAAType fsaaType, GrClampType clampType) override {
-        return this->doProcessorAnalysis(caps, clip, fsaaType, clampType);
+    GrProcessorSet::Analysis finalize(
+            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
+            GrClampType clampType) override {
+        return this->doProcessorAnalysis(caps, clip, hasMixedSampledCoverage, clampType);
     }
 
     void visitProxies(const VisitProxyFunc& func) const override {
@@ -46,7 +47,7 @@ protected:
     GrProcessorSet detachProcessors() { return std::move(fProcessorSet); }
     inline GrPipeline::InitArgs pipelineInitArgs(const GrOpFlushState&);
     const GrProcessorSet::Analysis& doProcessorAnalysis(
-            const GrCaps&, const GrAppliedClip*, GrFSAAType, GrClampType);
+            const GrCaps&, const GrAppliedClip*, bool hasMixedSampledCoverage, GrClampType);
     const GrProcessorSet::Analysis& processorAnalysis() const {
         SkASSERT(fAnalysis.isInitialized());
         return fAnalysis;
@@ -70,7 +71,7 @@ public:
     DEFINE_OP_CLASS_ID
 
     static std::unique_ptr<GrDrawOp> Make(
-            GrRecordingContext*, const SkMatrix& viewMatrix, GrPaint&&, GrAA, GrPath*);
+            GrRecordingContext*, const SkMatrix& viewMatrix, GrPaint&&, GrAA, sk_sp<const GrPath>);
 
     const char* name() const override { return "DrawPath"; }
 
@@ -81,16 +82,16 @@ public:
 private:
     friend class GrOpMemoryPool; // for ctor
 
-    GrDrawPathOp(const SkMatrix& viewMatrix, GrPaint&& paint, GrAA aa, const GrPath* path)
+    GrDrawPathOp(const SkMatrix& viewMatrix, GrPaint&& paint, GrAA aa, sk_sp<const GrPath> path)
             : GrDrawPathOpBase(
                     ClassID(), viewMatrix, std::move(paint), path->getFillType(), aa)
-            , fPath(path) {
-        this->setTransformedBounds(path->getBounds(), viewMatrix, HasAABloat::kNo, IsZeroArea::kNo);
+            , fPath(std::move(path)) {
+        this->setTransformedBounds(fPath->getBounds(), viewMatrix, HasAABloat::kNo, IsZeroArea::kNo);
     }
 
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
 
-    GrPendingIOResource<const GrPath, kRead_GrIOType> fPath;
+    sk_sp<const GrPath> fPath;
 
     typedef GrDrawPathOpBase INHERITED;
 };
