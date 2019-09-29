@@ -123,8 +123,7 @@ GrResourceCache::~GrResourceCache() {
     this->releaseAll();
 }
 
-void GrResourceCache::setLimits(int count, size_t bytes) {
-    fMaxCount = count;
+void GrResourceCache::setLimit(size_t bytes) {
     fMaxBytes = bytes;
     this->purgeAsNeeded();
 }
@@ -280,46 +279,24 @@ void GrResourceCache::refResource(GrGpuResource* resource) {
 
 class GrResourceCache::AvailableForScratchUse {
 public:
-    AvailableForScratchUse(bool rejectPendingIO) : fRejectPendingIO(rejectPendingIO) { }
+    AvailableForScratchUse() { }
 
     bool operator()(const GrGpuResource* resource) const {
         SkASSERT(!resource->getUniqueKey().isValid() &&
                  resource->resourcePriv().getScratchKey().isValid());
+
+        // isScratch() also tests that the resource is budgeted.
         if (resource->internalHasRef() || !resource->cacheAccess().isScratch()) {
             return false;
         }
-        return !fRejectPendingIO || !resource->internalHasPendingIO();
+        return true;
     }
-
-private:
-    bool fRejectPendingIO;
 };
 
-GrGpuResource* GrResourceCache::findAndRefScratchResource(const GrScratchKey& scratchKey,
-                                                          size_t resourceSize,
-                                                          ScratchFlags flags) {
+GrGpuResource* GrResourceCache::findAndRefScratchResource(const GrScratchKey& scratchKey) {
     SkASSERT(scratchKey.isValid());
 
-    GrGpuResource* resource;
-    if (flags & (ScratchFlags::kPreferNoPendingIO | ScratchFlags::kRequireNoPendingIO)) {
-        resource = fScratchMap.find(scratchKey, AvailableForScratchUse(true));
-        if (resource) {
-            this->refAndMakeResourceMRU(resource);
-            this->validate();
-            return resource;
-        } else if (flags & ScratchFlags::kRequireNoPendingIO) {
-            return nullptr;
-        }
-        // We would prefer to consume more available VRAM rather than flushing
-        // immediately, but on ANGLE this can lead to starving of the GPU.
-        if (fPreferVRAMUseOverFlushes && this->wouldFit(resourceSize)) {
-            // kPrefer is specified, we didn't find a resource without pending io,
-            // but there is still space in our budget for the resource so force
-            // the caller to allocate a new resource.
-            return nullptr;
-        }
-    }
-    resource = fScratchMap.find(scratchKey, AvailableForScratchUse(false));
+    GrGpuResource* resource = fScratchMap.find(scratchKey, AvailableForScratchUse());
     if (resource) {
         this->refAndMakeResourceMRU(resource);
         this->validate();
@@ -417,45 +394,29 @@ void GrResourceCache::refAndMakeResourceMRU(GrGpuResource* resource) {
     this->validate();
 }
 
-void GrResourceCache::notifyCntReachedZero(GrGpuResource* resource, uint32_t flags) {
+void GrResourceCache::notifyRefCntReachedZero(GrGpuResource* resource) {
     ASSERT_SINGLE_OWNER
     SkASSERT(resource);
     SkASSERT(!resource->wasDestroyed());
-    SkASSERT(flags);
     SkASSERT(this->isInCache(resource));
     // This resource should always be in the nonpurgeable array when this function is called. It
     // will be moved to the queue if it is newly purgeable.
     SkASSERT(fNonpurgeableResources[*resource->cacheAccess().accessCacheIndex()] == resource);
 
-    if (SkToBool(ResourceAccess::kRefCntReachedZero_RefNotificationFlag & flags)) {
 #ifdef SK_DEBUG
-        // When the timestamp overflows validate() is called. validate() checks that resources in
-        // the nonpurgeable array are indeed not purgeable. However, the movement from the array to
-        // the purgeable queue happens just below in this function. So we mark it as an exception.
-        if (resource->resourcePriv().isPurgeable()) {
-            fNewlyPurgeableResourceForValidation = resource;
-        }
-#endif
-        resource->cacheAccess().setTimestamp(this->getNextTimestamp());
-        SkDEBUGCODE(fNewlyPurgeableResourceForValidation = nullptr);
-        if (!resource->resourcePriv().isPurgeable() &&
-            resource->resourcePriv().budgetedType() == GrBudgetedType::kBudgeted) {
-            SkASSERT(resource->resourcePriv().hasPendingIO_debugOnly());
-            ++fNumBudgetedResourcesFlushWillMakePurgeable;
-        }
-    } else {
-        // If this is budgeted and just became purgeable by dropping the last pending IO
-        // then it clearly no longer needs a flush to become purgeable.
-        if (resource->resourcePriv().budgetedType() == GrBudgetedType::kBudgeted &&
-            resource->resourcePriv().isPurgeable()) {
-            SkASSERT(fNumBudgetedResourcesFlushWillMakePurgeable > 0);
-            fNumBudgetedResourcesFlushWillMakePurgeable--;
-        }
+    // When the timestamp overflows validate() is called. validate() checks that resources in
+    // the nonpurgeable array are indeed not purgeable. However, the movement from the array to
+    // the purgeable queue happens just below in this function. So we mark it as an exception.
+    if (resource->resourcePriv().isPurgeable()) {
+        fNewlyPurgeableResourceForValidation = resource;
     }
+#endif
+    resource->cacheAccess().setTimestamp(this->getNextTimestamp());
+    SkDEBUGCODE(fNewlyPurgeableResourceForValidation = nullptr);
 
-    if (!SkToBool(ResourceAccess::kAllCntsReachedZero_RefNotificationFlag & flags)) {
-        SkASSERT(!resource->resourcePriv().isPurgeable());
-        return;
+    if (!resource->resourcePriv().isPurgeable() &&
+        resource->resourcePriv().budgetedType() == GrBudgetedType::kBudgeted) {
+        ++fNumBudgetedResourcesFlushWillMakePurgeable;
     }
 
     if (!resource->resourcePriv().isPurgeable()) {
@@ -489,8 +450,7 @@ void GrResourceCache::notifyCntReachedZero(GrGpuResource* resource, uint32_t fla
         if (!resource->resourcePriv().refsWrappedObjects() &&
             resource->resourcePriv().getScratchKey().isValid()) {
             // We won't purge an existing resource to make room for this one.
-            if (fBudgetedCount < fMaxCount &&
-                fBudgetedBytes + resource->gpuMemorySize() <= fMaxBytes) {
+            if (this->wouldFit(resource->gpuMemorySize())) {
                 resource->resourcePriv().makeBudgeted();
                 return;
             }
@@ -807,14 +767,13 @@ void GrResourceCache::dumpStats(SkString* out) const {
 
     this->getStats(&stats);
 
-    float countUtilization = (100.f * fBudgetedCount) / fMaxCount;
     float byteUtilization = (100.f * fBudgetedBytes) / fMaxBytes;
 
-    out->appendf("Budget: %d items %d bytes\n", fMaxCount, (int)fMaxBytes);
+    out->appendf("Budget: %d bytes\n", (int)fMaxBytes);
     out->appendf("\t\tEntry Count: current %d"
-                 " (%d budgeted, %d wrapped, %d locked, %d scratch %.2g%% full), high %d\n",
+                 " (%d budgeted, %d wrapped, %d locked, %d scratch), high %d\n",
                  stats.fTotal, fBudgetedCount, stats.fWrapped, stats.fNumNonPurgeable,
-                 stats.fScratch, countUtilization, fHighWaterCount);
+                 stats.fScratch, fHighWaterCount);
     out->appendf("\t\tEntry Bytes: current %d (budgeted %d, %.2g%% full, %d unbudgeted) high %d\n",
                  SkToInt(fBytes), SkToInt(fBudgetedBytes), byteUtilization,
                  SkToInt(stats.fUnbudgetedSize), SkToInt(fHighWaterBytes));
@@ -861,9 +820,6 @@ void GrResourceCache::validate() const {
 
         void update(GrGpuResource* resource) {
             fBytes += resource->gpuMemorySize();
-
-            // No resource should ever have pendingIO any more
-            SkASSERT(!resource->internalHasPendingIO());
 
             if (!resource->resourcePriv().isPurgeable()) {
                 ++fLocked;
@@ -929,7 +885,6 @@ void GrResourceCache::validate() const {
         if (fNonpurgeableResources[i]->resourcePriv().budgetedType() == GrBudgetedType::kBudgeted &&
             !fNonpurgeableResources[i]->cacheAccess().hasRef() &&
             fNewlyPurgeableResourceForValidation != fNonpurgeableResources[i]) {
-            SkASSERT(fNonpurgeableResources[i]->resourcePriv().hasPendingIO_debugOnly());
             ++numBudgetedResourcesFlushWillMakePurgeable;
         }
         stats.update(fNonpurgeableResources[i]);

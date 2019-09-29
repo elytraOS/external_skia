@@ -18,6 +18,7 @@
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrMesh.h"
+#include "src/gpu/GrNativeRect.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrRenderTargetPriv.h"
@@ -27,11 +28,11 @@
 #include "src/gpu/vk/GrVkAMDMemoryAllocator.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkCommandPool.h"
-#include "src/gpu/vk/GrVkGpuCommandBuffer.h"
 #include "src/gpu/vk/GrVkImage.h"
 #include "src/gpu/vk/GrVkIndexBuffer.h"
 #include "src/gpu/vk/GrVkInterface.h"
 #include "src/gpu/vk/GrVkMemory.h"
+#include "src/gpu/vk/GrVkOpsRenderPass.h"
 #include "src/gpu/vk/GrVkPipeline.h"
 #include "src/gpu/vk/GrVkPipelineState.h"
 #include "src/gpu/vk/GrVkRenderPass.h"
@@ -318,33 +319,24 @@ void GrVkGpu::disconnect(DisconnectType type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGpuRTCommandBuffer* GrVkGpu::getCommandBuffer(
+GrOpsRenderPass* GrVkGpu::getOpsRenderPass(
             GrRenderTarget* rt, GrSurfaceOrigin origin, const SkRect& bounds,
-            const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
-            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
-    if (!fCachedRTCommandBuffer) {
-        fCachedRTCommandBuffer.reset(new GrVkGpuRTCommandBuffer(this));
+            const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
+            const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
+            const SkTArray<GrTextureProxy*, true>& sampledProxies) {
+    if (!fCachedOpsRenderPass) {
+        fCachedOpsRenderPass.reset(new GrVkOpsRenderPass(this));
     }
 
-    fCachedRTCommandBuffer->set(rt, origin, colorInfo, stencilInfo);
-    return fCachedRTCommandBuffer.get();
-}
-
-GrGpuTextureCommandBuffer* GrVkGpu::getCommandBuffer(GrTexture* texture, GrSurfaceOrigin origin) {
-    if (!fCachedTexCommandBuffer) {
-        fCachedTexCommandBuffer.reset(new GrVkGpuTextureCommandBuffer(this));
-    }
-
-    fCachedTexCommandBuffer->set(texture, origin);
-    return fCachedTexCommandBuffer.get();
+    fCachedOpsRenderPass->set(rt, origin, colorInfo, stencilInfo, sampledProxies);
+    return fCachedOpsRenderPass.get();
 }
 
 void GrVkGpu::submitCommandBuffer(SyncQueue sync, GrGpuFinishedProc finishedProc,
                                   GrGpuFinishedContext finishedContext) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     SkASSERT(fCurrentCmdBuffer);
-    SkASSERT(!fCachedRTCommandBuffer || !fCachedRTCommandBuffer->isActive());
-    SkASSERT(!fCachedTexCommandBuffer || !fCachedTexCommandBuffer->isActive());
+    SkASSERT(!fCachedOpsRenderPass || !fCachedOpsRenderPass->isActive());
 
     if (!fCurrentCmdBuffer->hasWork() && kForce_SyncQueue != sync &&
         !fSemaphoresToSignal.count() && !fSemaphoresToWaitOn.count()) {
@@ -421,7 +413,8 @@ sk_sp<GrGpuBuffer> GrVkGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
 
 bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, int height,
                             GrColorType surfaceColorType, GrColorType srcColorType,
-                            const GrMipLevel texels[], int mipLevelCount) {
+                            const GrMipLevel texels[], int mipLevelCount,
+                            bool prepForTexSampling) {
     GrVkTexture* vkTex = static_cast<GrVkTexture*>(surface->asTexture());
     if (!vkTex) {
         return false;
@@ -455,6 +448,12 @@ bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
         SkASSERT(mipLevelCount <= vkTex->texturePriv().maxMipMapLevel() + 1);
         success = this->uploadTexDataOptimal(vkTex, left, top, width, height, srcColorType, texels,
                                              mipLevelCount);
+    }
+
+    if (prepForTexSampling) {
+        vkTex->setImageLayout(this, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                              VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                              false);
     }
 
     return success;
@@ -954,8 +953,8 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
                                           int renderTargetSampleCnt,
                                           SkBudgeted budgeted,
                                           GrProtected isProtected,
-                                          const GrMipLevel texels[],
-                                          int mipLevelCount) {
+                                          int mipLevelCount,
+                                          uint32_t levelClearMask) {
     VkFormat pixelFormat;
     SkAssertResult(format.asVkFormat(&pixelFormat));
     SkASSERT(!GrVkFormatIsCompressed(pixelFormat));
@@ -976,28 +975,20 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
     // This ImageDesc refers to the texture that will be read by the client. Thus even if msaa is
     // requested, this ImageDesc describes the resolved texture. Therefore we always have samples set
     // to 1.
-    int mipLevels = !mipLevelCount ? 1 : mipLevelCount;
+    SkASSERT(mipLevelCount > 0);
     GrVkImage::ImageDesc imageDesc;
     imageDesc.fImageType = VK_IMAGE_TYPE_2D;
     imageDesc.fFormat = pixelFormat;
     imageDesc.fWidth = desc.fWidth;
     imageDesc.fHeight = desc.fHeight;
-    imageDesc.fLevels = mipLevels;
+    imageDesc.fLevels = mipLevelCount;
     imageDesc.fSamples = 1;
     imageDesc.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
     imageDesc.fUsageFlags = usageFlags;
     imageDesc.fIsProtected = isProtected;
 
-    GrMipMapsStatus mipMapsStatus = GrMipMapsStatus::kNotAllocated;
-    if (mipLevels > 1) {
-        mipMapsStatus = GrMipMapsStatus::kValid;
-        for (int i = 0; i < mipLevels; ++i) {
-            if (!texels[i].fPixels) {
-                mipMapsStatus = GrMipMapsStatus::kDirty;
-                break;
-            }
-        }
-    }
+    GrMipMapsStatus mipMapsStatus =
+            mipLevelCount > 1 ? GrMipMapsStatus::kDirty : GrMipMapsStatus::kNotAllocated;
 
     sk_sp<GrVkTexture> tex;
     if (renderable == GrRenderable::kYes) {
@@ -1011,20 +1002,11 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
         return nullptr;
     }
 
-    auto colorType = GrPixelConfigToColorType(desc.fConfig);
-    if (mipLevelCount) {
-        if (!this->uploadTexDataOptimal(tex.get(), 0, 0, desc.fWidth, desc.fHeight, colorType,
-                                        texels, mipLevelCount)) {
-            tex->unref();
-            return nullptr;
-        }
-    }
-
-    if (this->caps()->shouldInitializeTextures()) {
+    if (levelClearMask) {
         SkSTArray<1, VkImageSubresourceRange> ranges;
         bool inRange = false;
         for (uint32_t i = 0; i < tex->mipLevels(); ++i) {
-            if (i >= static_cast<uint32_t>(mipLevelCount) || !texels[i].fPixels) {
+            if (levelClearMask & (1U << i)) {
                 if (inRange) {
                     ranges.back().levelCount++;
                 } else {
@@ -1040,15 +1022,12 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
                 inRange = false;
             }
         }
-
-        if (!ranges.empty()) {
-            static constexpr VkClearColorValue kZeroClearColor = {};
-            tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                false);
-            this->currentCommandBuffer()->clearColorImage(this, tex.get(), &kZeroClearColor,
-                                                          ranges.count(), ranges.begin());
-        }
+        SkASSERT(!ranges.empty());
+        static constexpr VkClearColorValue kZeroClearColor = {};
+        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+        this->currentCommandBuffer()->clearColorImage(this, tex.get(), &kZeroClearColor,
+                                                      ranges.count(), ranges.begin());
     }
     return tex;
 }
@@ -2479,22 +2458,12 @@ void adjust_bounds_to_granularity(SkIRect* dstBounds, const SkIRect& srcBounds,
     }
 }
 
-void GrVkGpu::submitSecondaryCommandBuffer(
-        std::unique_ptr<GrVkSecondaryCommandBuffer> buffer,
-        const GrVkRenderPass* renderPass,
-        const VkClearValue* colorClear,
-        GrVkRenderTarget* target, GrSurfaceOrigin origin,
-        const SkIRect& bounds) {
-
+void GrVkGpu::beginRenderPass(const GrVkRenderPass* renderPass,
+                              const VkClearValue* colorClear,
+                              GrVkRenderTarget* target, GrSurfaceOrigin origin,
+                              const SkIRect& bounds, bool forSecondaryCB) {
     SkASSERT (!target->wrapsSecondaryCommandBuffer());
-    const SkIRect* pBounds = &bounds;
-    SkIRect flippedBounds;
-    if (kBottomLeft_GrSurfaceOrigin == origin) {
-        flippedBounds = bounds;
-        flippedBounds.fTop = target->height() - bounds.fBottom;
-        flippedBounds.fBottom = target->height() - bounds.fTop;
-        pBounds = &flippedBounds;
-    }
+    auto nativeBounds = GrNativeRect::MakeRelativeTo(origin, target->height(), bounds);
 
     // The bounds we use for the render pass should be of the granularity supported
     // by the device.
@@ -2502,9 +2471,10 @@ void GrVkGpu::submitSecondaryCommandBuffer(
     SkIRect adjustedBounds;
     if ((0 != granularity.width && 1 != granularity.width) ||
         (0 != granularity.height && 1 != granularity.height)) {
-        adjust_bounds_to_granularity(&adjustedBounds, *pBounds, granularity,
+        adjust_bounds_to_granularity(&adjustedBounds, nativeBounds.asSkIRect(), granularity,
                                      target->width(), target->height());
-        pBounds = &adjustedBounds;
+    } else {
+        adjustedBounds = nativeBounds.asSkIRect();
     }
 
 #ifdef SK_DEBUG
@@ -2521,25 +2491,25 @@ void GrVkGpu::submitSecondaryCommandBuffer(
     clears[1].depthStencil.depth = 0.0f;
     clears[1].depthStencil.stencil = 0;
 
-    fCurrentCmdBuffer->beginRenderPass(this, renderPass, clears, *target, *pBounds, true);
-    fCurrentCmdBuffer->executeCommands(this, std::move(buffer));
-    fCurrentCmdBuffer->endRenderPass(this);
+    fCurrentCmdBuffer->beginRenderPass(this, renderPass, clears, *target, adjustedBounds,
+                                       forSecondaryCB);
+}
 
+void GrVkGpu::endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
+                            const SkIRect& bounds) {
+    fCurrentCmdBuffer->endRenderPass(this);
     this->didWriteToSurface(target, origin, &bounds);
 }
 
-void GrVkGpu::submit(GrGpuCommandBuffer* buffer) {
-    if (buffer->asRTCommandBuffer()) {
-        SkASSERT(fCachedRTCommandBuffer.get() == buffer);
+void GrVkGpu::submitSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer> buffer) {
+    fCurrentCmdBuffer->executeCommands(this, std::move(buffer));
+}
 
-        fCachedRTCommandBuffer->submit();
-        fCachedRTCommandBuffer->reset();
-    } else {
-        SkASSERT(fCachedTexCommandBuffer.get() == buffer);
+void GrVkGpu::submit(GrOpsRenderPass* renderPass) {
+    SkASSERT(fCachedOpsRenderPass.get() == renderPass);
 
-        fCachedTexCommandBuffer->submit();
-        fCachedTexCommandBuffer->reset();
-    }
+    fCachedOpsRenderPass->submit();
+    fCachedOpsRenderPass->reset();
 }
 
 GrFence SK_WARN_UNUSED_RESULT GrVkGpu::insertFence() {

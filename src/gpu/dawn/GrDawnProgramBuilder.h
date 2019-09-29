@@ -54,25 +54,20 @@ struct GrDawnProgram : public SkRefCnt {
                   uint32_t fragmentUniformSize)
       : fDataManager(uniforms, geometryUniformSize, fragmentUniformSize) {
     }
-    dawn::ShaderModule fVSModule;
-    dawn::ShaderModule fFSModule;
     std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
     std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
     int fFragmentProcessorCnt;
-    dawn::Buffer fGeometryUniformBuffer;
-    dawn::Buffer fFragmentUniformBuffer;
-    dawn::PipelineLayout fPipelineLayout;
-    dawn::BindGroup fBindGroup;
-    dawn::ColorStateDescriptor fColorState;
-    dawn::DepthStencilStateDescriptor fDepthStencilState;
+    dawn::BindGroupLayout fBindGroupLayout;
+    dawn::RenderPipeline fRenderPipeline;
     GrDawnProgramDataManager fDataManager;
     RenderTargetState fRenderTargetState;
     BuiltinUniformHandles fBuiltinUniformHandles;
 
     void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin);
-    void setData(const GrPrimitiveProcessor&, const GrRenderTarget*, GrSurfaceOrigin,
-                 const GrPipeline&);
+    dawn::BindGroup setData(GrDawnGpu* gpu, const GrRenderTarget*, GrSurfaceOrigin origin,
+                            const GrPrimitiveProcessor&, const GrPipeline&,
+                            const GrTextureProxy* const primProcTextures[]);
 };
 
 class GrDawnProgramBuilder : public GrGLSLProgramBuilder {
@@ -83,6 +78,7 @@ public:
                                       const GrPipeline&,
                                       const GrPrimitiveProcessor&,
                                       const GrTextureProxy* const primProcProxies[],
+                                      GrPrimitiveType primitiveType,
                                       dawn::TextureFormat colorFormat,
                                       bool hasDepthStencil,
                                       dawn::TextureFormat depthStencilFormat,

@@ -14,7 +14,7 @@
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrSemaphore.h"
 
-class GrMockGpuRTCommandBuffer;
+class GrMockOpsRenderPass;
 struct GrMockOptions;
 class GrPipeline;
 
@@ -24,12 +24,11 @@ public:
 
     ~GrMockGpu() override {}
 
-    GrGpuRTCommandBuffer* getCommandBuffer(
-                                    GrRenderTarget*, GrSurfaceOrigin, const SkRect&,
-                                    const GrGpuRTCommandBuffer::LoadAndStoreInfo&,
-                                    const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo&) override;
-
-    GrGpuTextureCommandBuffer* getCommandBuffer(GrTexture*, GrSurfaceOrigin) override;
+    GrOpsRenderPass* getOpsRenderPass(
+            GrRenderTarget*, GrSurfaceOrigin, const SkRect&,
+            const GrOpsRenderPass::LoadAndStoreInfo&,
+            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+            const SkTArray<GrTextureProxy*, true>& sampledProxies) override;
 
     GrFence SK_WARN_UNUSED_RESULT insertFence() override { return 0; }
     bool waitFence(GrFence, uint64_t) override { return true; }
@@ -45,14 +44,12 @@ public:
     void waitSemaphore(sk_sp<GrSemaphore> semaphore) override {}
     sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override { return nullptr; }
 
-    void submit(GrGpuCommandBuffer* buffer) override;
+    void submit(GrOpsRenderPass* renderPass) override;
 
     void checkFinishProcs() override {}
 
 private:
     GrMockGpu(GrContext* context, const GrMockOptions&, const GrContextOptions&);
-
-    void submitCommandBuffer(const GrMockGpuRTCommandBuffer*);
 
     void onResetContext(uint32_t resetBits) override {}
 
@@ -66,8 +63,8 @@ private:
                                      int renderTargetSampleCnt,
                                      SkBudgeted,
                                      GrProtected,
-                                     const GrMipLevel[],
-                                     int mipLevelCount) override;
+                                     int mipLevelCount,
+                                     uint32_t levelClearMask) override;
 
     sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
                                                SkImage::CompressionType, SkBudgeted,
@@ -99,7 +96,8 @@ private:
 
     bool onWritePixels(GrSurface* surface, int left, int top, int width, int height,
                        GrColorType surfaceColorType, GrColorType srcColorType,
-                       const GrMipLevel texels[], int mipLevelCount) override {
+                       const GrMipLevel texels[], int mipLevelCount,
+                       bool prepForTexSampling) override {
         return true;
     }
 
@@ -120,7 +118,7 @@ private:
 
     bool onRegenerateMipMapLevels(GrTexture*) override { return true; }
 
-    void onResolveRenderTarget(GrRenderTarget* target) override { return; }
+    void onResolveRenderTarget(GrRenderTarget* target) override { target->flagAsResolved(); }
 
     void onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
                        const GrFlushInfo& info, const GrPrepareForExternalIORequests&) override {

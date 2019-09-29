@@ -38,15 +38,6 @@ struct WireTypeface;
 
 class SkStrikeServer;
 
-struct SkDescriptorMapOperators {
-    size_t operator()(const SkDescriptor* key) const;
-    bool operator()(const SkDescriptor* lhs, const SkDescriptor* rhs) const;
-};
-
-template <typename T>
-using SkDescriptorMap = std::unordered_map<const SkDescriptor*, T, SkDescriptorMapOperators,
-                                           SkDescriptorMapOperators>;
-
 // A SkTextBlobCacheDiffCanvas is used to populate the SkStrikeServer with ops
 // which will be serialized and rendered using the SkStrikeClient.
 class SkTextBlobCacheDiffCanvas : public SkNoDrawCanvas {
@@ -113,37 +104,44 @@ public:
     SK_API void writeStrikeData(std::vector<uint8_t>* memory);
 
     // Methods used internally in Skia ------------------------------------------
-    class SkGlyphCacheState;
+    class RemoteStrike;
 
-    SkGlyphCacheState* getOrCreateCache(const SkPaint&,
-                                        const SkFont& font,
-                                        const SkSurfaceProps&,
-                                        const SkMatrix&,
-                                        SkScalerContextFlags flags,
-                                        SkScalerContextEffects* effects);
+    RemoteStrike* getOrCreateCache(const SkPaint&,
+                                   const SkFont& font,
+                                   const SkSurfaceProps&,
+                                   const SkMatrix&,
+                                   SkScalerContextFlags flags,
+                                   SkScalerContextEffects* effects);
 
     SkScopedStrike findOrCreateScopedStrike(const SkDescriptor& desc,
                                             const SkScalerContextEffects& effects,
                                             const SkTypeface& typeface) override;
 
     static void AddGlyphForTesting(
-            SkGlyphCacheState* cache, SkPackedGlyphID glyphID, bool asPath);
+            RemoteStrike* cache, SkPackedGlyphID glyphID, bool asPath);
 
     void setMaxEntriesInDescriptorMapForTesting(size_t count) {
         fMaxEntriesInDescriptorMap = count;
     }
-    size_t remoteGlyphStateMapSizeForTesting() const { return fRemoteGlyphStateMap.size(); }
+    size_t remoteStrikeMapSizeForTesting() const { return fDescToRemoteStrike.size(); }
 
 private:
     static constexpr size_t kMaxEntriesInDescriptorMap = 2000u;
 
     void checkForDeletedEntries();
 
-    SkGlyphCacheState* getOrCreateCache(const SkDescriptor& desc,
-                                        const SkTypeface& typeface,
-                                        SkScalerContextEffects effects);
+    RemoteStrike* getOrCreateCache(const SkDescriptor& desc,
+                                   const SkTypeface& typeface,
+                                   SkScalerContextEffects effects);
 
-    SkDescriptorMap<std::unique_ptr<SkGlyphCacheState>> fRemoteGlyphStateMap;
+    struct MapOps {
+        size_t operator()(const SkDescriptor* key) const;
+        bool operator()(const SkDescriptor* lhs, const SkDescriptor* rhs) const;
+    };
+    using DescToRemoteStrike =
+            std::unordered_map<const SkDescriptor*, std::unique_ptr<RemoteStrike>, MapOps, MapOps>;
+    DescToRemoteStrike fDescToRemoteStrike;
+
     DiscardableHandleManager* const fDiscardableHandleManager;
     SkTHashSet<SkFontID> fCachedTypefaces;
     size_t fMaxEntriesInDescriptorMap = kMaxEntriesInDescriptorMap;
@@ -152,7 +150,7 @@ private:
     SkTHashMap<SkFontID, sk_sp<SkData>> fSerializedTypefaces;
 
     // State cached until the next serialization.
-    std::unordered_set<SkGlyphCacheState*> fStrikesToSend;
+    SkTHashSet<RemoteStrike*> fRemoteStrikesToSend;
     std::vector<WireTypeface> fTypefacesToSend;
 };
 

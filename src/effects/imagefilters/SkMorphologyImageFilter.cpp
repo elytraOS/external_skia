@@ -286,7 +286,7 @@ void GrGLMorphologyEffect::emitCode(EmitArgs& args) {
     const char* range = uniformHandler->getUniformCStr(fRangeUni);
 
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-    SkString coords2D = fragBuilder->ensureCoords2D(args.fTransformedCoords[0]);
+    SkString coords2D = fragBuilder->ensureCoords2D(args.fTransformedCoords[0].fVaryingPoint);
     const char* func;
     switch (me.type()) {
         case MorphType::kErode:
@@ -555,7 +555,8 @@ static sk_sp<SkSpecialImage> apply_morphology(
 
     const SkIRect dstRect = SkIRect::MakeWH(rect.width(), rect.height());
     SkIRect srcRect = rect;
-
+    // Map into proxy space
+    srcRect.offset(input->subset().x(), input->subset().y());
     SkASSERT(radius.width() > 0 || radius.height() > 0);
 
     if (radius.fWidth > 0) {
@@ -612,8 +613,8 @@ static sk_sp<SkSpecialImage> apply_morphology(
     return SkSpecialImage::MakeDeferredFromGpu(context,
                                                SkIRect::MakeWH(rect.width(), rect.height()),
                                                kNeedNewImageUniqueID_SpecialImage,
-                                               std::move(srcTexture), std::move(colorSpace),
-                                               &input->props());
+                                               std::move(srcTexture), colorType,
+                                               std::move(colorSpace), &input->props());
 }
 #endif
 

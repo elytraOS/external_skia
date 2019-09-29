@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "src/gpu/SkGr.h"
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
@@ -33,16 +35,15 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrXferProcessor.h"
-#include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/GrXfermodeFragmentProcessor.h"
 #include "src/gpu/effects/generated/GrConstColorProcessor.h"
+#include "src/gpu/effects/generated/GrSaturateProcessor.h"
 #include "src/image/SkImage_Base.h"
 #include "src/shaders/SkShaderBase.h"
 
-#if SK_SUPPORT_GPU
 GR_FP_SRC_STRING SKSL_DITHER_SRC = R"(
 // This controls the range of values added to color channels
 layout(key) in int rangeType;
@@ -82,7 +83,6 @@ void main(float x, float y, inout half4 color) {
     color = half4(clamp(color.rgb + value * range, 0.0, color.a), color.a);
 }
 )";
-#endif
 
 GrSurfaceDesc GrImageInfoToSurfaceDesc(const SkImageInfo& info) {
     GrSurfaceDesc desc;
@@ -257,9 +257,20 @@ GrPixelConfig SkColorType2GrPixelConfig(const SkColorType type) {
             return kRGBA_half_GrPixelConfig;
         case kRGBA_F32_SkColorType:
             return kRGBA_float_GrPixelConfig;
+        case kR8G8_unorm_SkColorType:
+            return kRG_88_GrPixelConfig;
+        case kR16G16_unorm_SkColorType:
+            return kRG_1616_GrPixelConfig;
+        case kA16_unorm_SkColorType:
+            return kAlpha_16_GrPixelConfig;
+        case kA16_float_SkColorType:
+            return kAlpha_half_GrPixelConfig;
+        case kR16G16_float_SkColorType:
+            return kRG_half_GrPixelConfig;
+        case kR16G16B16A16_unorm_SkColorType:
+            return kRGBA_16161616_GrPixelConfig;
     }
-    SkASSERT(0);    // shouldn't get here
-    return kUnknown_GrPixelConfig;
+    SkUNREACHABLE;
 }
 
 GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info) {
@@ -291,9 +302,7 @@ static inline int32_t dither_range_type_for_config(GrColorType dstColorType) {
         case GrColorType::kRGB_888x:
         case GrColorType::kRG_88:
         case GrColorType::kBGRA_8888:
-        case GrColorType::kR_16:
         case GrColorType::kRG_1616:
-        // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:
         case GrColorType::kRG_F16:
             return 0;
@@ -310,6 +319,7 @@ static inline int32_t dither_range_type_for_config(GrColorType dstColorType) {
         case GrColorType::kRGBA_F16_Clamped:
         case GrColorType::kAlpha_8:
         case GrColorType::kAlpha_8xxx:
+        case GrColorType::kAlpha_16:
         case GrColorType::kAlpha_F32xxx:
         case GrColorType::kGray_8xxx:
             return -1;
@@ -461,6 +471,17 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
         }
     }
 #endif
+    if (GrColorTypeClampType(colorSpaceInfo.colorType()) == GrClampType::kManual) {
+        if (grPaint->numColorFragmentProcessors()) {
+            grPaint->addColorFragmentProcessor(GrSaturateProcessor::Make());
+        } else {
+            auto color = grPaint->getColor4f();
+            grPaint->setColor4f({SkTPin(color.fR, 0.f, 1.f),
+                                 SkTPin(color.fG, 0.f, 1.f),
+                                 SkTPin(color.fB, 0.f, 1.f),
+                                 SkTPin(color.fA, 0.f, 1.f)});
+        }
+    }
     return true;
 }
 

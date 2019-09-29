@@ -27,7 +27,6 @@ def upload_dm_results(buildername):
     'ASAN',
     'Coverage',
     'MSAN',
-    'MSRTC',
     'TSAN',
     'UBSAN',
     'Valgrind',
@@ -70,7 +69,7 @@ def dm_flags(api, bot):
     args.append('--randomProcessorTest')
 
   if 'Pixel3' in bot and 'Vulkan' in bot:
-    args.extend(['--dontReduceOpListSplitting'])
+    args.extend(['--dontReduceOpsTaskSplitting'])
 
   thread_limit = None
   MAIN_THREAD_ONLY = 0
@@ -270,7 +269,10 @@ def dm_flags(api, bot):
         # Decoding transparent images to 1010102 just looks bad
         blacklist('vk1010102 image _ _')
       else:
-        configs.extend(['gl1010102', 'gltestpersistentcache', 'gltestglslcache'])
+        configs.extend(['gl1010102',
+                        'gltestpersistentcache',
+                        'gltestglslcache',
+                        'gltestprecompile'])
         # Decoding transparent images to 1010102 just looks bad
         blacklist('gl1010102 image _ _')
         # These tests produce slightly different pixels run to run on NV.
@@ -280,6 +282,14 @@ def dm_flags(api, bot):
         blacklist('gltestglslcache gm _ atlastext')
         blacklist('gltestglslcache gm _ dftext')
         blacklist('gltestglslcache gm _ glyph_pos_h_b')
+        blacklist('gltestprecompile gm _ atlastext')
+        blacklist('gltestprecompile gm _ dftext')
+        blacklist('gltestprecompile gm _ glyph_pos_h_b')
+
+    # We also test the SkSL precompile config on Pixel2XL as a representative
+    # Android device - this feature is primarily used by Flutter.
+    if 'Pixel2XL' in bot and 'Vulkan' not in bot:
+      configs.append('glestestprecompile')
 
     # Test rendering to wrapped dsts on a few bots
     # Also test 'glenarrow', which hits F16 surfaces and F16 vertex colors.
@@ -400,6 +410,10 @@ def dm_flags(api, bot):
     # skbug.com/9171 and 8847
     blacklist('_ test _ InitialTextureClear')
 
+  if 'TecnoSpark3Pro' in bot:
+    # skbug.com/9421
+    blacklist('_ test _ InitialTextureClear')
+
   if 'iOS' in bot:
     blacklist(gl_prefix + ' skp _ _')
 
@@ -484,7 +498,7 @@ def dm_flags(api, bot):
     # http://b/118312149#comment9
     blacklist('_ test _ SRGBReadWritePixels')
 
-  # skia:4095, skia:9334
+  # skia:4095
   bad_serialize_gms = ['bleed_image',
                        'c_gms',
                        'colortype',
@@ -500,8 +514,7 @@ def dm_flags(api, bot):
                        'imagemakewithfilter',
                        'imagemakewithfilter_crop',
                        'imagemakewithfilter_crop_ref',
-                       'imagemakewithfilter_ref',
-                       'picture_cull_rect']
+                       'imagemakewithfilter_ref']
 
   # skia:5589
   bad_serialize_gms.extend(['bitmapfilters',
@@ -582,6 +595,10 @@ def dm_flags(api, bot):
                'async_rescale_and_read_no_bleed']:
     blacklist([      'pic-8888', 'gm', '_', test])
     blacklist(['serialize-8888', 'gm', '_', test])
+
+  # GM requries canvas->makeSurface() to return a valid surface.
+    blacklist([      'pic-8888', 'gm', '_', "blurrect_compare"])
+    blacklist(['serialize-8888', 'gm', '_', "blurrect_compare"])
 
   # GM that not support tiles_rt
   for test in ['complexclip4_bw', 'complexclip4_aa']:
@@ -924,7 +941,7 @@ def test_steps(api):
       '--images', api.flavor.device_path_join(
           api.flavor.device_dirs.resource_dir, 'images', 'color_wheel.jpg'),
       '--nameByHash',
-      '--dontReduceOpListSplitting',
+      '--dontReduceOpsTaskSplitting',
       '--properties'
     ] + properties
   else:
@@ -1020,6 +1037,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-Nexus7-CPU-Tegra3-arm-Release-All-Android',
   'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
   'Test-Android-Clang-Pixel-GPU-Adreno530-arm-Debug-All-Android_ASAN',
+  'Test-Android-Clang-Pixel2XL-GPU-Adreno540-arm64-Debug-All-Android',
   'Test-Android-Clang-Pixel3-GPU-Adreno630-arm64-Debug-All-Android_Vulkan',
   ('Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-'
    'arm-Debug-All'),
@@ -1068,10 +1086,10 @@ TEST_BUILDERS = [
   'Test-Win10-MSVC-LenovoYogaC630-GPU-Adreno630-arm64-Debug-All-ANGLE',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
-  'Test-Win2016-MSVC-GCE-CPU-AVX2-x86_64-Debug-All-MSRTC',
   'Test-iOS-Clang-iPadPro-GPU-PowerVRGT7800-arm64-Release-All',
   'Test-Android-Clang-Nexus5x-GPU-Adreno418-arm-Release-All-Android_Vulkan',
   'Test-Mac10.13-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Debug-All-CommandBuffer',
+  'Test-Android-Clang-TecnoSpark3Pro-GPU-PowerVRGE8320-arm-Debug-All-Android',
 ]
 
 

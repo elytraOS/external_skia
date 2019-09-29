@@ -85,8 +85,8 @@ def nanobench_flags(api, bot):
         gl_prefix = 'gles'
       # iOS crashes with MSAA (skia:6399)
       # Nexus7 (Tegra3) does not support MSAA.
-      if ('iOS'         in bot or
-          'Nexus7'      in bot):
+      if ('iOS'     in bot or
+          'Nexus7'  in bot):
         sample_count = ''
     elif 'Intel' in bot:
       # MSAA doesn't work well on Intel GPUs chromium:527565, chromium:983926
@@ -155,7 +155,7 @@ def nanobench_flags(api, bot):
 
   # skia:9036
   if 'NVIDIA_Shield' in bot or 'Chorizo' in bot:
-    args.extend(['--dontReduceOpListSplitting'])
+    args.extend(['--dontReduceOpsTaskSplitting'])
 
   # Some people don't like verbose output.
   verbose = False
@@ -219,6 +219,11 @@ def nanobench_flags(api, bot):
   if 'AcerChromebook13_CB5_311-GPU-TegraK1' in bot:
     # skia:7551
     match.append('~^shapes_rrect_inner_rrect_50_500x500$')
+  if (bot ==
+      'Perf-Android-Clang-Pixel3a-GPU-Adreno615-arm64-Release-All-Android'):
+    # skia:9413
+    match.append('~^path_text$')
+    match.append('~^path_text_clipped_uncached$')
 
   # We do not need or want to benchmark the decodes of incomplete images.
   # In fact, in nanobench we assert that the full image decode succeeds.
@@ -301,7 +306,7 @@ def perf_steps(api):
           api.flavor.device_dirs.resource_dir, 'images', 'color_wheel.jpg'),
       '--skps',  api.flavor.device_dirs.skp_dir,
       '--pre_log',
-      '--dontReduceOpListSplitting',
+      '--dontReduceOpsTaskSplitting',
       '--match', # skia:6687
       '~matrixconvolution',
       '~blur_image_filter',
@@ -373,6 +378,7 @@ TEST_BUILDERS = [
   'Perf-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Release-All-Android_Vulkan',
   'Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-All-Android',
   'Perf-Android-Clang-P30-GPU-MaliG76-arm64-Release-All-Android_Vulkan',
+  'Perf-Android-Clang-Pixel3a-GPU-Adreno615-arm64-Release-All-Android',
   'Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All',
   'Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All',
   'Perf-Chromecast-Clang-Chorizo-CPU-Cortex_A7-arm-Debug-All',

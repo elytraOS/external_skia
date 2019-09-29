@@ -1333,25 +1333,16 @@ static DEFINE_bool(releaseAndAbandonGpuContext, false,
 static DEFINE_bool(drawOpClip, false, "Clip each GrDrawOp to its device bounds for testing.");
 static DEFINE_bool(programBinaryCache, true, "Use in-memory program binary cache");
 
-GPUSink::GPUSink(GrContextFactory::ContextType ct,
-                 GrContextFactory::ContextOverrides overrides,
-                 SkCommandLineConfigGpu::SurfType surfType,
-                 int samples,
-                 bool diText,
-                 SkColorType colorType,
-                 SkAlphaType alphaType,
-                 sk_sp<SkColorSpace> colorSpace,
-                 bool threaded,
+GPUSink::GPUSink(const SkCommandLineConfigGpu* config,
                  const GrContextOptions& grCtxOptions)
-        : fContextType(ct)
-        , fContextOverrides(overrides)
-        , fSurfType(surfType)
-        , fSampleCount(samples)
-        , fUseDIText(diText)
-        , fColorType(colorType)
-        , fAlphaType(alphaType)
-        , fColorSpace(std::move(colorSpace))
-        , fThreaded(threaded)
+        : fContextType(config->getContextType())
+        , fContextOverrides(config->getContextOverrides())
+        , fSurfType(config->getSurfType())
+        , fSampleCount(config->getSamples())
+        , fUseDIText(config->getUseDIText())
+        , fColorType(config->getColorType())
+        , fAlphaType(config->getAlphaType())
+        , fColorSpace(sk_ref_sp(config->getColorSpace()))
         , fBaseContextOptions(grCtxOptions) {
     if (FLAGS_programBinaryCache) {
         fBaseContextOptions.fPersistentCache = &fMemoryCache;
@@ -1363,7 +1354,8 @@ Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream* dstStream, SkStrin
 }
 
 Error GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
-                      const GrContextOptions& baseOptions) const {
+                      const GrContextOptions& baseOptions,
+                      std::function<void(GrContext*)> initContext) const {
     GrContextOptions grOptions = baseOptions;
 
     // We don't expect the src to mess with the persistent cache or the executor.
@@ -1379,6 +1371,9 @@ Error GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
             SkImageInfo::Make(size.width(), size.height(), fColorType, fAlphaType, fColorSpace);
     sk_sp<SkSurface> surface;
     GrContext* context = factory.getContextInfo(fContextType, fContextOverrides).grContext();
+    if (initContext) {
+        initContext(context);
+    }
     const int maxDimension = context->priv().caps()->maxTextureSize();
     if (maxDimension < SkTMax(size.width(), size.height())) {
         return Error::Nonfatal("Src too large to create a texture.\n");
@@ -1459,18 +1454,9 @@ Error GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-GPUThreadTestingSink::GPUThreadTestingSink(GrContextFactory::ContextType ct,
-                                           GrContextFactory::ContextOverrides overrides,
-                                           SkCommandLineConfigGpu::SurfType surfType,
-                                           int samples,
-                                           bool diText,
-                                           SkColorType colorType,
-                                           SkAlphaType alphaType,
-                                           sk_sp<SkColorSpace> colorSpace,
-                                           bool threaded,
+GPUThreadTestingSink::GPUThreadTestingSink(const SkCommandLineConfigGpu* config,
                                            const GrContextOptions& grCtxOptions)
-        : INHERITED(ct, overrides, surfType, samples, diText, colorType, alphaType,
-                    std::move(colorSpace), threaded, grCtxOptions)
+        : INHERITED(config, grCtxOptions)
         , fExecutor(SkExecutor::MakeFIFOThreadPool(FLAGS_gpuThreads)) {
     SkASSERT(fExecutor);
 }
@@ -1503,21 +1489,10 @@ Error GPUThreadTestingSink::draw(const Src& src, SkBitmap* dst, SkWStream* wStre
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-GPUPersistentCacheTestingSink::GPUPersistentCacheTestingSink(
-        GrContextFactory::ContextType ct,
-        GrContextFactory::ContextOverrides overrides,
-        SkCommandLineConfigGpu::SurfType surfType,
-        int samples,
-        bool diText,
-        SkColorType colorType,
-        SkAlphaType alphaType,
-        sk_sp<SkColorSpace> colorSpace,
-        bool threaded,
-        const GrContextOptions& grCtxOptions,
-        int cacheType)
-        : INHERITED(ct, overrides, surfType, samples, diText, colorType, alphaType,
-                    std::move(colorSpace), threaded, grCtxOptions)
-        , fCacheType(cacheType) {}
+GPUPersistentCacheTestingSink::GPUPersistentCacheTestingSink(const SkCommandLineConfigGpu* config,
+                                                             const GrContextOptions& grCtxOptions)
+    : INHERITED(config, grCtxOptions)
+    , fCacheType(config->getTestPersistentCache()) {}
 
 Error GPUPersistentCacheTestingSink::draw(const Src& src, SkBitmap* dst, SkWStream* wStream,
                                           SkString* log) const {
@@ -1526,7 +1501,9 @@ Error GPUPersistentCacheTestingSink::draw(const Src& src, SkBitmap* dst, SkWStre
     sk_gpu_test::MemoryCache memoryCache;
     GrContextOptions contextOptions = this->baseContextOptions();
     contextOptions.fPersistentCache = &memoryCache;
-    contextOptions.fDisallowGLSLBinaryCaching = (fCacheType == 2);
+    if (fCacheType == 2) {
+        contextOptions.fShaderCacheStrategy = GrContextOptions::ShaderCacheStrategy::kBackendSource;
+    }
     // anglebug.com/3619
     contextOptions.fGpuPathRenderers =
             contextOptions.fGpuPathRenderers & ~GpuPathRenderers::kStencilAndCover;
@@ -1545,6 +1522,61 @@ Error GPUPersistentCacheTestingSink::draw(const Src& src, SkBitmap* dst, SkWStre
         return refErr;
     }
     SkASSERT(!memoryCache.numCacheMisses());
+
+    return compare_bitmaps(reference, *dst);
+}
+
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+GPUPrecompileTestingSink::GPUPrecompileTestingSink(const SkCommandLineConfigGpu* config,
+                                                   const GrContextOptions& grCtxOptions)
+    : INHERITED(config, grCtxOptions) {}
+
+Error GPUPrecompileTestingSink::draw(const Src& src, SkBitmap* dst, SkWStream* wStream,
+                                     SkString* log) const {
+    // Three step process:
+    // 1) Draw once with an SkSL cache, and store off the shader blobs.
+    // 2) For the second context, pre-compile the shaders to warm the cache.
+    // 3) Draw with the second context, ensuring that we get the same result, and no cache misses.
+    sk_gpu_test::MemoryCache memoryCache;
+    GrContextOptions contextOptions = this->baseContextOptions();
+    contextOptions.fPersistentCache = &memoryCache;
+    contextOptions.fShaderCacheStrategy = GrContextOptions::ShaderCacheStrategy::kSkSL;
+    // anglebug.com/3619 means that we don't cache shaders when we're using NVPR. That prevents
+    // the precompile from working, so we'll trigger the assert at the end of this test.
+    contextOptions.fGpuPathRenderers =
+            contextOptions.fGpuPathRenderers & ~GpuPathRenderers::kStencilAndCover;
+
+    Error err = this->onDraw(src, dst, wStream, log, contextOptions);
+    if (!err.isEmpty() || !dst) {
+        return err;
+    }
+
+    auto precompileShaders = [&memoryCache](GrContext* context) {
+        memoryCache.foreach([context](sk_sp<const SkData> key, sk_sp<SkData> data, int /*count*/) {
+            SkAssertResult(context->precompileShader(*key, *data));
+        });
+    };
+
+    sk_gpu_test::MemoryCache replayCache;
+    GrContextOptions replayOptions = this->baseContextOptions();
+    // Ensure that the runtime cache is large enough to hold all of the shaders we pre-compile
+    replayOptions.fRuntimeProgramCacheSize = memoryCache.numCacheMisses();
+    replayOptions.fPersistentCache = &replayCache;
+    // anglebug.com/3619
+    replayOptions.fGpuPathRenderers =
+            replayOptions.fGpuPathRenderers & ~GpuPathRenderers::kStencilAndCover;
+
+    SkBitmap reference;
+    SkString refLog;
+    SkDynamicMemoryWStream refStream;
+    Error refErr = this->onDraw(src, &reference, &refStream, &refLog, replayOptions,
+                                precompileShaders);
+    if (!refErr.isEmpty()) {
+        return refErr;
+    }
+    SkASSERT(!replayCache.numCacheMisses());
 
     return compare_bitmaps(reference, *dst);
 }

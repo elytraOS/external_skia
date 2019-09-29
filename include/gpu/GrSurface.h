@@ -18,7 +18,7 @@ class GrRenderTarget;
 class GrSurfacePriv;
 class GrTexture;
 
-class SK_API GrSurface : public GrGpuResource {
+class GrSurface : public GrGpuResource {
 public:
     /**
      * Retrieves the width of the surface.
@@ -45,7 +45,7 @@ public:
 
     virtual GrBackendFormat backendFormat() const = 0;
 
-    void setRelease(sk_sp<GrRefCntedCallback> releaseHelper) {
+    SK_API void setRelease(sk_sp<GrRefCntedCallback> releaseHelper) {
         this->onSetRelease(releaseHelper);
         fReleaseHelper = std::move(releaseHelper);
     }
@@ -54,7 +54,7 @@ public:
     // TODO: Remove Chrome's need to call this on a GrTexture
     typedef void* ReleaseCtx;
     typedef void (*ReleaseProc)(ReleaseCtx);
-    void setRelease(ReleaseProc proc, ReleaseCtx ctx) {
+    SK_API void setRelease(ReleaseProc proc, ReleaseCtx ctx) {
         sk_sp<GrRefCntedCallback> helper(new GrRefCntedCallback(proc, ctx));
         this->setRelease(std::move(helper));
     }
@@ -75,8 +75,6 @@ public:
     inline GrSurfacePriv surfacePriv();
     inline const GrSurfacePriv surfacePriv() const;
 
-    static size_t WorstCaseSize(const GrSurfaceDesc& desc, GrRenderable renderable,
-                                int renderTargetSampleCnt, bool binSize = false);
     static size_t ComputeSize(GrPixelConfig config, int width, int height, int colorSamplesPerPixel,
                               GrMipMapped, bool binSize = false);
 
@@ -113,11 +111,6 @@ protected:
         SkASSERT(!this->asRenderTarget());
         fSurfaceFlags |= GrInternalSurfaceFlags::kReadOnly;
     }
-
-    // Methods made available via GrSurfacePriv
-    bool hasPendingRead() const;
-    bool hasPendingWrite() const;
-    bool hasPendingIO() const;
 
     // Provides access to methods that should be public within Skia code.
     friend class GrSurfacePriv;

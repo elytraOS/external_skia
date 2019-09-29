@@ -101,14 +101,12 @@ bool GrPixelConfigToMTLFormat(GrPixelConfig config, MTLPixelFormat* format) {
 #else
             return false;
 #endif
-        case kR_16_GrPixelConfig:
+        case kAlpha_16_GrPixelConfig:
             *format = MTLPixelFormatR16Unorm;
             return true;
         case kRG_1616_GrPixelConfig:
             *format = MTLPixelFormatRG16Unorm;
             return true;
-
-        // Experimental (for Y416 and mutant P016/P010)
         case kRGBA_16161616_GrPixelConfig:
             *format = MTLPixelFormatRGBA16Unorm;
             return true;
@@ -328,6 +326,30 @@ size_t GrMtlBytesPerFormat(MTLPixelFormat format) {
     }
 
     SK_ABORT("Invalid Mtl format");
+}
+
+bool GrMtlFormatIsCompressed(MTLPixelFormat mtlFormat) {
+    switch (mtlFormat) {
+#ifdef SK_BUILD_FOR_IOS
+        case MTLPixelFormatETC2_RGB8:
+            return true;
+#endif
+        default:
+            return false;
+    }
+}
+
+bool GrMtlFormatToCompressionType(MTLPixelFormat mtlFormat,
+                                  SkImage::CompressionType* compressionType) {
+    switch (mtlFormat) {
+#ifdef SK_BUILD_FOR_IOS
+        case MTLPixelFormatETC2_RGB8:
+            *compressionType = SkImage::kETC1_CompressionType;
+            return true;
+#endif
+        default:
+            return false;
+    }
 }
 
 #if GR_TEST_UTILS

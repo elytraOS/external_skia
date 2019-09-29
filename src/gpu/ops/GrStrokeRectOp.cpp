@@ -150,10 +150,10 @@ public:
             // We want to be consistent with how we snap non-aa lines. To match what we do in
             // GrGLSLVertexShaderBuilder, we first floor all the vertex values and then add half a
             // pixel to force us to pixel centers.
-            bounds.set(SkScalarFloorToScalar(bounds.fLeft),
-                       SkScalarFloorToScalar(bounds.fTop),
-                       SkScalarFloorToScalar(bounds.fRight),
-                       SkScalarFloorToScalar(bounds.fBottom));
+            bounds.setLTRB(SkScalarFloorToScalar(bounds.fLeft),
+                           SkScalarFloorToScalar(bounds.fTop),
+                           SkScalarFloorToScalar(bounds.fRight),
+                           SkScalarFloorToScalar(bounds.fBottom));
             bounds.offset(0.5f, 0.5f);
             this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
         } else {
@@ -724,7 +724,7 @@ void AAStrokeRectOp::generateAAStrokeRectGeometry(GrVertexWriter& vertices,
 
         // The innermost rect has 0 coverage...
         vertices.writeQuad(inset_fan(devInside, SK_ScalarHalf, SK_ScalarHalf),
-                           GrVertexColor(SK_PMColor4fTRANSPARENT, wideColor),
+                           outerColor,
                            maybe_coverage(0.0f));
     } else {
         // When the interior rect has become degenerate we smoosh to a single point

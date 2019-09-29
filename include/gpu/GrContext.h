@@ -135,15 +135,19 @@ public:
     ///////////////////////////////////////////////////////////////////////////
     // Resource Cache
 
-    /**
+    /** DEPRECATED
      *  Return the current GPU resource cache limits.
      *
-     *  @param maxResources If non-null, returns maximum number of resources that
-     *                      can be held in the cache.
+     *  @param maxResources If non-null, will be set to -1.
      *  @param maxResourceBytes If non-null, returns maximum number of bytes of
      *                          video memory that can be held in the cache.
      */
     void getResourceCacheLimits(int* maxResources, size_t* maxResourceBytes) const;
+
+    /**
+     *  Return the current GPU resource cache limit in bytes.
+     */
+    size_t getResourceCacheLimit() const;
 
     /**
      *  Gets the current GPU resource cache usage.
@@ -160,16 +164,24 @@ public:
      */
     size_t getResourceCachePurgeableBytes() const;
 
-    /**
-     *  Specify the GPU resource cache limits. If the current cache exceeds either
-     *  of these, it will be purged (LRU) to keep the cache within these limits.
+    /** DEPRECATED
+     *  Specify the GPU resource cache limits. If the current cache exceeds the maxResourceBytes
+     *  limit, it will be purged (LRU) to keep the cache within the limit.
      *
-     *  @param maxResources The maximum number of resources that can be held in
-     *                      the cache.
+     *  @param maxResources Unused.
      *  @param maxResourceBytes The maximum number of bytes of video memory
      *                          that can be held in the cache.
      */
     void setResourceCacheLimits(int maxResources, size_t maxResourceBytes);
+
+    /**
+     *  Specify the GPU resource cache limit. If the cache currently exceeds this limit,
+     *  it will be purged (LRU) to keep the cache within the limit.
+     *
+     *  @param maxResourceBytes The maximum number of bytes of video memory
+     *                          that can be held in the cache.
+     */
+    void setResourceCacheLimit(size_t maxResourceBytes);
 
     /**
      * Frees GPU created by the context. Can be called to reduce GPU memory
@@ -235,6 +247,16 @@ public:
      * use maxSurfaceSampleCountForColorType().
      */
     bool colorTypeSupportedAsSurface(SkColorType colorType) const {
+        if (kR8G8_unorm_SkColorType == colorType ||
+            kR16G16_unorm_SkColorType == colorType ||
+            kA16_unorm_SkColorType == colorType ||
+            kA16_float_SkColorType == colorType ||
+            kR16G16_float_SkColorType == colorType ||
+            kR16G16B16A16_unorm_SkColorType == colorType ||
+            kGray_8_SkColorType == colorType) {
+            return false;
+        }
+
         return this->maxSurfaceSampleCountForColorType(colorType) > 0;
     }
 
@@ -434,6 +456,25 @@ public:
                                           const SkColor4f& color);
 
     void deleteBackendTexture(GrBackendTexture);
+
+    // This interface allows clients to pre-compile shaders and populate the runtime program cache.
+    // The key and data blobs should be the ones passed to the PersistentCache, in SkSL format.
+    //
+    // Steps to use this API:
+    //
+    // 1) Create a GrContext as normal, but set fPersistentCache on GrContextOptions to something
+    //    that will save the cached shader blobs. Set fShaderCacheStrategy to kSkSL. This will
+    //    ensure that the blobs are SkSL, and are suitable for pre-compilation.
+    // 2) Run your application, and save all of the key/data pairs that are fed to the cache.
+    //
+    // 3) Switch over to shipping your application. Include the key/data pairs from above.
+    // 4) At startup (or any convenient time), call precompileShader for each key/data pair.
+    //    This will compile the SkSL to create a GL program, and populate the runtime cache.
+    //
+    // This is only guaranteed to work if the context/device used in step #2 are created in the
+    // same way as the one used in step #4, and the same GrContextOptions are specified.
+    // Using cached shader blobs on a different device or driver are undefined.
+    bool precompileShader(const SkData& key, const SkData& data);
 
 #ifdef SK_ENABLE_DUMP_GPU
     /** Returns a string with detailed information about the context & GPU, in JSON format. */

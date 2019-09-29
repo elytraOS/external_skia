@@ -23,12 +23,11 @@ class GrPipeline;
 
 class GrVkBufferImpl;
 class GrVkCommandPool;
-class GrVkGpuRTCommandBuffer;
-class GrVkGpuTextureCommandBuffer;
 class GrVkMemoryAllocator;
 class GrVkPipeline;
 class GrVkPipelineState;
 class GrVkPrimaryCommandBuffer;
+class GrVkOpsRenderPass;
 class GrVkRenderPass;
 class GrVkSecondaryCommandBuffer;
 class GrVkTexture;
@@ -102,13 +101,11 @@ public:
     GrStencilAttachment* createStencilAttachmentForRenderTarget(
             const GrRenderTarget*, int width, int height, int numStencilSamples) override;
 
-    GrGpuRTCommandBuffer* getCommandBuffer(
+    GrOpsRenderPass* getOpsRenderPass(
             GrRenderTarget*, GrSurfaceOrigin, const SkRect&,
-            const GrGpuRTCommandBuffer::LoadAndStoreInfo&,
-            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo&) override;
-
-    GrGpuTextureCommandBuffer* getCommandBuffer(GrTexture*, GrSurfaceOrigin) override;
-
+            const GrOpsRenderPass::LoadAndStoreInfo&,
+            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+            const SkTArray<GrTextureProxy*, true>& sampledProxies) override;
 
     void addBufferMemoryBarrier(const GrVkResource*,
                                 VkPipelineStageFlags srcStageMask,
@@ -138,13 +135,9 @@ public:
         this->internalResolveRenderTarget(target, true);
     }
 
-    void submitSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer>,
-                                      const GrVkRenderPass*,
-                                      const VkClearValue* colorClear,
-                                      GrVkRenderTarget*, GrSurfaceOrigin,
-                                      const SkIRect& bounds);
+    void submitSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer>);
 
-    void submit(GrGpuCommandBuffer*) override;
+    void submit(GrOpsRenderPass*) override;
 
     GrFence SK_WARN_UNUSED_RESULT insertFence() override;
     bool waitFence(GrFence, uint64_t timeout) override;
@@ -183,6 +176,12 @@ public:
 
     void storeVkPipelineCacheData() override;
 
+    void beginRenderPass(const GrVkRenderPass*,
+                         const VkClearValue* colorClear,
+                         GrVkRenderTarget*, GrSurfaceOrigin,
+                         const SkIRect& bounds, bool forSecondaryCB);
+    void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin, const SkIRect& bounds);
+
 private:
     GrVkGpu(GrContext*, const GrContextOptions&, const GrVkBackendContext&,
             sk_sp<const GrVkInterface>, uint32_t instanceVersion, uint32_t physicalDeviceVersion);
@@ -197,8 +196,8 @@ private:
                                      int renderTargetSampleCnt,
                                      SkBudgeted,
                                      GrProtected,
-                                     const GrMipLevel[],
-                                     int mipLevelCount) override;
+                                     int mipLevelCount,
+                                     uint32_t levelClearMask) override;
     sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
                                                SkImage::CompressionType, SkBudgeted,
                                                const void* data) override;
@@ -228,7 +227,8 @@ private:
 
     bool onWritePixels(GrSurface* surface, int left, int top, int width, int height,
                        GrColorType surfaceColorType, GrColorType srcColorType,
-                       const GrMipLevel texels[], int mipLevelCount) override;
+                       const GrMipLevel texels[], int mipLevelCount,
+                       bool prepForTexSampling) override;
 
     bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height,
                             GrColorType textureColorType, GrColorType bufferColorType,
@@ -315,8 +315,7 @@ private:
 
     GrProtected                                           fProtectedContext;
 
-    std::unique_ptr<GrVkGpuRTCommandBuffer>               fCachedRTCommandBuffer;
-    std::unique_ptr<GrVkGpuTextureCommandBuffer>          fCachedTexCommandBuffer;
+    std::unique_ptr<GrVkOpsRenderPass>                    fCachedOpsRenderPass;
 
     typedef GrGpu INHERITED;
 };

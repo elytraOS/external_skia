@@ -12,21 +12,27 @@
 
 int SkColorTypeBytesPerPixel(SkColorType ct) {
     switch (ct) {
-        case kUnknown_SkColorType:      return 0;
-        case kAlpha_8_SkColorType:      return 1;
-        case kRGB_565_SkColorType:      return 2;
-        case kARGB_4444_SkColorType:    return 2;
-        case kRGBA_8888_SkColorType:    return 4;
-        case kBGRA_8888_SkColorType:    return 4;
-        case kRGB_888x_SkColorType:     return 4;
-        case kRGBA_1010102_SkColorType: return 4;
-        case kRGB_101010x_SkColorType:  return 4;
-        case kGray_8_SkColorType:       return 1;
-        case kRGBA_F16Norm_SkColorType: return 8;
-        case kRGBA_F16_SkColorType:     return 8;
-        case kRGBA_F32_SkColorType:     return 16;
+        case kUnknown_SkColorType:            return 0;
+        case kAlpha_8_SkColorType:            return 1;
+        case kRGB_565_SkColorType:            return 2;
+        case kARGB_4444_SkColorType:          return 2;
+        case kRGBA_8888_SkColorType:          return 4;
+        case kBGRA_8888_SkColorType:          return 4;
+        case kRGB_888x_SkColorType:           return 4;
+        case kRGBA_1010102_SkColorType:       return 4;
+        case kRGB_101010x_SkColorType:        return 4;
+        case kGray_8_SkColorType:             return 1;
+        case kRGBA_F16Norm_SkColorType:       return 8;
+        case kRGBA_F16_SkColorType:           return 8;
+        case kRGBA_F32_SkColorType:           return 16;
+        case kR8G8_unorm_SkColorType:         return 2;
+        case kA16_unorm_SkColorType:          return 2;
+        case kR16G16_unorm_SkColorType:       return 4;
+        case kA16_float_SkColorType:          return 2;
+        case kR16G16_float_SkColorType:       return 4;
+        case kR16G16B16A16_unorm_SkColorType: return 8;
     }
-    return 0;
+    SkUNREACHABLE;
 }
 
 bool SkColorTypeIsAlwaysOpaque(SkColorType ct) {
@@ -66,7 +72,9 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
         case kUnknown_SkColorType:
             alphaType = kUnknown_SkAlphaType;
             break;
-        case kAlpha_8_SkColorType:
+        case kAlpha_8_SkColorType:         // fall-through
+        case kA16_unorm_SkColorType:       // fall-through
+        case kA16_float_SkColorType:
             if (kUnpremul_SkAlphaType == alphaType) {
                 alphaType = kPremul_SkAlphaType;
             }
@@ -78,11 +86,15 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
         case kRGBA_F16Norm_SkColorType:
         case kRGBA_F16_SkColorType:
         case kRGBA_F32_SkColorType:
+        case kR16G16B16A16_unorm_SkColorType:
             if (kUnknown_SkAlphaType == alphaType) {
                 return false;
             }
             break;
         case kGray_8_SkColorType:
+        case kR8G8_unorm_SkColorType:
+        case kR16G16_unorm_SkColorType:
+        case kR16G16_float_SkColorType:
         case kRGB_565_SkColorType:
         case kRGB_888x_SkColorType:
         case kRGB_101010x_SkColorType:
@@ -112,7 +124,7 @@ bool SkReadPixelsRec::trim(int srcWidth, int srcHeight) {
     int x = fX;
     int y = fY;
     SkIRect srcR = SkIRect::MakeXYWH(x, y, fInfo.width(), fInfo.height());
-    if (!srcR.intersect(0, 0, srcWidth, srcHeight)) {
+    if (!srcR.intersect({0, 0, srcWidth, srcHeight})) {
         return false;
     }
 
@@ -149,7 +161,7 @@ bool SkWritePixelsRec::trim(int dstWidth, int dstHeight) {
     int x = fX;
     int y = fY;
     SkIRect dstR = SkIRect::MakeXYWH(x, y, fInfo.width(), fInfo.height());
-    if (!dstR.intersect(0, 0, dstWidth, dstHeight)) {
+    if (!dstR.intersect({0, 0, dstWidth, dstHeight})) {
         return false;
     }
 

@@ -7,69 +7,41 @@
 
 #include "src/gpu/gl/GrGLGpu.h"
 
-#include "src/core/SkTSearch.h"
+#include "include/gpu/GrContextOptions.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrProgramDesc.h"
-#include "src/gpu/gl/GrGLPathRendering.h"
 #include "src/gpu/gl/builders/GrGLProgramBuilder.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
-#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
-
-#ifdef PROGRAM_CACHE_STATS
-// Display program cache usage
-static const bool c_DisplayCache{false};
-#endif
-
-typedef GrGLSLProgramDataManager::UniformHandle UniformHandle;
 
 struct GrGLGpu::ProgramCache::Entry {
-    Entry(sk_sp<GrGLProgram> program) : fProgram(std::move(program)) {}
+    Entry(sk_sp<GrGLProgram> program)
+        : fProgram(std::move(program)) {}
+
+    Entry(const GrGLPrecompiledProgram& precompiledProgram)
+        : fPrecompiledProgram(precompiledProgram) {}
 
     sk_sp<GrGLProgram> fProgram;
+    GrGLPrecompiledProgram fPrecompiledProgram;
 };
 
 GrGLGpu::ProgramCache::ProgramCache(GrGLGpu* gpu)
-    : fMap(kMaxEntries)
-    , fGpu(gpu)
-#ifdef PROGRAM_CACHE_STATS
-    , fTotalRequests(0)
-    , fCacheMisses(0)
-    , fHashMisses(0)
-#endif
-{}
+    : fMap(gpu->getContext()->priv().options().fRuntimeProgramCacheSize)
+    , fGpu(gpu) {}
 
-GrGLGpu::ProgramCache::~ProgramCache() {
-    // dump stats
-#ifdef PROGRAM_CACHE_STATS
-    if (c_DisplayCache) {
-        SkDebugf("--- Program Cache ---\n");
-        SkDebugf("Total requests: %d\n", fTotalRequests);
-        SkDebugf("Cache misses: %d\n", fCacheMisses);
-        SkDebugf("Cache miss %%: %f\n", (fTotalRequests > 0) ?
-                                            100.f * fCacheMisses / fTotalRequests :
-                                            0.f);
-        int cacheHits = fTotalRequests - fCacheMisses;
-        SkDebugf("Hash miss %%: %f\n", (cacheHits > 0) ? 100.f * fHashMisses / cacheHits : 0.f);
-        SkDebugf("---------------------\n");
-    }
-#endif
-}
+GrGLGpu::ProgramCache::~ProgramCache() {}
 
 void GrGLGpu::ProgramCache::abandon() {
     fMap.foreach([](std::unique_ptr<Entry>* e) {
-        (*e)->fProgram->abandon();
+        if ((*e)->fProgram) {
+            (*e)->fProgram->abandon();
+        }
     });
 
     this->reset();
 }
 
 void GrGLGpu::ProgramCache::reset() {
-#ifdef PROGRAM_CACHE_STATS
-    fTotalRequests = 0;
-    fCacheMisses = 0;
-    fHashMisses = 0;
-#endif
-
     fMap.reset();
 }
 
@@ -80,10 +52,6 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(GrGLGpu* gpu,
                                                const GrTextureProxy* const primProcProxies[],
                                                const GrPipeline& pipeline,
                                                bool isPoints) {
-#ifdef PROGRAM_CACHE_STATS
-    ++fTotalRequests;
-#endif
-
     // Get GrGLProgramDesc
     GrProgramDesc desc;
     if (!GrProgramDesc::Build(&desc, renderTarget, primProc, isPoints, pipeline, gpu)) {
@@ -95,11 +63,22 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(GrGLGpu* gpu,
     desc.setSurfaceOriginKey(GrGLSLFragmentShaderBuilder::KeyForSurfaceOrigin(origin));
 
     std::unique_ptr<Entry>* entry = fMap.find(desc);
-    if (!entry) {
+    if (entry && !(*entry)->fProgram) {
+        // We've pre-compiled the GL program, but don't have the GrGLProgram scaffolding
+        const GrGLPrecompiledProgram* precompiledProgram = &((*entry)->fPrecompiledProgram);
+        SkASSERT(precompiledProgram->fProgramID != 0);
+        GrGLProgram* program = GrGLProgramBuilder::CreateProgram(renderTarget, origin,
+                                                                 primProc, primProcProxies,
+                                                                 pipeline, &desc, fGpu,
+                                                                 precompiledProgram);
+        if (nullptr == program) {
+            // Should we purge the program ID from the cache at this point?
+            SkDEBUGFAIL("Couldn't create program from precompiled program");
+            return nullptr;
+        }
+        (*entry)->fProgram.reset(program);
+    } else if (!entry) {
         // We have a cache miss
-#ifdef PROGRAM_CACHE_STATS
-        ++fCacheMisses;
-#endif
         GrGLProgram* program = GrGLProgramBuilder::CreateProgram(renderTarget, origin,
                                                                  primProc, primProcProxies,
                                                                  pipeline, &desc, fGpu);
@@ -110,4 +89,25 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(GrGLGpu* gpu,
     }
 
     return SkRef((*entry)->fProgram.get());
+}
+
+bool GrGLGpu::ProgramCache::precompileShader(const SkData& key, const SkData& data) {
+    GrProgramDesc desc;
+    if (!GrProgramDesc::BuildFromData(&desc, key.data(), key.size())) {
+        return false;
+    }
+
+    std::unique_ptr<Entry>* entry = fMap.find(desc);
+    if (entry) {
+        // We've already seen/compiled this shader
+        return true;
+    }
+
+    GrGLPrecompiledProgram precompiledProgram;
+    if (!GrGLProgramBuilder::PrecompileProgram(&precompiledProgram, fGpu, data)) {
+        return false;
+    }
+
+    fMap.insert(desc, std::unique_ptr<Entry>(new Entry(precompiledProgram)));
+    return true;
 }

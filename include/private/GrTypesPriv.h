@@ -61,10 +61,8 @@ enum GrPixelConfig {
     kRGBA_half_GrPixelConfig,
     kRGBA_half_Clamped_GrPixelConfig,
     kRGB_ETC1_GrPixelConfig,
-    kR_16_GrPixelConfig,
+    kAlpha_16_GrPixelConfig,
     kRG_1616_GrPixelConfig,
-
-    // Experimental (for Y416 and mutant P016/P010)
     kRGBA_16161616_GrPixelConfig,
     kRG_half_GrPixelConfig,
 
@@ -219,7 +217,7 @@ struct GrMipLevel {
 };
 
 /**
- * This enum is used to specify the load operation to be used when an opList/GrGpuCommandBuffer
+ * This enum is used to specify the load operation to be used when an GrOpsTask/GrOpsRenderPass
  * begins execution.
  */
 enum class GrLoadOp {
@@ -229,7 +227,7 @@ enum class GrLoadOp {
 };
 
 /**
- * This enum is used to specify the store operation to be used when an opList/GrGpuCommandBuffer
+ * This enum is used to specify the store operation to be used when an GrOpsTask/GrOpsRenderPass
  * ends execution.
  */
 enum class GrStoreOp {
@@ -645,7 +643,6 @@ enum GrVertexAttribType {
 
     kUShort_norm_GrVertexAttribType,
 
-    // Experimental (for Y416)
     kUShort4_norm_GrVertexAttribType, // vector of 4 unsigned shorts. 0 -> 0.0f, 65535 -> 1.0f.
 
     kLast_GrVertexAttribType = kUShort4_norm_GrVertexAttribType
@@ -847,7 +844,7 @@ static constexpr size_t GrBytesPerPixel(GrPixelConfig config) {
         case kAlpha_half_GrPixelConfig:
         case kAlpha_half_as_Lum_GrPixelConfig:
         case kAlpha_half_as_Red_GrPixelConfig:
-        case kR_16_GrPixelConfig:
+        case kAlpha_16_GrPixelConfig:
             return 2;
         case kRGBA_8888_GrPixelConfig:
         case kRGB_888_GrPixelConfig:  // Assuming GPUs store this 4-byte aligned.
@@ -856,21 +853,17 @@ static constexpr size_t GrBytesPerPixel(GrPixelConfig config) {
         case kSRGBA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
+        case kRG_half_GrPixelConfig:
             return 4;
         case kRGBA_half_GrPixelConfig:
         case kRGBA_half_Clamped_GrPixelConfig:
+        case kRGBA_16161616_GrPixelConfig:
             return 8;
         case kRGBA_float_GrPixelConfig:
             return 16;
         case kUnknown_GrPixelConfig:
         case kRGB_ETC1_GrPixelConfig:
             return 0;
-
-        // Experimental (for Y416 and mutant P016/P010)
-        case kRGBA_16161616_GrPixelConfig:
-            return 8;
-        case kRG_half_GrPixelConfig:
-            return 4;
     }
     SkUNREACHABLE;
 }
@@ -885,13 +878,13 @@ static constexpr bool GrPixelConfigIsOpaque(GrPixelConfig config) {
         case kGray_8_as_Lum_GrPixelConfig:
         case kGray_8_as_Red_GrPixelConfig:
         case kRGB_ETC1_GrPixelConfig:
-        case kR_16_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
-        case kRG_half_GrPixelConfig: // Experimental (for mutant P016/P010)
+        case kRG_half_GrPixelConfig:
             return true;
         case kAlpha_8_GrPixelConfig:
         case kAlpha_8_as_Alpha_GrPixelConfig:
         case kAlpha_8_as_Red_GrPixelConfig:
+        case kAlpha_16_GrPixelConfig:
         case kRGBA_4444_GrPixelConfig:
         case kAlpha_half_GrPixelConfig:
         case kAlpha_half_as_Lum_GrPixelConfig:
@@ -903,7 +896,7 @@ static constexpr bool GrPixelConfigIsOpaque(GrPixelConfig config) {
         case kRGBA_half_GrPixelConfig:
         case kRGBA_half_Clamped_GrPixelConfig:
         case kRGBA_float_GrPixelConfig:
-        case kRGBA_16161616_GrPixelConfig: // Experimental (for Y416)
+        case kRGBA_16161616_GrPixelConfig:
         case kUnknown_GrPixelConfig:
             return false;
     }
@@ -915,6 +908,7 @@ static constexpr bool GrPixelConfigIsAlphaOnly(GrPixelConfig config) {
         case kAlpha_8_GrPixelConfig:
         case kAlpha_8_as_Alpha_GrPixelConfig:
         case kAlpha_8_as_Red_GrPixelConfig:
+        case kAlpha_16_GrPixelConfig:
         case kAlpha_half_GrPixelConfig:
         case kAlpha_half_as_Lum_GrPixelConfig:
         case kAlpha_half_as_Red_GrPixelConfig:
@@ -936,9 +930,7 @@ static constexpr bool GrPixelConfigIsAlphaOnly(GrPixelConfig config) {
         case kRGBA_half_GrPixelConfig:
         case kRGBA_half_Clamped_GrPixelConfig:
         case kRGB_ETC1_GrPixelConfig:
-        case kR_16_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
-        // Experimental (for Y416 and mutant P016/P010)
         case kRGBA_16161616_GrPixelConfig:
         case kRG_half_GrPixelConfig:
             return false;
@@ -965,9 +957,9 @@ static constexpr bool GrPixelConfigIsFloatingPoint(GrPixelConfig config) {
         case kSRGBA_8888_GrPixelConfig:
         case kRGBA_1010102_GrPixelConfig:
         case kRGB_ETC1_GrPixelConfig:
-        case kR_16_GrPixelConfig:
+        case kAlpha_16_GrPixelConfig:
         case kRG_1616_GrPixelConfig:
-        case kRGBA_16161616_GrPixelConfig: // Experimental (for Y416)
+        case kRGBA_16161616_GrPixelConfig:
             return false;
         case kRGBA_float_GrPixelConfig:
         case kAlpha_half_GrPixelConfig:
@@ -975,7 +967,7 @@ static constexpr bool GrPixelConfigIsFloatingPoint(GrPixelConfig config) {
         case kAlpha_half_as_Red_GrPixelConfig:
         case kRGBA_half_GrPixelConfig:
         case kRGBA_half_Clamped_GrPixelConfig:
-        case kRG_half_GrPixelConfig: // Experimental (for mutant P016/P010)
+        case kRG_half_GrPixelConfig:
             return true;
     }
     SkUNREACHABLE;
@@ -1048,6 +1040,11 @@ enum class GrColorType {
     kRGBA_F16_Clamped,
     kRGBA_F32,
 
+    kAlpha_16,
+    kRG_1616,
+    kRG_F16,
+    kRGBA_16161616,
+
     // Unusual formats that come up after reading back in cases where we are reassigning the meaning
     // of a texture format's channels to use for a particular color format but have to read back the
     // data to a full RGBA quadruple. (e.g. using a R8 texture format as A8 color type but the API
@@ -1056,14 +1053,7 @@ enum class GrColorType {
     kAlpha_F32xxx,
     kGray_8xxx,
 
-    kR_16,          // Not in SkColorType
-    kRG_1616,       // Not in SkColorType
-
-    // Experimental (for Y416 and mutant P016/P010)
-    kRGBA_16161616, // Not in SkColorType
-    kRG_F16,        // Not in SkColorType
-
-    kLast = kRG_F16
+    kLast = kGray_8xxx
 };
 
 static const int kGrColorTypeCnt = static_cast<int>(GrColorType::kLast) + 1;
@@ -1075,44 +1065,49 @@ static constexpr SkColorType GrColorTypeToSkColorType(GrColorType ct) {
         case GrColorType::kBGR_565:          return kRGB_565_SkColorType;
         case GrColorType::kABGR_4444:        return kARGB_4444_SkColorType;
         case GrColorType::kRGBA_8888:        return kRGBA_8888_SkColorType;
-        // Once we a kRGBA_8888_SRGB_SkColorType we should return that here.
+        // Once we add kRGBA_8888_SRGB_SkColorType we should return that here.
         case GrColorType::kRGBA_8888_SRGB:   return kRGBA_8888_SkColorType;
         case GrColorType::kRGB_888x:         return kRGB_888x_SkColorType;
-        case GrColorType::kRG_88:            return kUnknown_SkColorType;
+        case GrColorType::kRG_88:            return kR8G8_unorm_SkColorType;
         case GrColorType::kBGRA_8888:        return kBGRA_8888_SkColorType;
         case GrColorType::kRGBA_1010102:     return kRGBA_1010102_SkColorType;
         case GrColorType::kGray_8:           return kGray_8_SkColorType;
-        case GrColorType::kAlpha_F16:        return kUnknown_SkColorType;
+        case GrColorType::kAlpha_F16:        return kA16_float_SkColorType;
         case GrColorType::kRGBA_F16:         return kRGBA_F16_SkColorType;
         case GrColorType::kRGBA_F16_Clamped: return kRGBA_F16Norm_SkColorType;
         case GrColorType::kRGBA_F32:         return kRGBA_F32_SkColorType;
         case GrColorType::kAlpha_8xxx:       return kUnknown_SkColorType;
         case GrColorType::kAlpha_F32xxx:     return kUnknown_SkColorType;
         case GrColorType::kGray_8xxx:        return kUnknown_SkColorType;
-        case GrColorType::kR_16:             return kUnknown_SkColorType;
-        case GrColorType::kRG_1616:          return kUnknown_SkColorType;
-        // Experimental (for Y416 and mutant P016/P010)
-        case GrColorType::kRGBA_16161616:    return kUnknown_SkColorType;
-        case GrColorType::kRG_F16:           return kUnknown_SkColorType;
+        case GrColorType::kAlpha_16:         return kA16_unorm_SkColorType;
+        case GrColorType::kRG_1616:          return kR16G16_unorm_SkColorType;
+        case GrColorType::kRGBA_16161616:    return kR16G16B16A16_unorm_SkColorType;
+        case GrColorType::kRG_F16:           return kR16G16_float_SkColorType;
     }
     SkUNREACHABLE;
 }
 
 static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
     switch (ct) {
-        case kUnknown_SkColorType:      return GrColorType::kUnknown;
-        case kAlpha_8_SkColorType:      return GrColorType::kAlpha_8;
-        case kRGB_565_SkColorType:      return GrColorType::kBGR_565;
-        case kARGB_4444_SkColorType:    return GrColorType::kABGR_4444;
-        case kRGBA_8888_SkColorType:    return GrColorType::kRGBA_8888;
-        case kRGB_888x_SkColorType:     return GrColorType::kRGB_888x;
-        case kBGRA_8888_SkColorType:    return GrColorType::kBGRA_8888;
-        case kGray_8_SkColorType:       return GrColorType::kGray_8;
-        case kRGBA_F16Norm_SkColorType: return GrColorType::kRGBA_F16_Clamped;
-        case kRGBA_F16_SkColorType:     return GrColorType::kRGBA_F16;
-        case kRGBA_1010102_SkColorType: return GrColorType::kRGBA_1010102;
-        case kRGB_101010x_SkColorType:  return GrColorType::kUnknown;
-        case kRGBA_F32_SkColorType:     return GrColorType::kRGBA_F32;
+        case kUnknown_SkColorType:            return GrColorType::kUnknown;
+        case kAlpha_8_SkColorType:            return GrColorType::kAlpha_8;
+        case kRGB_565_SkColorType:            return GrColorType::kBGR_565;
+        case kARGB_4444_SkColorType:          return GrColorType::kABGR_4444;
+        case kRGBA_8888_SkColorType:          return GrColorType::kRGBA_8888;
+        case kRGB_888x_SkColorType:           return GrColorType::kRGB_888x;
+        case kBGRA_8888_SkColorType:          return GrColorType::kBGRA_8888;
+        case kGray_8_SkColorType:             return GrColorType::kGray_8;
+        case kRGBA_F16Norm_SkColorType:       return GrColorType::kRGBA_F16_Clamped;
+        case kRGBA_F16_SkColorType:           return GrColorType::kRGBA_F16;
+        case kRGBA_1010102_SkColorType:       return GrColorType::kRGBA_1010102;
+        case kRGB_101010x_SkColorType:        return GrColorType::kUnknown;
+        case kRGBA_F32_SkColorType:           return GrColorType::kRGBA_F32;
+        case kR8G8_unorm_SkColorType:         return GrColorType::kRG_88;
+        case kA16_unorm_SkColorType:          return GrColorType::kAlpha_16;
+        case kR16G16_unorm_SkColorType:       return GrColorType::kRG_1616;
+        case kA16_float_SkColorType:          return GrColorType::kAlpha_F16;
+        case kR16G16_float_SkColorType:       return GrColorType::kRG_F16;
+        case kR16G16B16A16_unorm_SkColorType: return GrColorType::kRGBA_16161616;
     }
     SkUNREACHABLE;
 }
@@ -1144,10 +1139,9 @@ static constexpr uint32_t GrColorTypeComponentFlags(GrColorType ct) {
         case GrColorType::kAlpha_8xxx:       return kAlpha_SkColorTypeComponentFlag;
         case GrColorType::kAlpha_F32xxx:     return kAlpha_SkColorTypeComponentFlag;
         case GrColorType::kGray_8xxx:        return kGray_SkColorTypeComponentFlag;
-        case GrColorType::kR_16:             return kRed_SkColorTypeComponentFlag;
+        case GrColorType::kAlpha_16:         return kAlpha_SkColorTypeComponentFlag;
         case GrColorType::kRG_1616:          return kRed_SkColorTypeComponentFlag |
                                                     kGreen_SkColorTypeComponentFlag;
-        // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:    return kRGBA_SkColorTypeComponentFlags;
         case GrColorType::kRG_F16:           return kRed_SkColorTypeComponentFlag |
                                                     kGreen_SkColorTypeComponentFlag;
@@ -1282,8 +1276,8 @@ static constexpr GrColorTypeDesc GrGetColorTypeDesc(GrColorType ct) {
             return GrColorTypeDesc::MakeAlpha(32, GrColorTypeEncoding::kFloat);
         case GrColorType::kGray_8xxx:
             return GrColorTypeDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
-        case GrColorType::kR_16:
-            return GrColorTypeDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
+        case GrColorType::kAlpha_16:
+            return GrColorTypeDesc::MakeAlpha(16, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRG_1616:
             return GrColorTypeDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRGBA_16161616:
@@ -1342,9 +1336,8 @@ static constexpr size_t GrColorTypeBytesPerPixel(GrColorType ct) {
         case GrColorType::kAlpha_8xxx:       return 4;
         case GrColorType::kAlpha_F32xxx:     return 16;
         case GrColorType::kGray_8xxx:        return 4;
-        case GrColorType::kR_16:             return 2;
+        case GrColorType::kAlpha_16:         return 2;
         case GrColorType::kRG_1616:          return 4;
-        // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:    return 8;
         case GrColorType::kRG_F16:           return 4;
     }
@@ -1400,12 +1393,10 @@ static constexpr GrColorType GrPixelConfigToColorType(GrPixelConfig config) {
             return GrColorType::kGray_8;
         case kGray_8_as_Red_GrPixelConfig:
             return GrColorType::kGray_8;
-        case kR_16_GrPixelConfig:
-            return GrColorType::kR_16;
+        case kAlpha_16_GrPixelConfig:
+            return GrColorType::kAlpha_16;
         case kRG_1616_GrPixelConfig:
             return GrColorType::kRG_1616;
-
-        // Experimental (for Y416 and mutant P016/P010)
         case kRGBA_16161616_GrPixelConfig:
             return GrColorType::kRGBA_16161616;
         case kRG_half_GrPixelConfig:
@@ -1434,10 +1425,8 @@ static constexpr GrPixelConfig GrColorTypeToPixelConfig(GrColorType colorType) {
         case GrColorType::kAlpha_8xxx:       return kUnknown_GrPixelConfig;
         case GrColorType::kAlpha_F32xxx:     return kUnknown_GrPixelConfig;
         case GrColorType::kGray_8xxx:        return kUnknown_GrPixelConfig;
-        case GrColorType::kR_16:             return kR_16_GrPixelConfig;
+        case GrColorType::kAlpha_16:         return kAlpha_16_GrPixelConfig;
         case GrColorType::kRG_1616:          return kRG_1616_GrPixelConfig;
-
-        // Experimental (for Y416 and mutant P016/P010)
         case GrColorType::kRGBA_16161616:    return kRGBA_16161616_GrPixelConfig;
         case GrColorType::kRG_F16:           return kRG_half_GrPixelConfig;
     }
@@ -1463,17 +1452,6 @@ private:
     Callback fReleaseProc;
     Context fReleaseCtx;
 };
-
-/**
- * Indicates "resolutions" that need to be done on a texture before it can be sampled from.
- */
-enum class GrTextureResolveFlags {
-    kNone = 0,
-    kMipMaps = 1 << 0,  // Regenerate all mipmap levels.
-    // TODO: kMSAA = 1 << 1  // Blit the MSAA render buffer into a standard texture.
-};
-
-GR_MAKE_BITFIELD_CLASS_OPS(GrTextureResolveFlags)
 
 #if GR_TEST_UTILS || defined(SK_ENABLE_DUMP_GPU)
 static constexpr const char* GrBackendApiToStr(GrBackendApi api) {
@@ -1512,7 +1490,7 @@ static constexpr const char* GrPixelConfigToStr(GrPixelConfig config) {
         case kRGBA_half_GrPixelConfig:         return "RGBAHalf";
         case kRGBA_half_Clamped_GrPixelConfig: return "RGBAHalfClamped";
         case kRGB_ETC1_GrPixelConfig:          return "RGBETC1";
-        case kR_16_GrPixelConfig:              return "R16";
+        case kAlpha_16_GrPixelConfig:          return "Alpha16";
         case kRG_1616_GrPixelConfig:           return "RG1616";
         case kRGBA_16161616_GrPixelConfig:     return "RGBA16161616";
         case kRG_half_GrPixelConfig:           return "RGHalf";
@@ -1525,7 +1503,7 @@ static constexpr const char* GrColorTypeToStr(GrColorType ct) {
         case GrColorType::kUnknown:          return "kUnknown";
         case GrColorType::kAlpha_8:          return "kAlpha_8";
         case GrColorType::kBGR_565:          return "kRGB_565";
-        case GrColorType::kABGR_4444:        return "kARGB_4444";
+        case GrColorType::kABGR_4444:        return "kABGR_4444";
         case GrColorType::kRGBA_8888:        return "kRGBA_8888";
         case GrColorType::kRGBA_8888_SRGB:   return "kRGBA_8888_SRGB";
         case GrColorType::kRGB_888x:         return "kRGB_888x";
@@ -1540,7 +1518,7 @@ static constexpr const char* GrColorTypeToStr(GrColorType ct) {
         case GrColorType::kAlpha_8xxx:       return "kAlpha_8xxx";
         case GrColorType::kAlpha_F32xxx:     return "kAlpha_F32xxx";
         case GrColorType::kGray_8xxx:        return "kGray_8xxx";
-        case GrColorType::kR_16:             return "kR_16";
+        case GrColorType::kAlpha_16:         return "kAlpha_16";
         case GrColorType::kRG_1616:          return "kRG_1616";
         case GrColorType::kRGBA_16161616:    return "kRGBA_16161616";
         case GrColorType::kRG_F16:           return "kRG_F16";

@@ -147,7 +147,7 @@ static void check_refs(skiatest::Reporter* reporter,
                        GrTextureProxy* proxy,
                        int32_t expectedProxyRefs,
                        int32_t expectedBackingRefs) {
-    int32_t actualProxyRefs = proxy->priv().getProxyRefCnt();
+    int32_t actualProxyRefs = proxy->refCnt();
     int32_t actualBackingRefs = proxy->testingOnly_getBackingRefCnt();
 
     SkASSERT(actualProxyRefs == expectedProxyRefs);
@@ -177,7 +177,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
             {
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
                         format, desc, GrRenderable::kNo, 1, kTopLeft_GrSurfaceOrigin,
-                        SkBackingFit::kExact, SkBudgeted::kYes, GrProtected::kNo);
+                        GrMipMapped::kNo, SkBackingFit::kExact, SkBudgeted::kYes, GrProtected::kNo);
 
                 {
                     SkTArray<sk_sp<GrTextureProxy>> proxies;

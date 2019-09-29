@@ -33,7 +33,7 @@ const (
 	ISOLATE_GCLOUD_LINUX_NAME  = "Housekeeper-PerCommit-IsolateGCloudLinux"
 	ISOLATE_SKIMAGE_NAME       = "Housekeeper-PerCommit-IsolateSkImage"
 	ISOLATE_SKP_NAME           = "Housekeeper-PerCommit-IsolateSKP"
-	ISOLATE_MSKP_NAME           = "Housekeeper-PerCommit-IsolateMSKP"
+	ISOLATE_MSKP_NAME          = "Housekeeper-PerCommit-IsolateMSKP"
 	ISOLATE_SVG_NAME           = "Housekeeper-PerCommit-IsolateSVG"
 	ISOLATE_NDK_LINUX_NAME     = "Housekeeper-PerCommit-IsolateAndroidNDKLinux"
 	ISOLATE_SDK_LINUX_NAME     = "Housekeeper-PerCommit-IsolateAndroidSDKLinux"
@@ -41,7 +41,7 @@ const (
 
 	DEFAULT_OS_DEBIAN    = "Debian-9.4"
 	DEFAULT_OS_LINUX_GCE = "Debian-9.8"
-	DEFAULT_OS_MAC       = "Mac-10.13.6"
+	DEFAULT_OS_MAC       = "Mac-10.14.6"
 	DEFAULT_OS_WIN       = "Windows-Server-14393"
 
 	// Small is a 2-core machine.
@@ -598,7 +598,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"ChromeOS":   "ChromeOS",
 			"Debian9":    DEFAULT_OS_DEBIAN,
 			"Mac":        DEFAULT_OS_MAC,
-			"Mac10.13":   DEFAULT_OS_MAC,
+			"Mac10.13":   "Mac-10.13.6",
 			"Mac10.14":   "Mac-10.14.3",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
@@ -617,7 +617,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 		}
 		if os == "Mac10.14" && parts["model"] == "VMware7.1" {
 			// ChOps VMs are at a newer version of MacOS.
-			d["os"] = "Mac-10.14.4"
+			d["os"] = "Mac-10.14.6"
 		}
 		if d["os"] == DEFAULT_OS_WIN {
 			// Upgrades result in a new image but not a new OS version.
@@ -649,6 +649,7 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 				"Pixel":           {"sailfish", "PPR1.180610.009"},
 				"Pixel2XL":        {"taimen", "PPR1.180610.009"},
 				"Pixel3":          {"blueline", "PQ1A.190105.004"},
+				"Pixel3a":         {"sargo", "QP1A.190711.020"},
 				"TecnoSpark3Pro":  {"TECNO-KB8", "PPR1.180610.011"},
 			}[parts["model"]]
 			if !ok {

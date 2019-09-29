@@ -3,6 +3,16 @@ Skia Graphics Release Notes
 This file includes a list of high level updates for each milestone release.
 
 -----
+  * Add SkSurface::MakeFromCAMetalLayer
+
+  * Remove isRectContour and ksNestedFillRects from public
+  * Start to move nested SkPath types (e.g. Direction, Verb) up to root level in SkPathTypes.h
+
+Milestone 79
+
+  * Make the size of program/pipeline caches configurable via
+    GrContextOptions::fRuntimeProgramCacheSize
+    https://review.skia.org/239756
 
 Milestone 78
 
@@ -61,5 +71,42 @@ Milestone 78
   * Removed SkImage::MakeCrossContextFromEncoded.
     https://review.skia.org/234912
 
+  * Add Metal support for GrFence, GrSemaphore, and GrBackendSemaphore
+    https://review.skia.org/233416
+
   * SkMallocPixelRef: remove MakeDirect and MakeWithProc from API.
     https://review.skia.org/234660
+
+  * Remove 4-parameter variant of SkRect::join() and intersect(), and
+    noemptycheck variants of intersect().
+    https://review.skia.org/235832
+    https://review.skia.org/237142
+
+  * Remove unused sk_sp comparison operators.
+    https://review.skia.org/236942
+
+  * Add SkColor4f variant to experimental_DrawEdgeAAQuad for SkiaRenderer.
+    https://review.skia.org/237492
+
+  * Deprecated maxCount resource cache limit for Ganesh.
+    This hasn't been relevant for a long time.
+
+  * Changed GrContextOptions' fDisallowGLSLBinaryCaching to fShaderCacheStrategy,
+    and allow caching SkSL.
+    https://review.skia.org/238856
+
+  * Added kRG_88_SkColorType. This is intended to help support YUV uses case (e.g., NV12).
+    As such, the addition is focused on allowing creation of SkPixmaps and SkImages and not
+    SkSurfaces (i.e., who wants to render to RG?)
+
+  * Add GrContext::precompileShader to allow up-front compilation of previously-cached shaders.
+    https://review.skia.org/239438
+
+  * Added kAlpha_16_SkColorType and kRG_1616_SkColorType. This is intended to help support HDR YUV
+    uses case (e.g., P010 and P016). As such, the addition is focused on allowing creation of
+    SkPixmaps and SkImages and not SkSurfaces (i.e., who wants to render to render to these?)
+
+  * Added kAlpha_F16_SkColorType, kRG_F16_SkColorType and kRGBA_16161616_SkColorType.
+    This is intended to help support HDR YUV uses case (e.g., P010 and P016). As such,
+    the addition is focused on allowing creation of SkPixmaps and SkImages and not
+    SkSurfaces (i.e., who wants to render to render to these?)

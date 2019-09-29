@@ -290,7 +290,7 @@ static void test_path_to_region(skiatest::Reporter* reporter) {
     };
 
     SkRegion clip;
-    clip.setRect(0, 0, 1255, 1925);
+    clip.setRect({0, 0, 1255, 1925});
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(procs); ++i) {
         SkPath path;
@@ -796,7 +796,7 @@ static void add_corner_arc(SkPath* path, const SkRect& rect,
     SkScalar ry = SkMinScalar(rect.height(), yIn);
 
     SkRect arcRect;
-    arcRect.set(-rx, -ry, rx, ry);
+    arcRect.setLTRB(-rx, -ry, rx, ry);
     switch (startAngle) {
     case 0:
         arcRect.offset(rect.fRight - arcRect.fRight, rect.fBottom - arcRect.fBottom);
@@ -891,9 +891,9 @@ static void test_rect_isfinite(skiatest::Reporter* reporter) {
     SkRect r;
     r.setEmpty();
     REPORTER_ASSERT(reporter, r.isFinite());
-    r.set(0, 0, inf, negInf);
+    r.setLTRB(0, 0, inf, negInf);
     REPORTER_ASSERT(reporter, !r.isFinite());
-    r.set(0, 0, nan, 0);
+    r.setLTRB(0, 0, nan, 0);
     REPORTER_ASSERT(reporter, !r.isFinite());
 
     SkPoint pts[] = {
@@ -2160,7 +2160,7 @@ static void test_isRect(skiatest::Reporter* reporter) {
             SkPath::Direction direction;
             SkPathPriv::FirstDirection cheapDirection;
             int pointCount = tests[testIndex].fPointCount - (d2 == tests[testIndex].fPoints);
-            expected.set(tests[testIndex].fPoints, pointCount);
+            expected.setBounds(tests[testIndex].fPoints, pointCount);
             REPORTER_ASSERT(reporter, SkPathPriv::CheapComputeFirstDirection(path, &cheapDirection));
             REPORTER_ASSERT(reporter, path.isRect(&computed, &isClosed, &direction));
             REPORTER_ASSERT(reporter, expected == computed);
@@ -2168,7 +2168,7 @@ static void test_isRect(skiatest::Reporter* reporter) {
             REPORTER_ASSERT(reporter, SkPathPriv::AsFirstDirection(direction) == cheapDirection);
         } else {
             SkRect computed;
-            computed.set(123, 456, 789, 1011);
+            computed.setLTRB(123, 456, 789, 1011);
             for (auto c : {true, false})
             for (auto d : {SkPath::kCW_Direction, SkPath::kCCW_Direction}) {
               bool isClosed = c;
@@ -2457,13 +2457,13 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
                 path.addRect(-1, -1, 2, 2, SkPath::kCCW_Direction);
             }
             REPORTER_ASSERT(reporter,
-                    tests[testIndex].fIsNestedRect == path.isNestedFillRects(nullptr));
+                            tests[testIndex].fIsNestedRect == SkPathPriv::IsNestedFillRects(path, nullptr));
             if (tests[testIndex].fIsNestedRect) {
                 SkRect expected[2], computed[2];
                 SkPathPriv::FirstDirection expectedDirs[2];
                 SkPath::Direction computedDirs[2];
                 SkRect testBounds;
-                testBounds.set(tests[testIndex].fPoints, tests[testIndex].fPointCount);
+                testBounds.setBounds(tests[testIndex].fPoints, tests[testIndex].fPointCount);
                 expected[0] = SkRect::MakeLTRB(-1, -1, 2, 2);
                 expected[1] = testBounds;
                 if (rectFirst) {
@@ -2472,7 +2472,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
                     expectedDirs[0] = SkPathPriv::kCCW_FirstDirection;
                 }
                 expectedDirs[1] = tests[testIndex].fDirection;
-                REPORTER_ASSERT(reporter, path.isNestedFillRects(computed, computedDirs));
+                REPORTER_ASSERT(reporter, SkPathPriv::IsNestedFillRects(path, computed, computedDirs));
                 REPORTER_ASSERT(reporter, expected[0] == computed[0]);
                 REPORTER_ASSERT(reporter, expected[1] == computed[1]);
                 REPORTER_ASSERT(reporter, expectedDirs[0] == SkPathPriv::AsFirstDirection(computedDirs[0]));
@@ -2494,7 +2494,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
         if (!rectFirst) {
             path1.addRect(-1, -1, 2, 2, SkPath::kCCW_Direction);
         }
-        REPORTER_ASSERT(reporter, !path1.isNestedFillRects(nullptr));
+        REPORTER_ASSERT(reporter, !SkPathPriv::IsNestedFillRects(path1, nullptr));
 
         // fail, move in the middle
         path1.reset();
@@ -2512,7 +2512,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
         if (!rectFirst) {
             path1.addRect(-1, -1, 2, 2, SkPath::kCCW_Direction);
         }
-        REPORTER_ASSERT(reporter, !path1.isNestedFillRects(nullptr));
+        REPORTER_ASSERT(reporter, !SkPathPriv::IsNestedFillRects(path1, nullptr));
 
         // fail, move on the edge
         path1.reset();
@@ -2527,7 +2527,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
         if (!rectFirst) {
             path1.addRect(-1, -1, 2, 2, SkPath::kCCW_Direction);
         }
-        REPORTER_ASSERT(reporter, !path1.isNestedFillRects(nullptr));
+        REPORTER_ASSERT(reporter, !SkPathPriv::IsNestedFillRects(path1, nullptr));
 
         // fail, quad
         path1.reset();
@@ -2545,7 +2545,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
         if (!rectFirst) {
             path1.addRect(-1, -1, 2, 2, SkPath::kCCW_Direction);
         }
-        REPORTER_ASSERT(reporter, !path1.isNestedFillRects(nullptr));
+        REPORTER_ASSERT(reporter, !SkPathPriv::IsNestedFillRects(path1, nullptr));
 
         // fail, cubic
         path1.reset();
@@ -2563,13 +2563,13 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
         if (!rectFirst) {
             path1.addRect(-1, -1, 2, 2, SkPath::kCCW_Direction);
         }
-        REPORTER_ASSERT(reporter, !path1.isNestedFillRects(nullptr));
+        REPORTER_ASSERT(reporter, !SkPathPriv::IsNestedFillRects(path1, nullptr));
 
         // fail,  not nested
         path1.reset();
         path1.addRect(1, 1, 3, 3, SkPath::kCW_Direction);
         path1.addRect(2, 2, 4, 4, SkPath::kCW_Direction);
-        REPORTER_ASSERT(reporter, !path1.isNestedFillRects(nullptr));
+        REPORTER_ASSERT(reporter, !SkPathPriv::IsNestedFillRects(path1, nullptr));
     }
 
     //  pass, constructed explicitly from manually closed rects specified as moves/lines.
@@ -2584,7 +2584,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
     path.lineTo(9, 9);
     path.lineTo(1, 9);
     path.lineTo(1, 1);
-    REPORTER_ASSERT(reporter, path.isNestedFillRects(nullptr));
+    REPORTER_ASSERT(reporter, SkPathPriv::IsNestedFillRects(path, nullptr));
 
     // pass, stroke rect
     SkPath src, dst;
@@ -2593,7 +2593,7 @@ static void test_isNestedFillRects(skiatest::Reporter* reporter) {
     strokePaint.setStyle(SkPaint::kStroke_Style);
     strokePaint.setStrokeWidth(2);
     strokePaint.getFillPath(src, &dst);
-    REPORTER_ASSERT(reporter, dst.isNestedFillRects(nullptr));
+    REPORTER_ASSERT(reporter, SkPathPriv::IsNestedFillRects(dst, nullptr));
 }
 
 static void write_and_read_back(skiatest::Reporter* reporter,
@@ -2797,12 +2797,14 @@ static void test_transform(skiatest::Reporter* reporter) {
         p2.addRect({ 10, 20, 30, 40 });
         uint32_t id1 = p1.getGenerationID();
         uint32_t id2 = p2.getGenerationID();
+        REPORTER_ASSERT(reporter, id1 != id2);
         SkMatrix matrix;
         matrix.setScale(2, 2);
         p1.transform(matrix, &p2);
+        REPORTER_ASSERT(reporter, id1 == p1.getGenerationID());
+        REPORTER_ASSERT(reporter, id2 != p2.getGenerationID());
         p1.transform(matrix);
         REPORTER_ASSERT(reporter, id1 != p1.getGenerationID());
-        REPORTER_ASSERT(reporter, id2 != p2.getGenerationID());
     }
 }
 
@@ -4174,7 +4176,8 @@ static void test_contains(skiatest::Reporter* reporter) {
 class PathRefTest_Private {
 public:
     static size_t GetFreeSpace(const SkPathRef& ref) {
-        return ref.fFreeSpace;
+        return   (ref.fPoints.reserved() - ref.fPoints.count()) * sizeof(SkPoint)
+               + (ref.fVerbs.reserved()  - ref.fVerbs.count())  * sizeof(uint8_t);
     }
 
     static void TestPathRef(skiatest::Reporter* reporter) {
@@ -4800,7 +4803,7 @@ DEF_TEST(Paths, reporter) {
     // this triggers a code path in SkPath::swap which is otherwise unexercised
     p.swap(self);
 
-    bounds.set(0, 0, SK_Scalar1, SK_Scalar1);
+    bounds.setLTRB(0, 0, SK_Scalar1, SK_Scalar1);
 
     p.addRoundRect(bounds, SK_Scalar1, SK_Scalar1);
     check_convex_bounds(reporter, p, bounds);
@@ -4843,7 +4846,7 @@ DEF_TEST(Paths, reporter) {
     REPORTER_ASSERT(reporter, SkPath::kLine_Verb == verbs[3]);
     REPORTER_ASSERT(reporter, SkPath::kClose_Verb == verbs[4]);
     REPORTER_ASSERT(reporter, 0xff == verbs[5]);
-    bounds2.set(pts, 4);
+    bounds2.setBounds(pts, 4);
     REPORTER_ASSERT(reporter, bounds == bounds2);
 
     bounds.offset(SK_Scalar1*3, SK_Scalar1*4);
@@ -4856,7 +4859,7 @@ DEF_TEST(Paths, reporter) {
     REPORTER_ASSERT(reporter, bounds == bounds2);
 
     // now force p to not be a rect
-    bounds.set(0, 0, SK_Scalar1/2, SK_Scalar1/2);
+    bounds.setWH(SK_Scalar1/2, SK_Scalar1/2);
     p.addRect(bounds);
     REPORTER_ASSERT(reporter, !p.isRect(nullptr));
 
@@ -5207,7 +5210,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPath path = makePath(points, SK_ARRAY_COUNT(points), false);
     REPORTER_ASSERT(reporter, path.isRect(&rect));
     SkRect compare;
-    compare.set(&points[1], SK_ARRAY_COUNT(points) - 1);
+    compare.setBounds(&points[1], SK_ARRAY_COUNT(points) - 1);
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c3
     SkPoint points3[] = { {75, 50}, {100, 75}, {150, 75}, {150, 150}, {75, 150}, {75, 50} };
@@ -5217,7 +5220,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPoint points9[] = { {10, 10}, {75, 75}, {150, 75}, {150, 150}, {75, 150} };
     path = makePath(points9, SK_ARRAY_COUNT(points9), true);
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points9[1], SK_ARRAY_COUNT(points9) - 1);
+    compare.setBounds(&points9[1], SK_ARRAY_COUNT(points9) - 1);
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c11
     SkPath::Verb verbs11[] = { SkPath::kMove_Verb, SkPath::kLine_Verb, SkPath::kLine_Verb,
@@ -5225,7 +5228,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPoint points11[] = { {75, 150}, {75, 75}, {150, 75}, {150, 150}, {75, 150}, {75, 150} };
     path = makePath2(points11, verbs11, SK_ARRAY_COUNT(verbs11));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points11[0], SK_ARRAY_COUNT(points11));
+    compare.setBounds(&points11[0], SK_ARRAY_COUNT(points11));
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c14
     SkPath::Verb verbs14[] = { SkPath::kMove_Verb, SkPath::kMove_Verb, SkPath::kMove_Verb,
@@ -5242,7 +5245,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPoint points15[] = { {75, 75}, {150, 75}, {150, 150}, {75, 150}, {250, 75} };
     path = makePath2(points15, verbs15, SK_ARRAY_COUNT(verbs15));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points15[0], SK_ARRAY_COUNT(points15) - 1);
+    compare.setBounds(&points15[0], SK_ARRAY_COUNT(points15) - 1);
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c17
     SkPoint points17[] = { {75, 10}, {75, 75}, {150, 75}, {150, 150}, {75, 150}, {75, 10} };
@@ -5265,7 +5268,7 @@ DEF_TEST(Path_isRect, reporter) {
                            {75, 150} };
     path = makePath2(points23, verbs23, SK_ARRAY_COUNT(verbs23));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points23[0], SK_ARRAY_COUNT(points23));
+    compare.setBounds(&points23[0], SK_ARRAY_COUNT(points23));
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c29
     SkPath::Verb verbs29[] = { SkPath::kMove_Verb, SkPath::kLine_Verb, SkPath::kLine_Verb,
@@ -5281,7 +5284,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPoint points31[] = { {75, 75}, {150, 75}, {150, 150}, {75, 150}, {75, 10}, {75, 75} };
     path = makePath2(points31, verbs31, SK_ARRAY_COUNT(verbs31));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points31[0], 4);
+    compare.setBounds(&points31[0], 4);
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c36
     SkPath::Verb verbs36[] = { SkPath::kMove_Verb, SkPath::kLine_Verb, SkPath::kLine_Verb,
@@ -5303,7 +5306,7 @@ DEF_TEST(Path_isRect, reporter) {
                            {32, 2} };
     path = makePath2(pointsAA, verbsAA, SK_ARRAY_COUNT(verbsAA));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&pointsAA[0], SK_ARRAY_COUNT(pointsAA));
+    compare.setBounds(&pointsAA[0], SK_ARRAY_COUNT(pointsAA));
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c41
     SkPath::Verb verbs41[] = { SkPath::kMove_Verb, SkPath::kLine_Verb, SkPath::kLine_Verb,
@@ -5312,7 +5315,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPoint points41[] = { {75, 75}, {150, 75}, {150, 150}, {140, 150}, {140, 75}, {75, 75} };
     path = makePath2(points41, verbs41, SK_ARRAY_COUNT(verbs41));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points41[1], 4);
+    compare.setBounds(&points41[1], 4);
     REPORTER_ASSERT(reporter, rect == compare);
     // isolated from skbug.com/7792#c53
     SkPath::Verb verbs53[] = { SkPath::kMove_Verb, SkPath::kLine_Verb, SkPath::kLine_Verb,
@@ -5321,7 +5324,7 @@ DEF_TEST(Path_isRect, reporter) {
     SkPoint points53[] = { {75, 75}, {150, 75}, {150, 150}, {140, 150}, {140, 75}, {75, 75} };
     path = makePath2(points53, verbs53, SK_ARRAY_COUNT(verbs53));
     REPORTER_ASSERT(reporter, path.isRect(&rect));
-    compare.set(&points53[1], 4);
+    compare.setBounds(&points53[1], 4);
     REPORTER_ASSERT(reporter, rect == compare);
 }
 

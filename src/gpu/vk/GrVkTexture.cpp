@@ -32,7 +32,7 @@ GrVkTexture::GrVkTexture(GrVkGpu* gpu,
         , fTextureView(view) {
     SkASSERT((GrMipMapsStatus::kNotAllocated == mipMapsStatus) == (1 == info.fLevelCount));
     this->registerWithCache(budgeted);
-    if (GrPixelConfigIsCompressed(desc.fConfig)) {
+    if (GrVkFormatIsCompressed(info.fFormat)) {
         this->setReadOnly();
     }
 }
@@ -199,7 +199,7 @@ void GrVkTexture::callIdleProcsOnBehalfOfResource() {
     this->resource()->resetIdleProcs();
 }
 
-void GrVkTexture::willRemoveLastRefOrPendingIO() {
+void GrVkTexture::willRemoveLastRef() {
     if (!fIdleProcs.count()) {
         return;
     }

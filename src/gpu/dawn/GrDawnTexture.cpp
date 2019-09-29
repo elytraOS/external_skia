@@ -124,13 +124,14 @@ GrBackendTexture GrDawnTexture::getBackendTexture() const {
     return GrBackendTexture(this->width(), this->height(), fInfo);
 }
 
-void GrDawnTexture::upload(const GrMipLevel texels[], int mipLevels) {
-    upload(texels, mipLevels, SkIRect::MakeWH(width(), height()));
+void GrDawnTexture::upload(const GrMipLevel texels[], int mipLevels,
+                           dawn::CommandEncoder copyEncoder) {
+    this->upload(texels, mipLevels, SkIRect::MakeWH(width(), height()), copyEncoder);
 }
 
-void GrDawnTexture::upload(const GrMipLevel texels[], int mipLevels, const SkIRect& rect) {
+void GrDawnTexture::upload(const GrMipLevel texels[], int mipLevels, const SkIRect& rect,
+                           dawn::CommandEncoder copyEncoder) {
     dawn::Device device = this->getDawnGpu()->device();
-    dawn::Queue queue = this->getDawnGpu()->queue();
 
     uint32_t x = rect.x();
     uint32_t y = rect.y();
@@ -165,31 +166,23 @@ void GrDawnTexture::upload(const GrMipLevel texels[], int mipLevels, const SkIRe
         }
         size_t rowBytes = GrDawnRoundRowBytes(origRowBytes);
         size_t size = rowBytes * height;
-
-        dawn::BufferDescriptor desc;
-        desc.usage = dawn::BufferUsageBit::CopyDst | dawn::BufferUsageBit::CopySrc;
-        desc.size = size;
-
-        dawn::Buffer stagingBuffer = device.CreateBuffer(&desc);
-
+        GrDawnStagingBuffer* stagingBuffer = getDawnGpu()->getStagingBuffer(size);
         if (rowBytes == origRowBytes) {
-            stagingBuffer.SetSubData(0, size,
-                static_cast<const uint8_t*>(static_cast<const void *>(src)));
+            memcpy(stagingBuffer->fData, src, size);
         } else {
-            char* buf = new char[size];
-            char* dst = buf;
+            char* dst = static_cast<char*>(stagingBuffer->fData);
             for (uint32_t row = 0; row < height; row++) {
                 memcpy(dst, src, origRowBytes);
                 dst += rowBytes;
                 src += texels[i].fRowBytes;
             }
-            stagingBuffer.SetSubData(0, size,
-                static_cast<const uint8_t*>(static_cast<const void*>(buf)));
-            delete[] buf;
         }
+        dawn::Buffer buffer = stagingBuffer->fBuffer;
+        buffer.Unmap();
+        stagingBuffer->fData = nullptr;
 
         dawn::BufferCopyView srcBuffer;
-        srcBuffer.buffer = stagingBuffer;
+        srcBuffer.buffer = buffer;
         srcBuffer.offset = 0;
         srcBuffer.rowPitch = rowBytes;
         srcBuffer.imageHeight = height;
@@ -200,11 +193,7 @@ void GrDawnTexture::upload(const GrMipLevel texels[], int mipLevels, const SkIRe
         dstTexture.origin = {x, y, 0};
 
         dawn::Extent3D copySize = {width, height, 1};
-        dawn::CommandEncoder encoder = device.CreateCommandEncoder();
-        encoder.CopyBufferToTexture(&srcBuffer, &dstTexture, &copySize);
-        dawn::CommandBuffer copy = encoder.Finish();
-        queue.Submit(1, &copy);
-
+        copyEncoder.CopyBufferToTexture(&srcBuffer, &dstTexture, &copySize);
         x /= 2;
         y /= 2;
         width /= 2;

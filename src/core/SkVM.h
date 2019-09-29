@@ -10,7 +10,10 @@
 
 #include "include/core/SkTypes.h"
 #include "include/private/SkTHash.h"
-#include <vector>
+#include <functional>  // std::hash
+#include <vector>      // std::vector
+
+class SkWStream;
 
 namespace skvm {
 
@@ -424,12 +427,15 @@ namespace skvm {
         I32 extract(I32 x, int bits, I32 y);   // (x >> bits) & y
         I32 pack   (I32 x, I32 y, int bits);   // x | (y << bits), assuming (x & (y << bits)) == 0
 
+        void dump(SkWStream* = nullptr) const;
+
     private:
         struct InstructionHash {
             template <typename T>
             static size_t Hash(T val) {
                 return std::hash<T>{}(val);
             }
+            // TODO: replace with SkOpts::hash()?
             size_t operator()(const Instruction& inst) const {
                 return Hash((uint8_t)inst.op)
                      ^ Hash(inst.x)
@@ -485,8 +491,10 @@ namespace skvm {
         int loop() const { return fLoop; }
         bool empty() const { return fInstructions.empty(); }
 
-        // If this Program has been JITted, drop it, forcing interpreter fallback.
-        void dropJIT();
+        bool hasJIT() const;  // Has this Program been JITted?
+        void dropJIT();       // If hasJIT(), drop it, forcing interpreter fallback.
+
+        void dump(SkWStream* = nullptr) const;
 
     private:
         void setupInterpreter(const std::vector<Builder::Instruction>&);
@@ -503,6 +511,9 @@ namespace skvm {
         int                      fRegs = 0;
         int                      fLoop = 0;
         std::vector<int>         fStrides;
+
+        // We only hang onto these to help debugging.
+        std::vector<Builder::Instruction> fOriginalProgram;
 
         void*  fJITBuf  = nullptr;
         size_t fJITSize = 0;

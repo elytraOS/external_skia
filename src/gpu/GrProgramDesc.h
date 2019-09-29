@@ -42,6 +42,15 @@ public:
     static bool Build(GrProgramDesc*, const GrRenderTarget*, const GrPrimitiveProcessor&,
                       bool hasPointSize, const GrPipeline&, GrGpu*);
 
+    static bool BuildFromData(GrProgramDesc* desc, const void* keyData, size_t keyLength) {
+        if (!SkTFitsIn<int>(keyLength)) {
+            return false;
+        }
+        desc->fKey.reset(SkToInt(keyLength));
+        memcpy(desc->fKey.begin(), keyData, keyLength);
+        return true;
+    }
+
     // Returns this as a uint32_t array to be used as a key in the program cache.
     const uint32_t* asKey() const {
         return reinterpret_cast<const uint32_t*>(fKey.begin());
@@ -103,8 +112,7 @@ public:
         uint8_t fProcessorFeatures : 1;
         bool fSnapVerticesToPixelCenters : 1;
         bool fHasPointSize : 1;
-        bool fClampBlendInput : 1;
-        uint8_t fPad : 2;
+        uint8_t fPad : 3;
     };
     GR_STATIC_ASSERT(sizeof(KeyHeader) == 6);
 

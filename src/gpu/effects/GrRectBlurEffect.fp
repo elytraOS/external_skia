@@ -6,10 +6,13 @@
  */
 
 @header {
-    #include "include/core/SkScalar.h"
-    #include "src/core/SkBlurMask.h"
-    #include "src/gpu/GrProxyProvider.h"
-    #include "src/gpu/GrShaderCaps.h"
+#include <cmath>
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "src/core/SkBlurMask.h"
+#include "src/core/SkMathPriv.h"
+#include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrShaderCaps.h"
 }
 
 in float4 rect;
@@ -20,13 +23,74 @@ layout(key) bool highp = abs(rect.x) > 16000 || abs(rect.y) > 16000 ||
 layout(when= highp) uniform float4 rectF;
 layout(when=!highp) uniform half4  rectH;
 
-in uniform half sigma;
+// Texture that is a LUT for integral of normal distribution. The value at x (where x is a texture
+// coord between 0 and 1) is the integral from -inf to (3 * sigma * (-2 * x - 1)). I.e. x is mapped
+// 0 3*sigma to -3 sigma. The flip saves a reversal in the shader.
+in uniform sampler2D integral;
+// Used to produce normalized texture coords for lookups in 'integral'
+in uniform half invSixSigma;
+
+// There is a fast variant of the effect that does 2 texture lookups and a more general one for
+// wider blurs relative to rect sizes that does 4.
+layout(key) in bool isFast;
+
+@constructorParams {
+    GrSamplerState samplerParams
+}
+
+@samplerParams(integral) {
+    samplerParams
+}
+@class {
+static sk_sp<GrTextureProxy> CreateIntegralTexture(GrProxyProvider* proxyProvider,
+                                                   float sixSigma) {
+    // The texture we're producing represents the integral of a normal distribution over a six-sigma
+    // range centered at zero. We want enough resolution so that the linear interpolation done in
+    // texture lookup doesn't introduce noticeable artifacts. We conservatively choose to have 2
+    // texels for each dst pixel.
+    int minWidth = 2 * sk_float_ceil2int(sixSigma);
+    // Bin by powers of 2 with a minimum so we get good profile reuse.
+    int width = SkTMax(SkNextPow2(minWidth), 32);
+
+    static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
+    GrUniqueKey key;
+    GrUniqueKey::Builder builder(&key, kDomain, 1, "Rect Blur Mask");
+    builder[0] = width;
+    builder.finish();
+
+    sk_sp<GrTextureProxy> proxy(proxyProvider->findOrCreateProxyByUniqueKey(
+            key, GrColorType::kAlpha_8, kTopLeft_GrSurfaceOrigin));
+    if (!proxy) {
+        SkBitmap bitmap;
+        if (!bitmap.tryAllocPixels(SkImageInfo::MakeA8(width, 1))) {
+            return nullptr;
+        }
+        *bitmap.getAddr8(0, 0) = 255;
+        const float invWidth = 1.f / width;
+        for (int i = 1; i < width - 1; ++i) {
+            float x = (i + 0.5f) * invWidth;
+            x = (-6 * x + 3) * SK_ScalarRoot2Over2;
+            float integral = 0.5f * (std::erf(x) + 1.f);
+            *bitmap.getAddr8(i, 0) = SkToU8(sk_float_round2int(255.f * integral));
+        }
+        *bitmap.getAddr8(width - 1, 0) = 0;
+        bitmap.setImmutable();
+        proxy = proxyProvider->createProxyFromBitmap(bitmap, GrMipMapped::kNo);
+        if (!proxy) {
+            return nullptr;
+        }
+        SkASSERT(proxy->origin() == kTopLeft_GrSurfaceOrigin);
+        proxyProvider->assignUniqueKeyToProxy(key, proxy.get());
+    }
+    return proxy;
+}
+}
 
 @make {
      static std::unique_ptr<GrFragmentProcessor> Make(GrProxyProvider* proxyProvider,
                                                       const GrShaderCaps& caps,
                                                       const SkRect& rect, float sigma) {
-         float doubleProfileSize = (12 * sigma);
+         SkASSERT(rect.isSorted());
          if (!caps.floatIs32Bits()) {
              // We promote the math that gets us into the Gaussian space to full float when the rect
              // coords are large. If we don't have full float then fail. We could probably clip the
@@ -36,65 +100,92 @@ in uniform half sigma;
                     return nullptr;
              }
          }
-         // Sigma is always a half.
-         SkASSERT(sigma > 0);
-         if (sigma > 16000.f) {
+
+         const float sixSigma = 6 * sigma;
+         auto integral = CreateIntegralTexture(proxyProvider, sixSigma);
+         if (!integral) {
              return nullptr;
          }
 
-         if (doubleProfileSize >= (float) rect.width() ||
-             doubleProfileSize >= (float) rect.height()) {
-             // if the blur sigma is too large so the gaussian overlaps the whole
-             // rect in either direction, fall back to CPU path for now.
-             return nullptr;
-         }
+         // In the fast variant we think of the midpoint of the integral texture as aligning
+         // with the closest rect edge both in x and y. To simplify texture coord calculation we
+         // inset the rect so that the edge of the inset rect corresponds to t = 0 in the texture.
+         // It actually simplifies things a bit in the !isFast case, too.
+         float threeSigma = sixSigma / 2;
+         SkRect insetRect = {rect.fLeft   + threeSigma,
+                             rect.fTop    + threeSigma,
+                             rect.fRight  - threeSigma,
+                             rect.fBottom - threeSigma};
 
-         return std::unique_ptr<GrFragmentProcessor>(new GrRectBlurEffect(rect, sigma));
+         // In our fast variant we find the nearest horizontal and vertical edges and for each
+         // do a lookup in the integral texture for each and multiply them. When the rect is
+         // less than 6 sigma wide then things aren't so simple and we have to consider both the
+         // left and right edge of the rectangle (and similar in y).
+         bool isFast = insetRect.isSorted();
+         // 1 / (6 * sigma) is the domain of the integral texture. We use the inverse to produce
+         // normalized texture coords from frag coord distances.
+         float invSixSigma = 1.f / sixSigma;
+         return std::unique_ptr<GrFragmentProcessor>(new GrRectBlurEffect(insetRect,
+                 std::move(integral), invSixSigma, isFast, GrSamplerState::ClampBilerp()));
      }
 }
 
 void main() {
-        // Get the smaller of the signed distance from the frag coord to the left and right edges
-        // and similar for y.
-        half x;
-        @if (highp) {
-            x = min(half(sk_FragCoord.x - rectF.x), half(rectF.z - sk_FragCoord.x));
+        half xCoverage, yCoverage;
+        @if (isFast) {
+            // Get the smaller of the signed distance from the frag coord to the left and right
+            // edges and similar for y.
+            // The integral texture goes "backwards" (from 3*sigma to -3*sigma), So, the below
+            // computations align the left edge of the integral texture with the inset rect's edge
+            // extending outward 6 * sigma from the inset rect.
+            half x, y;
+            @if (highp) {
+                x = max(half(rectF.x - sk_FragCoord.x), half(sk_FragCoord.x - rectF.z));
+                y = max(half(rectF.y - sk_FragCoord.y), half(sk_FragCoord.y - rectF.w));
+           } else {
+                x = max(half(rectH.x - sk_FragCoord.x), half(sk_FragCoord.x - rectH.z));
+                y = max(half(rectH.y - sk_FragCoord.y), half(sk_FragCoord.y - rectH.w));
+            }
+            xCoverage = sample(integral, half2(x * invSixSigma, 0.5)).a;
+            yCoverage = sample(integral, half2(y * invSixSigma, 0.5)).a;
+            sk_OutColor = sk_InColor * xCoverage * yCoverage;
         } else {
-            x = min(half(sk_FragCoord.x - rectH.x), half(rectH.z - sk_FragCoord.x));
+            // We just consider just the x direction here. In practice we compute x and y separately
+            // and multiply them together.
+            // We define our coord system so that the point at which we're evaluating a kernel
+            // defined by the normal distribution (K) as  0. In this coord system let L be left
+            // edge and R be the right edge of the rectangle.
+            // We can calculate C by integrating K with the half infinite ranges outside the L to R
+            // range and subtracting from 1:
+            //   C = 1 - <integral of K from from -inf to  L> - <integral of K from R to inf>
+            // K is symmetric about x=0 so:
+            //   C = 1 - <integral of K from from -inf to  L> - <integral of K from -inf to -R>
+
+            // The integral texture goes "backwards" (from 3*sigma to -3*sigma) which is factored
+            // in to the below calculations.
+            // Also, our rect uniform was pre-inset by 3 sigma from the actual rect being blurred,
+            // also factored in.
+            half l, r, t, b;
+            @if (highp) {
+                l = half(sk_FragCoord.x - rectF.x);
+                r = half(rectF.z - sk_FragCoord.x);
+                t = half(sk_FragCoord.y - rectF.y);
+                b = half(rectF.w - sk_FragCoord.y);
+            } else {
+                l = half(sk_FragCoord.x - rectH.x);
+                r = half(rectH.z - sk_FragCoord.x);
+                t = half(sk_FragCoord.y - rectH.y);
+                b = half(rectH.w - sk_FragCoord.y);
+            }
+            half il = 1 + l * invSixSigma;
+            half ir = 1 + r * invSixSigma;
+            half it = 1 + t * invSixSigma;
+            half ib = 1 + b * invSixSigma;
+            xCoverage = 1 - sample(integral, half2(il, 0.5)).a
+                          - sample(integral, half2(ir, 0.5)).a;
+            yCoverage = 1 - sample(integral, half2(it, 0.5)).a
+                          - sample(integral, half2(ib, 0.5)).a;
         }
-        half y;
-        @if (highp) {
-            y = min(half(sk_FragCoord.y - rectF.y), half(rectF.w - sk_FragCoord.y));
-        } else {
-            y = min(half(sk_FragCoord.y - rectH.y), half(rectH.w - sk_FragCoord.y));
-        }
-        // The sw code computes an approximation of an integral of the Gaussian from -inf to x,
-        // where x is the signed distance to the edge (positive inside the rect). The approximation
-        // is based on three box filters and is a piecewise cubic. The piecewise nature introduces
-        // branches so here we use a 5th degree very close approximation of the piecewise cubic. The
-        // piecewise cubic goes from 0 to 1 as x goes from -1.5 to 1.5.
-        half r = 1 / (2.0 * sigma);
-        x *= r;
-        y *= r;
-        // The polynomial is such that we can either clamp the domain or the range. Clamping the
-        // range (xCoverage/yCoverage) seems to be faster but the polynomial quickly produces very
-        // large absolute values outside the [-1.5, 1.5] domain and some mobile GPUs don't seem to
-        // properly produce -infs or infs in that case. So instead we clamp the domain (x/y). The
-        // perf is probably because clamping to [0, 1] is faster than clamping to [-1.5, 1.5].
-        x = clamp(x, -1.5, 1.5);
-        y = clamp(y, -1.5, 1.5);
-        half x2 = x * x;
-        half x3 = x2 * x;
-        half x5 = x2 * x3;
-        half a =  0.734822;
-        half b = -0.313376;
-        half c =  0.0609169;
-        half d =  0.5;
-        half xCoverage = a * x + b * x3 + c * x5 + d;
-        half y2 = y * y;
-        half y3 = y2 * y;
-        half y5 = y2 * y3;
-        half yCoverage = a * y + b * y3 + c * y5 + d;
         sk_OutColor = sk_InColor * xCoverage * yCoverage;
 }
 

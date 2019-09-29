@@ -120,9 +120,9 @@ void basic_transfer_to_test(skiatest::Reporter* reporter, GrContext* context, Gr
     desc.fHeight = kTextureHeight;
     desc.fConfig = GrColorTypeToPixelConfig(colorType);
 
-    sk_sp<GrTexture> tex = resourceProvider->createTexture(desc, backendFormat, renderable, 1,
-                                                           SkBudgeted::kNo, GrProtected::kNo,
-                                                           GrResourceProvider::Flags::kNoPendingIO);
+    sk_sp<GrTexture> tex =
+            resourceProvider->createTexture(desc, backendFormat, renderable, 1, GrMipMapped::kNo,
+                                            SkBudgeted::kNo, GrProtected::kNo);
     if (!tex) {
         ERRORF(reporter, "Could not create texture");
         return;
@@ -290,7 +290,7 @@ void basic_transfer_from_test(skiatest::Reporter* reporter, const sk_gpu_test::C
     data.fPixels = textureData.get();
     data.fRowBytes = textureDataRowBytes;
     sk_sp<GrTexture> tex = resourceProvider->createTexture(
-            desc, format, renderable, 1, SkBudgeted::kNo, GrProtected::kNo, &data, 1);
+            desc, format, colorType, renderable, 1, SkBudgeted::kNo, GrProtected::kNo, &data, 1);
     if (!tex) {
         return;
     }
@@ -436,7 +436,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTest, reporter, ctxInfo) {
                      GrColorType::kRGBA_F16,
                      GrColorType::kRGBA_F16_Clamped,
                      GrColorType::kRGBA_F32,
-                     GrColorType::kR_16,
+                     GrColorType::kAlpha_16,
                      GrColorType::kRG_1616,
                      GrColorType::kRGBA_16161616,
                      GrColorType::kRG_F16,
@@ -454,6 +454,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTest, reporter, ctxInfo) {
     for (auto renderable : {GrRenderable::kNo, GrRenderable::kYes}) {
         for (auto colorType : {
                 GrColorType::kAlpha_8,
+                GrColorType::kAlpha_16,
                 GrColorType::kBGR_565,
                 GrColorType::kABGR_4444,
                 GrColorType::kRGBA_8888,
@@ -467,7 +468,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTest, reporter, ctxInfo) {
                 GrColorType::kRGBA_F16,
                 GrColorType::kRGBA_F16_Clamped,
                 GrColorType::kRGBA_F32,
-                GrColorType::kR_16,
                 GrColorType::kRG_1616,
                 GrColorType::kRGBA_16161616,
                 GrColorType::kRG_F16,

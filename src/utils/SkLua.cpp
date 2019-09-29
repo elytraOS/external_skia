@@ -412,10 +412,10 @@ static SkColor lua2color(lua_State* L, int index) {
 }
 
 static SkRect* lua2rect(lua_State* L, int index, SkRect* rect) {
-    rect->set(getfield_scalar_default(L, index, "left", 0),
-              getfield_scalar_default(L, index, "top", 0),
-              getfield_scalar(L, index, "right"),
-              getfield_scalar(L, index, "bottom"));
+    rect->setLTRB(getfield_scalar_default(L, index, "left", 0),
+                  getfield_scalar_default(L, index, "top", 0),
+                  getfield_scalar(L, index, "right"),
+                  getfield_scalar(L, index, "bottom"));
     return rect;
 }
 
@@ -1309,19 +1309,9 @@ static int lpath_getSegmentTypes(lua_State* L) {
     return 1;
 }
 
-bool SkPath_isNumericallyUnstable(const SkPath* p) {
-    return p->isNumericallyUnstable();
-}
-
 static int lpath_isConvex(lua_State* L) {
     bool isConvex = SkPath::kConvex_Convexity == get_obj<SkPath>(L, 1)->getConvexity();
     SkLua(L).pushBool(isConvex);
-    return 1;
-}
-
-static int lpath_isNumericallyUnstable(lua_State* L) {
-    bool isUnstable = SkPath_isNumericallyUnstable(get_obj<SkPath>(L, 1));
-    SkLua(L).pushBool(isUnstable);
     return 1;
 }
 
@@ -1338,31 +1328,6 @@ static int lpath_isRect(lua_State* L) {
     if (pred) {
         SkLua(L).pushRect(r);
         ret_count += 1;
-    }
-    return ret_count;
-}
-
-static const char* dir2string(SkPath::Direction dir) {
-    static const char* gStr[] = {
-        "unknown", "cw", "ccw"
-    };
-    SkASSERT((unsigned)dir < SK_ARRAY_COUNT(gStr));
-    return gStr[dir];
-}
-
-static int lpath_isNestedFillRects(lua_State* L) {
-    SkRect rects[2];
-    SkPath::Direction dirs[2];
-    bool pred = get_obj<SkPath>(L, 1)->isNestedFillRects(rects, dirs);
-    int ret_count = 1;
-    lua_pushboolean(L, pred);
-    if (pred) {
-        SkLua lua(L);
-        lua.pushRect(rects[0]);
-        lua.pushRect(rects[1]);
-        lua_pushstring(L, dir2string(dirs[0]));
-        lua_pushstring(L, dir2string(dirs[0]));
-        ret_count += 4;
     }
     return ret_count;
 }
@@ -1455,10 +1420,8 @@ static const struct luaL_Reg gSkPath_Methods[] = {
     { "getSegmentTypes", lpath_getSegmentTypes },
     { "getVerbs", lpath_getVerbs },
     { "isConvex", lpath_isConvex },
-    { "isUnstable", lpath_isNumericallyUnstable },
     { "isEmpty", lpath_isEmpty },
     { "isRect", lpath_isRect },
-    { "isNestedFillRects", lpath_isNestedFillRects },
     { "countPoints", lpath_countPoints },
     { "reset", lpath_reset },
     { "moveTo", lpath_moveTo },

@@ -6,8 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+ - `CanvasKit.MakeAnimatedImageFromEncoded`, `SkCanvas.drawAnimatedImage`.
+
+## [0.7.0] - 2019-09-18
+
+### Added
+ - `SkCanvas.drawCircle()`, `SkCanvas.getSaveCount()`
+ - `SkPath.offset()`, `SkPath.drawOval`
+ - `SkRRect` support (`SkCanvas.drawRRect`, `SkCanvas.drawDRRect`, `CanvasKit.RRectXY`).
+   Advanced users can specify the 8 individual radii, if needed.
+ - `CanvasKit.computeTonalColors()`, which  returns TonalColors, which has an
+   ambient SkColor and a spot SkColor.
+ - `CanvasKit.SkColorFilter` and a variety of factories. `SkPaint.setColorFilter` is the only
+   consumer of these at the moment.
+ - `CanvasKit.SkColorMatrix` with functions `.identity()`, `.scaled()`, `.concat()` and
+   others. Primarily for use with `CanvasKit.SkColorFilter.MakeMatrix`.
+
 ### Changed
  - `MakeSkVertices` uses a builder to save a copy.
+
+### Breaking
+ - When `SkPath.arcTo` is given seven arguments, it no longer turns the first four into
+   a `SkRect` automatically, and instead uses them as
+   `arcTo(rx, ry, xAxisRotate, useSmallArc, isCCW, x, y)` (see SkPath.h for more).
 
 ## [0.6.0] - 2019-05-06
 

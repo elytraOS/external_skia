@@ -15,14 +15,13 @@
 #include "src/gpu/GrTextureResolveManager.h"
 
 class GrOpFlushState;
-class GrOpList;
-class GrRenderTargetOpList;
+class GrOpsTask;
 class GrResourceAllocator;
-class GrTextureOpList;
+class GrTextureResolveRenderTask;
 
 // This class abstracts a task that targets a single GrSurfaceProxy, participates in the
 // GrDrawingManager's DAG, and implements the onExecute method to modify its target proxy's
-// contents. (e.g., an opList that executes a command buffer, a task to regenerate mipmaps, etc.)
+// contents. (e.g., an opsTask that executes a command buffer, a task to regenerate mipmaps, etc.)
 class GrRenderTask : public SkRefCnt {
 public:
     GrRenderTask(sk_sp<GrSurfaceProxy> target);
@@ -48,6 +47,12 @@ public:
                        const GrCaps& caps);
 
     /*
+     * Notify this GrRenderTask that it relies on the contents of all GrRenderTasks which otherTask
+     * depends on.
+     */
+    void addDependenciesFromOtherTask(GrRenderTask* otherTask);
+
+    /*
      * Does this renderTask depend on 'dependedOn'?
      */
     bool dependsOn(const GrRenderTask* dependedOn) const;
@@ -55,21 +60,29 @@ public:
     uint32_t uniqueID() const { return fUniqueID; }
 
     /*
-     * Safely cast this GrRenderTask to a GrTextureOpList (if possible).
+     * Safely cast this GrRenderTask to a GrOpsTask (if possible).
      */
-    virtual GrTextureOpList* asTextureOpList() { return nullptr; }
+    virtual GrOpsTask* asOpsTask() { return nullptr; }
 
-    /*
-     * Safely cast this GrRenderTask to a GrRenderTargetOpList (if possible).
-     */
-    virtual GrRenderTargetOpList* asRenderTargetOpList() { return nullptr; }
-
+#ifdef SK_DEBUG
     /*
      * Dump out the GrRenderTask dependency DAG
      */
-    SkDEBUGCODE(virtual void dump(bool printDependencies) const;)
+    virtual void dump(bool printDependencies) const;
 
-    SkDEBUGCODE(virtual int numClips() const { return 0; })
+    virtual int numClips() const { return 0; }
+
+    using VisitSurfaceProxyFunc = std::function<void(GrSurfaceProxy*, GrMipMapped)>;
+
+    virtual void visitProxies_debugOnly(const VisitSurfaceProxyFunc&) const = 0;
+
+    void visitTargetAndSrcProxies_debugOnly(const VisitSurfaceProxyFunc& fn) const {
+        this->visitProxies_debugOnly(fn);
+        if (fTarget) {
+            fn(fTarget.get(), GrMipMapped::kNo);
+        }
+    }
+#endif
 
 protected:
     // In addition to just the GrSurface being allocated, has the stencil buffer been allocated (if
@@ -171,10 +184,15 @@ private:
     const uint32_t         fUniqueID;
     uint32_t               fFlags;
 
-    // 'this' GrOpList relies on the output of the GrOpLists in 'fDependencies'
+    // 'this' GrRenderTask relies on the output of the GrRenderTasks in 'fDependencies'
     SkSTArray<1, GrRenderTask*, true> fDependencies;
-    // 'this' GrOpList's output is relied on by the GrOpLists in 'fDependents'
+    // 'this' GrRenderTask's output is relied on by the GrRenderTasks in 'fDependents'
     SkSTArray<1, GrRenderTask*, true> fDependents;
+
+    // For performance reasons, we should perform texture resolves back-to-back as much as possible.
+    // (http://skbug.com/9406). To accomplish this, we make and reuse one single resolve task for
+    // each render task, then add it as a dependency during makeClosed().
+    GrTextureResolveRenderTask* fTextureResolveTask = nullptr;
 };
 
 #endif

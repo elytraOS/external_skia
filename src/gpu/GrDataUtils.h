@@ -15,6 +15,9 @@
 
 size_t GrCompressedDataSize(SkImage::CompressionType, int w, int h);
 
+// Returns a value that can be used to set rowBytes for a transfer function.
+size_t GrCompressedRowBytes(SkImage::CompressionType, int w);
+
 // Compute the size of the buffer required to hold all the mipLevels of the specified type
 // of data when all rowBytes are tight.
 // Note there may still be padding between the mipLevels to meet alignment requirements.
@@ -39,6 +42,9 @@ public:
 
     GrPixelInfo(GrColorType ct, SkAlphaType at, sk_sp<SkColorSpace> cs, int w, int h)
             : fColorInfo(ct, at, std::move(cs)), fWidth(w), fHeight(h) {}
+
+    GrPixelInfo(GrColorType ct, SkAlphaType at, sk_sp<SkColorSpace> cs, const SkISize& size)
+            : fColorInfo(ct, at, std::move(cs)), fWidth(size.fWidth), fHeight(size.fHeight) {}
 
     GrPixelInfo(const GrPixelInfo&) = default;
     GrPixelInfo(GrPixelInfo&&) = default;

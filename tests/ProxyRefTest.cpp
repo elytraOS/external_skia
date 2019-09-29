@@ -23,7 +23,7 @@ static void check_refs(skiatest::Reporter* reporter,
                        GrTextureProxy* proxy,
                        int32_t expectedProxyRefs,
                        int32_t expectedBackingRefs) {
-    int32_t actualProxyRefs = proxy->priv().getProxyRefCnt();
+    int32_t actualProxyRefs = proxy->refCnt();
     int32_t actualBackingRefs = proxy->testingOnly_getBackingRefCnt();
 
     SkASSERT(actualProxyRefs == expectedProxyRefs);
@@ -45,8 +45,8 @@ static sk_sp<GrTextureProxy> make_deferred(GrContext* context) {
     const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                                  GrRenderable::kYes);
     return proxyProvider->createProxy(format, desc, GrRenderable::kYes, 1,
-                                      kBottomLeft_GrSurfaceOrigin, SkBackingFit::kApprox,
-                                      SkBudgeted::kYes, GrProtected::kNo);
+                                      kBottomLeft_GrSurfaceOrigin, GrMipMapped::kNo,
+                                      SkBackingFit::kApprox, SkBudgeted::kYes, GrProtected::kNo);
 }
 
 static sk_sp<GrTextureProxy> make_wrapped(GrContext* context) {

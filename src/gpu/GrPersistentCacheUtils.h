@@ -23,7 +23,8 @@ namespace GrPersistentCacheUtils {
 static inline sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
                                               const SkSL::String shaders[],
                                               const SkSL::Program::Inputs inputs[],
-                                              int numInputs) {
+                                              int numInputs,
+                                              const SkSL::Program::Settings* settings) {
     // For consistency (so tools can blindly pack and unpack cached shaders), we always write
     // kGrShaderTypeCount inputs. If the backend gives us fewer, we just replicate the last one.
     SkASSERT(numInputs >= 1 && numInputs <= kGrShaderTypeCount);
@@ -34,28 +35,37 @@ static inline sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
         writer.writeString(shaders[i].c_str(), shaders[i].size());
         writer.writePad(&inputs[SkTMin(i, numInputs - 1)], sizeof(SkSL::Program::Inputs));
     }
+    writer.writeBool(SkToBool(settings));
+    if (settings) {
+        writer.writeBool(settings->fFlipY);
+        writer.writeBool(settings->fFragColorIsInOut);
+        writer.writeBool(settings->fForceHighPrecision);
+    }
     return writer.snapshotAsData();
 }
 
-static inline SkFourByteTag UnpackCachedShaders(const SkData* data,
-                                                SkSL::String shaders[],
-                                                SkSL::Program::Inputs inputs[],
-                                                int numInputs) {
-    SkReader32 reader(data->data(), data->size());
-    SkFourByteTag shaderType = reader.readU32();
+static inline void UnpackCachedShaders(SkReader32* reader,
+                                       SkSL::String shaders[],
+                                       SkSL::Program::Inputs inputs[],
+                                       int numInputs,
+                                       SkSL::Program::Settings* settings = nullptr) {
     for (int i = 0; i < kGrShaderTypeCount; ++i) {
         size_t stringLen = 0;
-        const char* string = reader.readString(&stringLen);
+        const char* string = reader->readString(&stringLen);
         shaders[i] = SkSL::String(string, stringLen);
 
         // GL, for example, only wants one set of Inputs
         if (i < numInputs) {
-            reader.read(&inputs[i], sizeof(inputs[i]));
+            reader->read(&inputs[i], sizeof(inputs[i]));
         } else {
-            reader.skip(sizeof(SkSL::Program::Inputs));
+            reader->skip(sizeof(SkSL::Program::Inputs));
         }
     }
-    return shaderType;
+    if (reader->readBool() && settings) {
+        settings->fFlipY = reader->readBool();
+        settings->fFragColorIsInOut = reader->readBool();
+        settings->fForceHighPrecision = reader->readBool();
+    }
 }
 
 }

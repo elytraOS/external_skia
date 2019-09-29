@@ -294,8 +294,8 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffectImpl::onFilterImage(const Context& 
     // With a more complex DAG attached to this input, it's not clear that working in ANY specific
     // color space makes sense, so we ignore color spaces (and gamma) entirely. This may not be
     // ideal, but it's at least consistent and predictable.
-    Context displContext(ctx.ctm(), ctx.clipBounds(), ctx.cache(), kN32_SkColorType, nullptr,
-                         ctx.sourceImage());
+    Context displContext(ctx.ctm(), ctx.clipBounds(), ctx.cache(),
+                         kN32_SkColorType, nullptr, ctx.source());
     sk_sp<SkSpecialImage> displ(this->filterInput(0, displContext, &displOffset));
     if (!displ) {
         return nullptr;
@@ -389,6 +389,7 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffectImpl::onFilterImage(const Context& 
                 SkIRect::MakeWH(bounds.width(), bounds.height()),
                 kNeedNewImageUniqueID_SpecialImage,
                 renderTargetContext->asTextureProxyRef(),
+                renderTargetContext->colorSpaceInfo().colorType(),
                 renderTargetContext->colorSpaceInfo().refColorSpace());
     }
 #endif
@@ -586,15 +587,16 @@ void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
 
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     fragBuilder->codeAppendf("\t\thalf4 %s = ", dColor);
-    fragBuilder->appendTextureLookup(args.fTexSamplers[0], args.fTransformedCoords[0].c_str(),
-                                     args.fTransformedCoords[0].getType());
+    fragBuilder->appendTextureLookup(args.fTexSamplers[0],
+                                     args.fTransformedCoords[0].fVaryingPoint.c_str(),
+                                     args.fTransformedCoords[0].fVaryingPoint.getType());
     fragBuilder->codeAppend(";\n");
 
     // Unpremultiply the displacement
     fragBuilder->codeAppendf(
         "\t\t%s.rgb = (%s.a < %s) ? half3(0.0) : saturate(%s.rgb / %s.a);",
         dColor, dColor, nearZero, dColor, dColor);
-    SkString coords2D = fragBuilder->ensureCoords2D(args.fTransformedCoords[1]);
+    SkString coords2D = fragBuilder->ensureCoords2D(args.fTransformedCoords[1].fVaryingPoint);
     fragBuilder->codeAppendf("\t\tfloat2 %s = %s + %s*(%s.",
                              cCoords, coords2D.c_str(), scaleUni, dColor);
 

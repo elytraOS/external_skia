@@ -58,6 +58,7 @@ TEST_BUILDERS = [
   'Build-Debian9-GCC-x86_64-Release-ANGLE',
   'Build-Debian9-GCC-x86_64-Release-NoGPU',
   'Build-Debian9-GCC-x86_64-Release-Shared',
+  'Build-Mac-Clang-arm-Debug-iOS',
   'Build-Mac-Clang-arm64-Debug-Android_Vulkan',
   'Build-Mac-Clang-arm64-Debug-iOS',
   'Build-Mac-Clang-x86_64-Debug-ASAN',
@@ -68,7 +69,6 @@ TEST_BUILDERS = [
   'Build-Win-Clang-x86-Debug-Exceptions',
   'Build-Win-Clang-x86_64-Debug-OpenCL',
   'Build-Win-Clang-x86_64-Release-Vulkan',
-  'Build-Win-MSVC-x86_64-Debug-MSRTC',
   'Test-Debian9-Clang-GCE-CPU-AVX2-universal-devrel-All-Android_SKQP',
   'Housekeeper-PerCommit-CheckGeneratedFiles',
 ]

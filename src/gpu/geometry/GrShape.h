@@ -256,7 +256,7 @@ public:
         }
 
         SkPath::Direction dirs[2];
-        if (!this->path().isNestedFillRects(rects, dirs)) {
+        if (!SkPathPriv::IsNestedFillRects(this->path(), rects, dirs)) {
             return false;
         }
 
@@ -332,6 +332,32 @@ public:
                 // contour hence isLastContourClosed() is a sufficient for a convex path.
                 return (this->style().isSimpleFill() || this->path().isLastContourClosed()) &&
                         this->path().isConvex();
+        }
+        return false;
+    }
+
+    /**
+     * Does the shape have a known winding direction. Some degenerate convex shapes may not have
+     * a computable direction, but this is not always a requirement for path renderers so it is
+     * kept separate from knownToBeConvex().
+     */
+    bool knownDirection() const {
+        switch (fType) {
+            case Type::kEmpty:
+                return true;
+            case Type::kInvertedEmpty:
+                return true;
+            case Type::kRRect:
+                return true;
+            case Type::kArc:
+                return true;
+            case Type::kLine:
+                return true;
+            case Type::kPath:
+                // Assuming this is called after knownToBeConvex(), this should just be relying on
+                // cached convexity and direction and will be cheap.
+                return !SkPathPriv::CheapIsFirstDirection(this->path(),
+                                                          SkPathPriv::kUnknown_FirstDirection);
         }
         return false;
     }

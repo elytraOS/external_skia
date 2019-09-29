@@ -35,8 +35,6 @@ GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice>
 
     // The following are disabled due to the unfinished Metal backend, not because Metal itself
     // doesn't support it.
-    fFenceSyncSupport = false;           // Fences are not implemented yet
-    fSemaphoreSupport = false;           // Semaphores are not implemented yet
     fCrossContextTextureSupport = false; // GrMtlGpu::prepareTextureForCrossContextUsage() not impl
 }
 
@@ -252,7 +250,22 @@ void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
     fMixedSamplesSupport = false;
     fGpuTracingSupport = false;
 
-    fFenceSyncSupport = true;   // always available in Metal
+    bool supportsMTLEvent = false;
+#ifdef GR_METAL_SDK_SUPPORTS_EVENTS
+    // TODO: this may be redundant
+    if (@available(macOS 10.14, iOS 12.0, *)) {
+        NSOperatingSystemVersion osVersion = [[NSProcessInfo processInfo] operatingSystemVersion];
+#ifdef SK_BUILD_FOR_MAC
+        supportsMTLEvent = (osVersion.majorVersion > 10 ||
+                            (osVersion.majorVersion == 10 && osVersion.minorVersion >= 14));
+#else
+        supportsMTLEvent = (osVersion.majorVersion >= 12);
+#endif
+    }
+#endif
+    fFenceSyncSupport = supportsMTLEvent;
+    fSemaphoreSupport = supportsMTLEvent;
+
     fCrossContextTextureSupport = false;
     fHalfFloatVertexAttributeSupport = true;
 }
@@ -423,7 +436,6 @@ static constexpr MTLPixelFormat kMtlFormats[] = {
 #ifdef SK_BUILD_FOR_IOS
     MTLPixelFormatETC2_RGB8,
 #endif
-    // Experimental (for Y416 and mutant P016/P010)
     MTLPixelFormatRGBA16Unorm,
     MTLPixelFormatRG16Float,
 
@@ -700,11 +712,13 @@ void GrMtlCaps::initFormatTable() {
         info->fColorTypeInfoCount = 1;
         info->fColorTypeInfos.reset(new ColorTypeInfo[info->fColorTypeInfoCount]());
         int ctIdx = 0;
-        // Format: R16Unorm, Surface: kR_16
+        // Format: R16Unorm, Surface: kAlpha_16
         {
             auto& ctInfo = info->fColorTypeInfos[ctIdx++];
-            ctInfo.fColorType = GrColorType::kR_16;
+            ctInfo.fColorType = GrColorType::kAlpha_16;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+            ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+            ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
         }
     }
 
@@ -730,12 +744,9 @@ void GrMtlCaps::initFormatTable() {
 #ifdef SK_BUILD_FOR_IOS
     // ETC2_RGB8
     info = &fFormatTable[GetFormatIndex(MTLPixelFormatETC2_RGB8)];
-    // GrMtlGpu::onCreateCompressedTexture() not implemented.
-    info->fFlags = 0;
+    info->fFlags = FormatInfo::kTexturable_Flag;
     // NO supported colorTypes
 #endif
-
-    // Experimental (for Y416 and mutant P016/P010)
 
     // Format: RGBA16Unorm
     {
@@ -795,7 +806,7 @@ void GrMtlCaps::initFormatTable() {
     this->setColorType(GrColorType::kRGBA_F16,         { MTLPixelFormatRGBA16Float });
     this->setColorType(GrColorType::kRGBA_F16_Clamped, { MTLPixelFormatRGBA16Float });
     this->setColorType(GrColorType::kRGBA_F32,         { MTLPixelFormatRGBA32Float });
-    this->setColorType(GrColorType::kR_16,             { MTLPixelFormatR16Unorm });
+    this->setColorType(GrColorType::kAlpha_16,         { MTLPixelFormatR16Unorm });
     this->setColorType(GrColorType::kRG_1616,          { MTLPixelFormatRG16Unorm });
     this->setColorType(GrColorType::kRGBA_16161616,    { MTLPixelFormatRGBA16Unorm });
     this->setColorType(GrColorType::kRG_F16,           { MTLPixelFormatRG16Float });
@@ -900,9 +911,9 @@ static constexpr GrPixelConfig validate_sized_format(GrMTLPixelFormat grFormat, 
                 return kRGBA_float_GrPixelConfig;
             }
             break;
-        case GrColorType::kR_16:
+        case GrColorType::kAlpha_16:
             if (MTLPixelFormatR16Unorm == format) {
-                return kR_16_GrPixelConfig;
+                return kAlpha_16_GrPixelConfig;
             }
             break;
         case GrColorType::kRG_1616:
@@ -955,9 +966,9 @@ GrColorType GrMtlCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& 
         case MTLPixelFormatRGBA8Unorm:        return GrColorType::kRGBA_8888;
         case MTLPixelFormatBGRA8Unorm:        return GrColorType::kBGRA_8888;
         case MTLPixelFormatRGB10A2Unorm:      return GrColorType::kRGBA_1010102;
-        case MTLPixelFormatR16Unorm:          return GrColorType::kR_16;
+        case MTLPixelFormatR16Unorm:          return GrColorType::kAlpha_16;
+        case MTLPixelFormatR16Float:          return GrColorType::kAlpha_F16;
         case MTLPixelFormatRG16Unorm:         return GrColorType::kRG_1616;
-        // Experimental (for Y416 and mutant P016/P010)
         case MTLPixelFormatRGBA16Unorm:       return GrColorType::kRGBA_16161616;
         case MTLPixelFormatRG16Float:         return GrColorType::kRG_F16;
         default:                              return GrColorType::kUnknown;
@@ -1070,7 +1081,7 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrMtlCaps::getTestingCombina
         { GrColorType::kRGBA_F16,         GrBackendFormat::MakeMtl(MTLPixelFormatRGBA16Float)     },
         { GrColorType::kRGBA_F16_Clamped, GrBackendFormat::MakeMtl(MTLPixelFormatRGBA16Float)     },
         { GrColorType::kRGBA_F32,         GrBackendFormat::MakeMtl(MTLPixelFormatRGBA32Float)     },
-        { GrColorType::kR_16,             GrBackendFormat::MakeMtl(MTLPixelFormatR16Unorm)        },
+        { GrColorType::kAlpha_16,         GrBackendFormat::MakeMtl(MTLPixelFormatR16Unorm)        },
         { GrColorType::kRG_1616,          GrBackendFormat::MakeMtl(MTLPixelFormatRG16Unorm)       },
         { GrColorType::kRGBA_16161616,    GrBackendFormat::MakeMtl(MTLPixelFormatRGBA16Unorm)     },
         { GrColorType::kRG_F16,           GrBackendFormat::MakeMtl(MTLPixelFormatRG16Float)       },

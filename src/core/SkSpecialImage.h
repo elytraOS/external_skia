@@ -13,6 +13,10 @@
 #include "include/core/SkSurfaceProps.h"
 #include "src/core/SkNextID.h"
 
+#if SK_SUPPORT_GPU
+#include "include/private/GrTypesPriv.h"
+#endif
+
 class GrRecordingContext;
 class GrTextureProxy;
 class SkBitmap;
@@ -53,6 +57,7 @@ public:
 
     uint32_t uniqueID() const { return fUniqueID; }
     virtual SkAlphaType alphaType() const = 0;
+    virtual SkColorType colorType() const = 0;
     virtual size_t getSize() const = 0;
 
     /**
@@ -60,7 +65,7 @@ public:
      *  If no transformation is required, the returned image may be the same as this special image.
      *  If this special image is from a different GrRecordingContext, this will fail.
      */
-    sk_sp<SkSpecialImage> makeTextureImage(GrRecordingContext*);
+    sk_sp<SkSpecialImage> makeTextureImage(GrRecordingContext*) const;
 
     /**
      *  Draw this SpecialImage into the canvas, automatically taking into account the image's subset
@@ -82,6 +87,7 @@ public:
                                                      const SkIRect& subset,
                                                      uint32_t uniqueID,
                                                      sk_sp<GrTextureProxy>,
+                                                     GrColorType,
                                                      sk_sp<SkColorSpace>,
                                                      const SkSurfaceProps* = nullptr,
                                                      SkAlphaType at = kPremul_SkAlphaType);

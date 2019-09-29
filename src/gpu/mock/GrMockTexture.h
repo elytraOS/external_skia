@@ -171,7 +171,7 @@ public:
 
 protected:
     // This avoids an inherits via dominance warning on MSVC.
-    void willRemoveLastRefOrPendingIO() override { GrTexture::willRemoveLastRefOrPendingIO(); }
+    void willRemoveLastRef() override { GrTexture::willRemoveLastRef(); }
 
 private:
     void onAbandon() override {
@@ -195,11 +195,8 @@ private:
                                       this->texturePriv().mipMapped());
     }
 
-    void computeScratchKey(GrScratchKey* key) const override {
-        GrTexturePriv::ComputeScratchKey(this->config(), this->width(), this->height(),
-                                         GrRenderable::kYes, this->numSamples(),
-                                         this->texturePriv().mipMapped(), key);
-    }
+    // This avoids an inherits via dominance warning on MSVC.
+    void computeScratchKey(GrScratchKey* key) const override { GrTexture::computeScratchKey(key); }
 };
 
 #endif

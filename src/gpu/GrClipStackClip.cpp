@@ -245,10 +245,10 @@ bool GrClipStackClip::apply(GrRecordingContext* context, GrRenderTargetContext* 
         }
     }
 
-    // The opList ID must not be looked up until AFTER producing the clip mask (if any). That step
-    // can cause a flush or otherwise change which opList our draw is going into.
-    uint32_t opListID = renderTargetContext->getOpList()->uniqueID();
-    if (auto clipFPs = reducedClip.finishAndDetachAnalyticFPs(ccpr, opListID)) {
+    // The opsTask ID must not be looked up until AFTER producing the clip mask (if any). That step
+    // can cause a flush or otherwise change which opstask our draw is going into.
+    uint32_t opsTaskID = renderTargetContext->getOpsTask()->uniqueID();
+    if (auto clipFPs = reducedClip.finishAndDetachAnalyticFPs(ccpr, opsTaskID)) {
         out->addCoverageFP(std::move(clipFPs));
     }
 
@@ -498,9 +498,15 @@ sk_sp<GrTextureProxy> GrClipStackClip::createSoftwareClipMask(
 
         // MDB TODO: We're going to fill this proxy with an ASAP upload (which is out of order wrt
         // to ops), so it can't have any pending IO.
-        proxy = proxyProvider->createProxy(format, desc, GrRenderable::kNo, 1,
-                                           kTopLeft_GrSurfaceOrigin, SkBackingFit::kApprox,
-                                           SkBudgeted::kYes, GrProtected::kNo);
+        proxy = proxyProvider->createProxy(format,
+                                           desc,
+                                           GrRenderable::kNo,
+                                           1,
+                                           kTopLeft_GrSurfaceOrigin,
+                                           GrMipMapped::kNo,
+                                           SkBackingFit::kApprox,
+                                           SkBudgeted::kYes,
+                                           GrProtected::kNo);
 
         auto uploader = skstd::make_unique<GrTDeferredProxyUploader<ClipMaskData>>(reducedClip);
         GrTDeferredProxyUploader<ClipMaskData>* uploaderRaw = uploader.get();

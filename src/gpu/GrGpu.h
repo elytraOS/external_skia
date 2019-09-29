@@ -14,7 +14,7 @@
 #include "include/private/SkTArray.h"
 #include "src/gpu/GrAllocator.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrGpuCommandBuffer.h"
+#include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrSamplePatternDictionary.h"
 #include "src/gpu/GrSwizzle.h"
@@ -103,22 +103,35 @@ public:
      *                       If mipLevelCount > 1 and texels[i].fPixels != nullptr for any i > 0
      *                       then all levels must have non-null pixels. All levels must have
      *                       non-null pixels if GrCaps::createTextureMustSpecifyAllLevels() is true.
-     * @param mipLevelCount  the number of levels in 'texels'. May be 0, 1, or
+     * @param textureColorType The color type interpretation of the texture for the purpose of
+     *                       of uploading texel data.
+     * @param srcColorType   The color type of data in texels[].
+     * @param texelLevelCount the number of levels in 'texels'. May be 0, 1, or
      *                       floor(max((log2(desc.fWidth), log2(desc.fHeight)))). It must be the
      *                       latter if GrCaps::createTextureMustSpecifyAllLevels() is true.
      * @return  The texture object if successful, otherwise nullptr.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, const GrBackendFormat& format,
-                                   GrRenderable renderable, int renderTargetSampleCnt, SkBudgeted,
-                                   GrProtected isProtected, const GrMipLevel texels[],
-                                   int mipLevelCount);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc,
+                                   const GrBackendFormat& format,
+                                   GrRenderable renderable,
+                                   int renderTargetSampleCnt,
+                                   SkBudgeted,
+                                   GrProtected isProtected,
+                                   GrColorType textureColorType,
+                                   GrColorType srcColorType,
+                                   const GrMipLevel texels[],
+                                   int texelLevelCount);
 
     /**
      * Simplified createTexture() interface for when there is no initial texel data to upload.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, const GrBackendFormat& format,
-                                   GrRenderable renderable, int renderTargetSampleCnt,
-                                   SkBudgeted budgeted, GrProtected isProtected);
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc,
+                                   const GrBackendFormat& format,
+                                   GrRenderable renderable,
+                                   int renderTargetSampleCnt,
+                                   GrMipMapped,
+                                   SkBudgeted budgeted,
+                                   GrProtected isProtected);
 
     sk_sp<GrTexture> createCompressedTexture(int width, int height, const GrBackendFormat&,
                                              SkImage::CompressionType, SkBudgeted, const void* data,
@@ -210,17 +223,24 @@ public:
     /**
      * Updates the pixels in a rectangle of a surface.  No sRGB/linear conversions are performed.
      *
-     * @param surface           The surface to write to.
-     * @param left              left edge of the rectangle to write (inclusive)
-     * @param top               top edge of the rectangle to write (inclusive)
-     * @param width             width of rectangle to write in pixels.
-     * @param height            height of rectangle to write in pixels.
-     * @param surfaceColorType  the color type for this use of the surface.
-     * @param srcColorType      the color type of the source buffer.
-     * @param texels            array of mipmap levels containing texture data. Row bytes must be a
-     *                          multiple of srcColorType's bytes-per-pixel. Must be tight to level
-     *                          width if !caps->writePixelsRowBytesSupport().
-     * @param mipLevelCount     number of levels in 'texels'
+     * @param surface            The surface to write to.
+     * @param left               left edge of the rectangle to write (inclusive)
+     * @param top                top edge of the rectangle to write (inclusive)
+     * @param width              width of rectangle to write in pixels.
+     * @param height             height of rectangle to write in pixels.
+     * @param surfaceColorType   the color type for this use of the surface.
+     * @param srcColorType       the color type of the source buffer.
+     * @param texels             array of mipmap levels containing texture data. Row bytes must be a
+     *                           multiple of srcColorType's bytes-per-pixel. Must be tight to level
+     *                           width if !caps->writePixelsRowBytesSupport().
+     * @param mipLevelCount      number of levels in 'texels'
+     * @param prepForTexSampling After doing write pixels should the surface be prepared for texture
+     *                           sampling. This is currently only used by Vulkan for inline uploads
+     *                           to set that layout back to sampled after doing the upload. Inline
+     *                           uploads currently can happen between draws in a single op so it is
+     *                           not trivial to break up the GrOpsTask into two tasks when we see
+     *                           an inline upload. However, once we are able to support doing that
+     *                           we can remove this parameter.
      *
      * @return true if the write succeeded, false if not. The read can fail
      *              because of the surface doesn't support writing (e.g. read only),
@@ -229,17 +249,17 @@ public:
      */
     bool writePixels(GrSurface* surface, int left, int top, int width, int height,
                      GrColorType surfaceColorType, GrColorType srcColorType,
-                     const GrMipLevel texels[], int mipLevelCount);
+                     const GrMipLevel texels[], int mipLevelCount, bool prepForTexSampling = false);
 
     /**
      * Helper for the case of a single level.
      */
     bool writePixels(GrSurface* surface, int left, int top, int width, int height,
                      GrColorType surfaceColorType, GrColorType srcColorType, const void* buffer,
-                     size_t rowBytes) {
+                     size_t rowBytes, bool prepForTexSampling = false) {
         GrMipLevel mipLevel = {buffer, rowBytes};
         return this->writePixels(surface, left, top, width, height, surfaceColorType, srcColorType,
-                                 &mipLevel, 1);
+                                 &mipLevel, 1, prepForTexSampling);
     }
 
     /**
@@ -289,7 +309,7 @@ public:
                             GrGpuBuffer* transferBuffer, size_t offset);
 
     // Called to perform a surface to surface copy. Fallbacks to issuing a draw from the src to dst
-    // take place at the GrOpList level and this function implement faster copy paths. The rect
+    // take place at higher levels and this function implement faster copy paths. The rect
     // and point are pre-clipped. The src rect and implied dst rect are guaranteed to be within the
     // src/dst bounds and non-empty. They must also be in their exact device space coords, including
     // already being transformed for origin if need be. If canDiscardOutsideDstRect is set to true
@@ -310,16 +330,13 @@ public:
         return fSamplePatternDictionary.retrieveSampleLocations(samplePatternKey);
     }
 
-    // Returns a GrGpuRTCommandBuffer which GrOpLists send draw commands to instead of directly
-    // to the Gpu object. The 'bounds' rect is the content rect of the destination.
-    virtual GrGpuRTCommandBuffer* getCommandBuffer(
-            GrRenderTarget*, GrSurfaceOrigin, const SkRect& bounds,
-            const GrGpuRTCommandBuffer::LoadAndStoreInfo&,
-            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo&) = 0;
-
-    // Returns a GrGpuTextureCommandBuffer which GrOpLists send texture commands to instead of
-    // directly to the Gpu object.
-    virtual GrGpuTextureCommandBuffer* getCommandBuffer(GrTexture*, GrSurfaceOrigin) = 0;
+    // Returns a GrOpsRenderPass which GrOpsTasks send draw commands to instead of directly
+    // to the Gpu object. The 'bounds' rect is the content rect of the renderTarget.
+    virtual GrOpsRenderPass* getOpsRenderPass(
+            GrRenderTarget* renderTarget, GrSurfaceOrigin, const SkRect& bounds,
+            const GrOpsRenderPass::LoadAndStoreInfo&,
+            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+            const SkTArray<GrTextureProxy*, true>& sampledProxies) = 0;
 
     // Called by GrDrawingManager when flushing.
     // Provides a hook for post-flush actions (e.g. Vulkan command buffer submits). This will also
@@ -329,7 +346,7 @@ public:
                                       SkSurface::BackendSurfaceAccess access, const GrFlushInfo&,
                                       const GrPrepareForExternalIORequests&);
 
-    virtual void submit(GrGpuCommandBuffer*) = 0;
+    virtual void submit(GrOpsRenderPass*) = 0;
 
     virtual GrFence SK_WARN_UNUSED_RESULT insertFence() = 0;
     virtual bool waitFence(GrFence, uint64_t timeout = 1000) = 0;
@@ -450,6 +467,8 @@ public:
      */
     virtual void deleteBackendTexture(const GrBackendTexture&) = 0;
 
+    virtual bool precompileShader(const SkData& key, const SkData& data) { return false; }
+
 #if GR_TEST_UTILS
     /** Check a handle represents an actual texture in the backend API that has not been freed. */
     virtual bool isTestingOnlyBackendTexture(const GrBackendTexture&) const = 0;
@@ -540,15 +559,17 @@ private:
     virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
 
     // overridden by backend-specific derived class to create objects.
-    // Texture size and sample size will have already been validated in base class before
-    // onCreateTexture is called.
+    // Texture size, renderablility, format support, sample count will have already been validated
+    // in base class before onCreateTexture is called.
+    // If the ith bit is set in levelClearMask then the ith MIP level should be cleared.
     virtual sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
                                              const GrBackendFormat&,
                                              GrRenderable,
                                              int renderTargetSampleCnt,
-                                             SkBudgeted, GrProtected,
-                                             const GrMipLevel[],
-                                             int mipLevelCount) = 0;
+                                             SkBudgeted,
+                                             GrProtected,
+                                             int mipLevelCoont,
+                                             uint32_t levelClearMask) = 0;
     virtual sk_sp<GrTexture> onCreateCompressedTexture(int width, int height,
                                                        const GrBackendFormat&,
                                                        SkImage::CompressionType, SkBudgeted,
@@ -577,7 +598,8 @@ private:
     // overridden by backend-specific derived class to perform the surface write
     virtual bool onWritePixels(GrSurface*, int left, int top, int width, int height,
                                GrColorType surfaceColorType, GrColorType srcColorType,
-                               const GrMipLevel texels[], int mipLevelCount) = 0;
+                               const GrMipLevel texels[], int mipLevelCount,
+                               bool prepForTexSampling) = 0;
 
     // overridden by backend-specific derived class to perform the texture transfer
     virtual bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height,
@@ -605,6 +627,15 @@ private:
 #ifdef SK_ENABLE_DUMP_GPU
     virtual void onDumpJSON(SkJSONWriter*) const {}
 #endif
+
+    sk_sp<GrTexture> createTextureCommon(const GrSurfaceDesc& desc,
+                                         const GrBackendFormat& format,
+                                         GrRenderable renderable,
+                                         int renderTargetSampleCnt,
+                                         SkBudgeted budgeted,
+                                         GrProtected isProtected,
+                                         int mipLevelCnt,
+                                         uint32_t levelClearMask);
 
     void resetContext() {
         this->onResetContext(fResetBits);

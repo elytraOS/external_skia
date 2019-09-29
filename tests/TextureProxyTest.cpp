@@ -44,9 +44,9 @@ static sk_sp<GrTextureProxy> deferred_tex(skiatest::Reporter* reporter, GrContex
     const GrSurfaceDesc desc = make_desc();
     GrBackendFormat format = caps->getDefaultBackendFormat(kColorType, GrRenderable::kNo);
 
-    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(format, desc, GrRenderable::kNo, 1,
-                                                             kBottomLeft_GrSurfaceOrigin, fit,
-                                                             SkBudgeted::kYes, GrProtected::kNo);
+    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
+            format, desc, GrRenderable::kNo, 1, kBottomLeft_GrSurfaceOrigin, GrMipMapped::kNo, fit,
+            SkBudgeted::kYes, GrProtected::kNo);
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
@@ -60,9 +60,9 @@ static sk_sp<GrTextureProxy> deferred_texRT(skiatest::Reporter* reporter, GrCont
 
     GrBackendFormat format = caps->getDefaultBackendFormat(kColorType, GrRenderable::kYes);
 
-    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(format, desc, GrRenderable::kYes, 1,
-                                                             kBottomLeft_GrSurfaceOrigin, fit,
-                                                             SkBudgeted::kYes, GrProtected::kNo);
+    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
+            format, desc, GrRenderable::kYes, 1, kBottomLeft_GrSurfaceOrigin, GrMipMapped::kNo, fit,
+            SkBudgeted::kYes, GrProtected::kNo);
     // Only budgeted & wrapped external proxies get to carry uniqueKeys
     REPORTER_ASSERT(reporter, !proxy->getUniqueKey().isValid());
     return proxy;
@@ -107,9 +107,9 @@ static sk_sp<GrTextureProxy> create_wrapped_backend(GrContext* context, SkBackin
     GrBackendFormat format =
             proxyProvider->caps()->getDefaultBackendFormat(kColorType, GrRenderable::kYes);
 
-    *backingSurface = resourceProvider->createTexture(desc, format, GrRenderable::kNo, 1,
-                                                      SkBudgeted::kNo, GrProtected::kNo,
-                                                      GrResourceProvider::Flags::kNoPendingIO);
+    *backingSurface =
+            resourceProvider->createTexture(desc, format, GrRenderable::kNo, 1, GrMipMapped::kNo,
+                                            SkBudgeted::kNo, GrProtected::kNo);
     if (!(*backingSurface)) {
         return nullptr;
     }
@@ -250,10 +250,8 @@ static void invalidation_test(GrContext* context, skiatest::Reporter* reporter) 
     rasterImg = nullptr;        // this invalidates the uniqueKey
 
     // this forces the cache to respond to the inval msg
-    int maxNum;
-    size_t maxBytes;
-    context->getResourceCacheLimits(&maxNum, &maxBytes);
-    context->setResourceCacheLimits(maxNum-1, maxBytes);
+    size_t maxBytes = context->getResourceCacheLimit();
+    context->setResourceCacheLimit(maxBytes-1);
 
     REPORTER_ASSERT(reporter, 0 == proxyProvider->numUniqueKeyProxies_TestOnly());
     REPORTER_ASSERT(reporter, 1 == cache->getResourceCount());

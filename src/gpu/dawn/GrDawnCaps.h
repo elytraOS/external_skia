@@ -48,8 +48,6 @@ public:
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
-    bool canClearTextureOnCreation() const override;
-
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
@@ -78,7 +76,7 @@ private:
     SupportedRead onSupportedReadPixelsColorType(GrColorType srcColorType,
                                                  const GrBackendFormat& backendFormat,
                                                  GrColorType dstColorType) const override {
-        return { GrColorType::kUnknown, 0 };
+        return { srcColorType, GrColorTypeBytesPerPixel(srcColorType) };
     }
 
     typedef GrCaps INHERITED;

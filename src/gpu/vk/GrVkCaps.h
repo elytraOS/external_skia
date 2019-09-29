@@ -141,6 +141,11 @@ public:
     // Returns true if the device supports protected memory.
     bool supportsProtectedMemory() const { return fSupportsProtectedMemory; }
 
+    // Returns whether we prefer to record draws directly into a primary command buffer.
+    bool preferPrimaryOverSecondaryCommandBuffers() const {
+        return fPreferPrimaryOverSecondaryCommandBuffers;
+    }
+
     /**
      * Helpers used by canCopySurface. In all cases if the SampleCnt parameter is zero that means
      * the surface is not a render target, otherwise it is the number of samples in the render
@@ -165,8 +170,6 @@ public:
         int idx = static_cast<int>(colorType);
         return fColorTypeToFormatTable[idx];
     }
-
-    bool canClearTextureOnCreation() const override;
 
     GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
@@ -299,6 +302,8 @@ private:
     bool fSupportsYcbcrConversion = false;
 
     bool fSupportsProtectedMemory = false;
+
+    bool fPreferPrimaryOverSecondaryCommandBuffers = false;
 
     typedef GrCaps INHERITED;
 };

@@ -86,8 +86,12 @@ sk_sp<SkGpuDevice> SkGpuDevice::Make(GrContext* context,
     if (!renderTargetContext || context->priv().abandoned()) {
         return nullptr;
     }
+
+    SkColorType ct = GrColorTypeToSkColorType(renderTargetContext->colorSpaceInfo().colorType());
+
     unsigned flags;
-    if (!CheckAlphaTypeAndGetFlags(nullptr, init, &flags)) {
+    if (!context->colorTypeSupportedAsSurface(ct) ||
+        !CheckAlphaTypeAndGetFlags(nullptr, init, &flags)) {
         return nullptr;
     }
     return sk_sp<SkGpuDevice>(new SkGpuDevice(context, std::move(renderTargetContext), flags));
@@ -98,7 +102,8 @@ sk_sp<SkGpuDevice> SkGpuDevice::Make(GrContext* context, SkBudgeted budgeted,
                                      GrSurfaceOrigin origin, const SkSurfaceProps* props,
                                      GrMipMapped mipMapped, InitContents init) {
     unsigned flags;
-    if (!CheckAlphaTypeAndGetFlags(&info, init, &flags)) {
+    if (!context->colorTypeSupportedAsSurface(info.colorType()) ||
+        !CheckAlphaTypeAndGetFlags(&info, init, &flags)) {
         return nullptr;
     }
 
@@ -169,7 +174,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::filterTexture(SkSpecialImage* srcImg,
     SkImageFilter_Base::Context ctx(matrix, clipBounds, cache.get(), colorType,
                                     fRenderTargetContext->colorSpaceInfo().colorSpace(), srcImg);
 
-    return as_IFB(filter)->filterImage(ctx, offset);
+    return as_IFB(filter)->filterImage(ctx).imageAndOffset(offset);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -378,13 +383,13 @@ void SkGpuDevice::drawRect(const SkRect& rect, const SkPaint& paint) {
 }
 
 void SkGpuDevice::drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4],
-                                 SkCanvas::QuadAAFlags aaFlags, SkColor color, SkBlendMode mode) {
+                                 SkCanvas::QuadAAFlags aaFlags, const SkColor4f& color,
+                                 SkBlendMode mode) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawEdgeAAQuad", fContext.get());
 
-    SkPMColor4f dstColor = SkColor4fPrepForDst(SkColor4f::FromColor(color),
-                                              fRenderTargetContext->colorSpaceInfo())
-                           .premul();
+    SkPMColor4f dstColor =
+            SkColor4fPrepForDst(color, fRenderTargetContext->colorSpaceInfo()).premul();
 
     GrPaint grPaint;
     grPaint.setColor4f(dstColor);
@@ -726,8 +731,7 @@ bool SkGpuDevice::shouldTileImageID(uint32_t imageID,
     // assumption here is that sw bitmap size is a good proxy for its size as
     // a texture
     size_t bmpSize = area * sizeof(SkPMColor);  // assume 32bit pixels
-    size_t cacheSize;
-    fContext->getResourceCacheLimits(nullptr, &cacheSize);
+    size_t cacheSize = fContext->getResourceCacheLimit();
     if (bmpSize < cacheSize / 2) {
         return false;
     }
@@ -846,10 +850,8 @@ void SkGpuDevice::drawTiledBitmap(const SkBitmap& bitmap,
     for (int x = 0; x <= nx; x++) {
         for (int y = 0; y <= ny; y++) {
             SkRect tileR;
-            tileR.set(SkIntToScalar(x * tileSize),
-                      SkIntToScalar(y * tileSize),
-                      SkIntToScalar((x + 1) * tileSize),
-                      SkIntToScalar((y + 1) * tileSize));
+            tileR.setLTRB(SkIntToScalar(x * tileSize),       SkIntToScalar(y * tileSize),
+                          SkIntToScalar((x + 1) * tileSize), SkIntToScalar((y + 1) * tileSize));
 
             if (!SkRect::Intersects(tileR, clippedSrcRect)) {
                 continue;
@@ -1202,6 +1204,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkBitmap& bitmap) {
                                                rect,
                                                bitmap.getGenerationID(),
                                                std::move(proxy),
+                                               SkColorTypeToGrColorType(bitmap.colorType()),
                                                bitmap.refColorSpace(),
                                                &this->surfaceProps());
 }
@@ -1215,6 +1218,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkImage* image) {
                                                    SkIRect::MakeWH(image->width(), image->height()),
                                                    image->uniqueID(),
                                                    std::move(proxy),
+                                                   SkColorTypeToGrColorType(image->colorType()),
                                                    image->refColorSpace(),
                                                    &this->surfaceProps());
     } else if (image->peekPixels(&pm)) {
@@ -1227,42 +1231,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::makeSpecial(const SkImage* image) {
     }
 }
 
-sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial() {
-    // If we are wrapping a vulkan secondary command buffer, then we can't snap off a special image
-    // since it would require us to make a copy of the underlying VkImage which we don't have access
-    // to. Additionaly we can't stop and start the render pass that is used with the secondary
-    // command buffer.
-    if (this->accessRenderTargetContext()->wrapsVkSecondaryCB()) {
-        return nullptr;
-    }
-
-    sk_sp<GrTextureProxy> proxy(this->accessRenderTargetContext()->asTextureProxyRef());
-    if (!proxy) {
-        // When the device doesn't have a texture, we create a temporary texture.
-        // TODO: we should actually only copy the portion of the source needed to apply the image
-        // filter
-        proxy = GrSurfaceProxy::Copy(fContext.get(),
-                                     this->accessRenderTargetContext()->asSurfaceProxy(),
-                                     GrMipMapped::kNo,
-                                     SkBackingFit::kApprox,
-                                     SkBudgeted::kYes);
-        if (!proxy) {
-            return nullptr;
-        }
-    }
-
-    const SkImageInfo ii = this->imageInfo();
-    const SkIRect srcRect = SkIRect::MakeWH(ii.width(), ii.height());
-
-    return SkSpecialImage::MakeDeferredFromGpu(fContext.get(),
-                                               srcRect,
-                                               kNeedNewImageUniqueID_SpecialImage,
-                                               std::move(proxy),
-                                               ii.refColorSpace(),
-                                               &this->surfaceProps());
-}
-
-sk_sp<SkSpecialImage> SkGpuDevice::snapBackImage(const SkIRect& subset) {
+sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial(const SkIRect& subset, bool forceCopy) {
     GrRenderTargetContext* rtc = this->accessRenderTargetContext();
 
     // If we are wrapping a vulkan secondary command buffer, then we can't snap off a special image
@@ -1273,22 +1242,35 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapBackImage(const SkIRect& subset) {
         return nullptr;
     }
 
-
-    GrContext* ctx = this->context();
     SkASSERT(rtc->asSurfaceProxy());
 
-    auto srcProxy =
-            GrSurfaceProxy::Copy(ctx, rtc->asSurfaceProxy(), rtc->mipMapped(), subset,
-                                 SkBackingFit::kApprox, rtc->asSurfaceProxy()->isBudgeted());
-    if (!srcProxy) {
-        return nullptr;
+    SkIRect finalSubset = subset;
+    sk_sp<GrTextureProxy> proxy(rtc->asTextureProxyRef());
+    if (forceCopy || !proxy) {
+        // When the device doesn't have a texture, or a copy is requested, we create a temporary
+        // texture that matches the device contents
+        proxy = GrSurfaceProxy::Copy(fContext.get(),
+                                     rtc->asSurfaceProxy(),
+                                     GrMipMapped::kNo,      // Don't auto generate mips
+                                     subset,
+                                     SkBackingFit::kApprox,
+                                     SkBudgeted::kYes);     // Always budgeted
+        if (!proxy) {
+            return nullptr;
+        }
+
+        // Since this copied only the requested subset, the special image wrapping the proxy no
+        // longer needs the original subset.
+        finalSubset = SkIRect::MakeSize(proxy->isize());
     }
 
-    // Note, can't move srcProxy since we also refer to this in the 2nd parameter
+    GrColorType ct = SkColorTypeToGrColorType(this->imageInfo().colorType());
+
     return SkSpecialImage::MakeDeferredFromGpu(fContext.get(),
-                                               SkIRect::MakeSize(srcProxy->isize()),
+                                               finalSubset,
                                                kNeedNewImageUniqueID_SpecialImage,
-                                               srcProxy,
+                                               std::move(proxy),
+                                               ct,
                                                this->imageInfo().refColorSpace(),
                                                &this->surfaceProps());
 }
@@ -1303,7 +1285,7 @@ void SkGpuDevice::drawDevice(SkBaseDevice* device,
 
     // drawDevice is defined to be in device coords.
     SkGpuDevice* dev = static_cast<SkGpuDevice*>(device);
-    sk_sp<SkSpecialImage> srcImg(dev->snapSpecial());
+    sk_sp<SkSpecialImage> srcImg(dev->snapSpecial(SkIRect::MakeWH(dev->width(), dev->height())));
     if (!srcImg) {
         return;
     }
@@ -1642,18 +1624,13 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
     SkBackingFit fit = kNever_TileUsage == cinfo.fTileUsage ? SkBackingFit::kApprox
                                                             : SkBackingFit::kExact;
 
-    GrColorType colorType = fRenderTargetContext->colorSpaceInfo().colorType();
-    if (colorType == GrColorType::kRGBA_1010102) {
-        // If the original device is 1010102, fall back to 8888 so that we have a usable alpha
-        // channel in the layer.
-        colorType = GrColorType::kRGBA_8888;
-    }
+    SkASSERT(cinfo.fInfo.colorType() != kRGBA_1010102_SkColorType);
 
-    auto rtc = fContext->priv().makeDeferredRenderTargetContext(
+    auto rtc = fContext->priv().makeDeferredRenderTargetContextWithFallback(
             fit,
             cinfo.fInfo.width(),
             cinfo.fInfo.height(),
-            colorType,
+            SkColorTypeToGrColorType(cinfo.fInfo.colorType()),
             fRenderTargetContext->colorSpaceInfo().refColorSpace(),
             fRenderTargetContext->numSamples(),
             GrMipMapped::kNo,
