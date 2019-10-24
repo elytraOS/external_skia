@@ -25,6 +25,7 @@ class GrShaderCaps;
 namespace GrQuadPerEdgeAA {
     using Saturate = GrTextureOp::Saturate;
 
+    enum class CoverageMode { kNone, kWithPosition, kWithColor };
     enum class Domain : bool { kNo = false, kYes = true };
     enum class ColorType { kNone, kByte, kHalf, kLast = kHalf };
     static const int kColorTypeCount = static_cast<int>(ColorType::kLast) + 1;
@@ -38,6 +39,16 @@ namespace GrQuadPerEdgeAA {
     // GPAttributes maintains. If hasLocalCoords is false, then the local quad type can be ignored.
     struct VertexSpec {
     public:
+        VertexSpec()
+                : fDeviceQuadType(0)     // kAxisAligned
+                , fLocalQuadType(0)      // kAxisAligned
+                , fHasLocalCoords(false)
+                , fColorType(0)          // kNone
+                , fHasDomain(false)
+                , fUsesCoverageAA(false)
+                , fCompatibleWithCoverageAsAlpha(false)
+                , fRequiresGeometryDomain(false) { }
+
         VertexSpec(GrQuad::Type deviceQuadType, ColorType colorType, GrQuad::Type localQuadType,
                    bool hasLocalCoords, Domain domain, GrAAType aa, bool coverageAsAlpha)
                 : fDeviceQuadType(static_cast<unsigned>(deviceQuadType))
@@ -65,6 +76,10 @@ namespace GrQuadPerEdgeAA {
         int localDimensionality() const;
 
         int verticesPerQuad() const { return fUsesCoverageAA ? 8 : 4; }
+
+        CoverageMode coverageMode() const;
+        size_t vertexSize() const;
+
     private:
         static_assert(GrQuad::kTypeCount <= 4, "GrQuad::Type doesn't fit in 2 bits");
         static_assert(kColorTypeCount <= 4, "Color doesn't fit in 2 bits");
@@ -84,7 +99,7 @@ namespace GrQuadPerEdgeAA {
     sk_sp<GrGeometryProcessor> MakeProcessor(const VertexSpec& spec);
 
     sk_sp<GrGeometryProcessor> MakeTexturedProcessor(
-            const VertexSpec& spec, const GrShaderCaps& caps, GrTextureType textureType,
+            const VertexSpec& spec, const GrShaderCaps& caps, const GrBackendFormat&,
             const GrSamplerState& samplerState, const GrSwizzle& swizzle, uint32_t extraSamplerKey,
             sk_sp<GrColorSpaceXform> textureColorSpaceXform, Saturate saturate);
 

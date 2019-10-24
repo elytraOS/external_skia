@@ -14,17 +14,19 @@
 sk_sp<GrRenderTask> GrCopyRenderTask::Make(sk_sp<GrSurfaceProxy> srcProxy,
                                            const SkIRect& srcRect,
                                            sk_sp<GrSurfaceProxy> dstProxy,
-                                           const SkIPoint& dstPoint) {
+                                           const SkIPoint& dstPoint,
+                                           const GrCaps* caps) {
     SkASSERT(dstProxy);
     SkASSERT(srcProxy);
     SkIRect clippedSrcRect;
     SkIPoint clippedDstPoint;
     // If the rect is outside the srcProxy or dstProxy then we've already succeeded.
-    if (!GrClipSrcRectAndDstPoint(dstProxy->isize(), srcProxy->isize(), srcRect, dstPoint,
+    if (!GrClipSrcRectAndDstPoint(dstProxy->dimensions(), srcProxy->dimensions(), srcRect, dstPoint,
                                   &clippedSrcRect, &clippedDstPoint)) {
         return nullptr;
     }
-    if (GrPixelConfigIsCompressed(dstProxy->config())) {
+
+    if (caps->isFormatCompressed(dstProxy->backendFormat())) {
         return nullptr;
     }
 

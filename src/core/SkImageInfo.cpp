@@ -41,9 +41,11 @@ bool SkColorTypeIsAlwaysOpaque(SkColorType ct) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-int SkImageInfo::bytesPerPixel() const { return SkColorTypeBytesPerPixel(fColorType); }
+int SkColorInfo::bytesPerPixel() const { return SkColorTypeBytesPerPixel(fColorType); }
 
-int SkImageInfo::shiftPerPixel() const { return SkColorTypeShiftPerPixel(fColorType); }
+int SkColorInfo::shiftPerPixel() const { return SkColorTypeShiftPerPixel(fColorType); }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 size_t SkImageInfo::computeOffset(int x, int y, size_t rowBytes) const {
     SkASSERT((unsigned)x < (unsigned)this->width());
@@ -58,13 +60,21 @@ size_t SkImageInfo::computeByteSize(size_t rowBytes) const {
     SkSafeMath safe;
     size_t bytes = safe.add(safe.mul(safe.addInt(this->height(), -1), rowBytes),
                             safe.mul(this->width(), this->bytesPerPixel()));
-    return safe ? bytes : SIZE_MAX;
+    return safe.ok() ? bytes : SIZE_MAX;
 }
 
 SkImageInfo SkImageInfo::MakeS32(int width, int height, SkAlphaType at) {
-    return SkImageInfo(width, height, kN32_SkColorType, at,
-                       SkColorSpace::MakeSRGB());
+    return SkImageInfo({width, height}, {kN32_SkColorType, at, SkColorSpace::MakeSRGB()});
 }
+
+#ifdef SK_DEBUG
+void SkImageInfo::validate() const {
+    SkASSERT(fDimensions.width() >= 0);
+    SkASSERT(fDimensions.height() >= 0);
+    SkASSERT(SkColorTypeIsValid(this->colorType()));
+    SkASSERT(SkAlphaTypeIsValid(this->alphaType()));
+}
+#endif
 
 bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
                                   SkAlphaType* canonical) {
@@ -139,7 +149,7 @@ bool SkReadPixelsRec::trim(int srcWidth, int srcHeight) {
     // we negate and add them so UBSAN (pointer-overflow) doesn't get confused.
     fPixels = ((char*)fPixels + -y*fRowBytes + -x*fInfo.bytesPerPixel());
     // the intersect may have shrunk info's logical size
-    fInfo = fInfo.makeWH(srcR.width(), srcR.height());
+    fInfo = fInfo.makeDimensions(srcR.size());
     fX = srcR.x();
     fY = srcR.y();
 
@@ -176,7 +186,7 @@ bool SkWritePixelsRec::trim(int dstWidth, int dstHeight) {
     // we negate and add them so UBSAN (pointer-overflow) doesn't get confused.
     fPixels = ((const char*)fPixels + -y*fRowBytes + -x*fInfo.bytesPerPixel());
     // the intersect may have shrunk info's logical size
-    fInfo = fInfo.makeWH(dstR.width(), dstR.height());
+    fInfo = fInfo.makeDimensions(dstR.size());
     fX = dstR.x();
     fY = dstR.y();
 

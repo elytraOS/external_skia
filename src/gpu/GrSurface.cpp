@@ -15,29 +15,31 @@
 #include "src/core/SkMathPriv.h"
 #include "src/gpu/SkGr.h"
 
-size_t GrSurface::ComputeSize(GrPixelConfig config,
-                              int width,
-                              int height,
+size_t GrSurface::ComputeSize(const GrCaps& caps,
+                              const GrBackendFormat& format,
+                              SkISize dimensions,
                               int colorSamplesPerPixel,
                               GrMipMapped mipMapped,
                               bool binSize) {
     size_t colorSize;
 
-    width  = binSize ? GrResourceProvider::MakeApprox(width)  : width;
-    height = binSize ? GrResourceProvider::MakeApprox(height) : height;
+    if (binSize) {
+        dimensions = GrResourceProvider::MakeApprox(dimensions);
+    }
 
-    SkASSERT(kUnknown_GrPixelConfig != config);
-    if (GrPixelConfigIsCompressed(config)) {
-        colorSize = GrCompressedFormatDataSize(config, width, height);
+    // Just setting a defualt value here to appease warnings on uninitialized object.
+    SkImage::CompressionType compressionType = SkImage::kETC1_CompressionType;
+    if (caps.isFormatCompressed(format, &compressionType)) {
+        colorSize = GrCompressedFormatDataSize(compressionType, dimensions);
     } else {
-        colorSize = (size_t)width * height * GrBytesPerPixel(config);
+        colorSize = (size_t)dimensions.width() * dimensions.height() * caps.bytesPerPixel(format);
     }
     SkASSERT(colorSize > 0);
 
     size_t finalSize = colorSamplesPerPixel * colorSize;
 
     if (GrMipMapped::kYes == mipMapped) {
-        // We don't have to worry about the mipmaps being a different size than
+        // We don't have to worry about the mipmaps being a different dimensions than
         // we'd expect because we never change fDesc.fWidth/fHeight.
         finalSize += colorSize/3;
     }

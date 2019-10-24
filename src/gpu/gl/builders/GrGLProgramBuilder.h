@@ -47,10 +47,8 @@ public:
      * be supplied to skip the shader compilation.
      * @return true if generation was successful.
      */
-    static GrGLProgram* CreateProgram(GrRenderTarget*, GrSurfaceOrigin,
-                                      const GrPrimitiveProcessor&,
-                                      const GrTextureProxy* const primProcProxies[],
-                                      const GrPipeline&,
+    static GrGLProgram* CreateProgram(GrRenderTarget*,
+                                      const GrProgramInfo&,
                                       GrProgramDesc*,
                                       GrGLGpu*,
                                       const GrGLPrecompiledProgram* = nullptr);
@@ -62,9 +60,7 @@ public:
     GrGLGpu* gpu() const { return fGpu; }
 
 private:
-    GrGLProgramBuilder(GrGLGpu*, GrRenderTarget*, GrSurfaceOrigin,
-                       const GrPipeline&, const GrPrimitiveProcessor&,
-                       const GrTextureProxy* const primProcProxies[], GrProgramDesc*);
+    GrGLProgramBuilder(GrGLGpu*, GrRenderTarget*, const GrProgramInfo&, GrProgramDesc*);
 
     void addInputVars(const SkSL::Program::Inputs& inputs);
     bool compileAndAttachShaders(const SkSL::String& glsl,
@@ -77,7 +73,7 @@ private:
                                  bool bindAttribLocations);
     void storeShaderInCache(const SkSL::Program::Inputs& inputs, GrGLuint programID,
                             const SkSL::String shaders[], bool isSkSL,
-                            const SkSL::Program::Settings& settings);
+                            SkSL::Program::Settings* settings);
     GrGLProgram* finalize(const GrGLPrecompiledProgram*);
     void bindProgramResourceLocations(GrGLuint programID);
     bool checkLinkStatus(GrGLuint programID, GrContextOptions::ShaderErrorHandler* errorHandler,

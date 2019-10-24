@@ -93,10 +93,6 @@ public:
         this->registerWithCacheWrapped(GrWrapCacheable::kNo);
     }
 
-    ResolveType getResolveType() const override {
-        return (this->requiresManualMSAAResolve()) ?
-                kCanResolve_ResolveType : kAutoResolves_ResolveType;
-    }
     bool canAttemptStencilAttachment() const override { return true; }
     bool completeStencilAttachment() override { return true; }
 
@@ -106,7 +102,8 @@ public:
             // Add one to account for the resolve buffer.
             ++numColorSamples;
         }
-        return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
+        const GrCaps& caps = *this->getGpu()->caps();
+        return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
                                       numColorSamples, GrMipMapped::kNo);
     }
 
@@ -190,9 +187,9 @@ private:
             // Add one to account for the resolve buffer.
             ++numColorSamples;
         }
-        return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
-                                      numColorSamples,
-                                      this->texturePriv().mipMapped());
+        const GrCaps& caps = *this->getGpu()->caps();
+        return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
+                                      numColorSamples, this->texturePriv().mipMapped());
     }
 
     // This avoids an inherits via dominance warning on MSVC.

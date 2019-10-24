@@ -20,9 +20,9 @@ namespace SkSL {
 
 #if defined(SK_ENABLE_SKSL_INTERPRETER)
 
-namespace Interpreter {
-
 constexpr int VecWidth = ByteCode::kVecWidth;
+
+struct Interpreter {
 
 using F32 = skvx::Vec<VecWidth, float>;
 using I32 = skvx::Vec<VecWidth, int32_t>;
@@ -54,7 +54,7 @@ using U32 = skvx::Vec<VecWidth, uint32_t>;
     VECTOR_DISASSEMBLE_NO_COUNT(op, text)            \
     case ByteCodeInstruction::op##N: printf(text "N %d", READ8()); break;
 
-static const uint8_t* disassemble_instruction(const uint8_t* ip) {
+static const uint8_t* DisassembleInstruction(const uint8_t* ip) {
     switch ((ByteCodeInstruction) (intptr_t) READ_INST()) {
         VECTOR_MATRIX_DISASSEMBLE(kAddF, "addf")
         VECTOR_DISASSEMBLE(kAddI, "addi")
@@ -104,6 +104,10 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         case ByteCodeInstruction::kLoadGlobal2: printf("loadglobal2 %d", READ16() >> 8); break;
         case ByteCodeInstruction::kLoadGlobal3: printf("loadglobal3 %d", READ16() >> 8); break;
         case ByteCodeInstruction::kLoadGlobal4: printf("loadglobal4 %d", READ16() >> 8); break;
+        case ByteCodeInstruction::kLoadUniform: printf("loaduniform %d", READ16() >> 8); break;
+        case ByteCodeInstruction::kLoadUniform2: printf("loaduniform2 %d", READ16() >> 8); break;
+        case ByteCodeInstruction::kLoadUniform3: printf("loaduniform3 %d", READ16() >> 8); break;
+        case ByteCodeInstruction::kLoadUniform4: printf("loaduniform4 %d", READ16() >> 8); break;
         case ByteCodeInstruction::kLoadSwizzle: {
             int target = READ8();
             int count = READ8();
@@ -122,8 +126,19 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
             }
             break;
         }
+        case ByteCodeInstruction::kLoadSwizzleUniform: {
+            int target = READ8();
+            int count = READ8();
+            printf("loadswizzleuniform %d %d", target, count);
+            for (int i = 0; i < count; ++i) {
+                printf(", %d", READ8());
+            }
+            break;
+        }
         case ByteCodeInstruction::kLoadExtended: printf("loadextended %d", READ8()); break;
         case ByteCodeInstruction::kLoadExtendedGlobal: printf("loadextendedglobal %d", READ8());
+            break;
+        case ByteCodeInstruction::kLoadExtendedUniform: printf("loadextendeduniform %d", READ8());
             break;
         case ByteCodeInstruction::kMatrixToMatrix: {
             int srcCols = READ8();
@@ -168,6 +183,9 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
             printf("scalartomatrix %dx%d", cols, rows);
             break;
         }
+        case ByteCodeInstruction::kShiftLeft: printf("shl %d", READ8()); break;
+        case ByteCodeInstruction::kShiftRightS: printf("shrs %d", READ8()); break;
+        case ByteCodeInstruction::kShiftRightU: printf("shru %d", READ8()); break;
         VECTOR_DISASSEMBLE(kSin, "sin")
         VECTOR_DISASSEMBLE_NO_COUNT(kSqrt, "sqrt")
         case ByteCodeInstruction::kStore: printf("store %d", READ8()); break;
@@ -285,6 +303,45 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
         NEXT();                                       \
     }
 
+// A naive implementation of / or % using skvx operations will likely crash with a divide by zero
+// in inactive vector lanesm, so we need to be sure to avoid masked-off lanes.
+#define VECTOR_BINARY_MASKED_OP(base, field, op)            \
+    LABEL(base ## 4)                                        \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-4].field[i] op ## = sp[0].field[i];     \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+        /* fall through */                                  \
+    LABEL(base ## 3) {                                      \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-ip[0]].field[i] op ## = sp[0].field[i]; \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+    }   /* fall through */                                  \
+    LABEL(base ## 2) {                                      \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-ip[0]].field[i] op ## = sp[0].field[i]; \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+    }   /* fall through */                                  \
+    LABEL(base) {                                           \
+        for (int i = 0; i < VecWidth; ++i) {                \
+            if (mask()[i]) {                                \
+                sp[-ip[0]].field[i] op ## = sp[0].field[i]; \
+            }                                               \
+        }                                                   \
+        POP();                                              \
+        ++ip;                                               \
+        NEXT();                                             \
+    }
+
+
 #define VECTOR_MATRIX_BINARY_OP(base, field, op)          \
     VECTOR_BINARY_OP(base, field, op)                     \
     LABEL(base ## N) {                                    \
@@ -363,18 +420,9 @@ static const uint8_t* disassemble_instruction(const uint8_t* ip) {
 
 union VValue {
     VValue() {}
-
-    VValue(F32 f)
-        : fFloat(f) {
-    }
-
-    VValue(I32 s)
-        : fSigned(s) {
-    }
-
-    VValue(U32 u)
-        : fUnsigned(u) {
-    }
+    VValue(F32 f) : fFloat(f) {}
+    VValue(I32 s) : fSigned(s) {}
+    VValue(U32 u) : fUnsigned(u) {}
 
     F32 fFloat;
     I32 fSigned;
@@ -388,15 +436,13 @@ struct StackFrame {
     int fParameterCount;
 };
 
-// TODO: trunc on integers?
-template <typename T>
-static T vec_mod(T a, T b) {
+static F32 VecMod(F32 a, F32 b) {
     return a - skvx::trunc(a / b) * b;
 }
 
 #define spf(index)  sp[index].fFloat
 
-static void call_external(const ByteCode* byteCode, const uint8_t*& ip, VValue*& sp,
+static void CallExternal(const ByteCode* byteCode, const uint8_t*& ip, VValue*& sp,
                           int baseIndex, I32 mask) {
     int argumentCount = READ8();
     int returnCount = READ8();
@@ -423,7 +469,7 @@ static void call_external(const ByteCode* byteCode, const uint8_t*& ip, VValue*&
     sp += returnCount - 1;
 }
 
-static void inverse2x2(VValue* sp) {
+static void Inverse2x2(VValue* sp) {
     F32 a = sp[-3].fFloat,
         b = sp[-2].fFloat,
         c = sp[-1].fFloat,
@@ -435,7 +481,7 @@ static void inverse2x2(VValue* sp) {
     sp[ 0].fFloat = a * idet;
 }
 
-static void inverse3x3(VValue* sp) {
+static void Inverse3x3(VValue* sp) {
     F32 a11 = sp[-8].fFloat, a12 = sp[-5].fFloat, a13 = sp[-2].fFloat,
         a21 = sp[-7].fFloat, a22 = sp[-4].fFloat, a23 = sp[-1].fFloat,
         a31 = sp[-6].fFloat, a32 = sp[-3].fFloat, a33 = sp[ 0].fFloat;
@@ -452,7 +498,7 @@ static void inverse3x3(VValue* sp) {
     sp[ 0].fFloat = (a11 * a22 - a12 * a21) * idet;
 }
 
-static void inverse4x4(VValue* sp) {
+static void Inverse4x4(VValue* sp) {
     F32 a00 = spf(-15), a10 = spf(-11), a20 = spf( -7), a30 = spf( -3),
         a01 = spf(-14), a11 = spf(-10), a21 = spf( -6), a31 = spf( -2),
         a02 = spf(-13), a12 = spf( -9), a22 = spf( -5), a32 = spf( -1),
@@ -505,9 +551,9 @@ static void inverse4x4(VValue* sp) {
     spf(  0) = a20 * b03 - a21 * b01 + a22 * b00;
 }
 
-static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack,
-                     float* outReturn[], VValue globals[], bool stripedOutput, int N,
-                     int baseIndex) {
+static bool InnerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue* stack,
+                     float* outReturn[], VValue globals[], const float uniforms[],
+                     bool stripedOutput, int N, int baseIndex) {
 #ifdef SKSLC_THREADED_CODE
     static const void* labels[] = {
         // If you aren't familiar with it, the &&label syntax is the GCC / Clang "labels as values"
@@ -549,10 +595,13 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         &&kInverse4x4,
         VECTOR_LABELS(kLoad),
         VECTOR_LABELS(kLoadGlobal),
+        VECTOR_LABELS(kLoadUniform),
         &&kLoadSwizzle,
         &&kLoadSwizzleGlobal,
+        &&kLoadSwizzleUniform,
         &&kLoadExtended,
         &&kLoadExtendedGlobal,
+        &&kLoadExtendedUniform,
         &&kMatrixToMatrix,
         &&kMatrixMultiply,
         VECTOR_MATRIX_LABELS(kNegateF),
@@ -570,6 +619,9 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         &&kReserve,
         &&kReturn,
         &&kScalarToMatrix,
+        &&kShiftLeft,
+        &&kShiftRightS,
+        &&kShiftRightU,
         VECTOR_LABELS(kSin),
         VECTOR_LABELS(kSqrt),
         VECTOR_LABELS(kStore),
@@ -637,10 +689,13 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     CHECK_LABEL(kInverse4x4);
     CHECK_VECTOR_LABELS(kLoad);
     CHECK_VECTOR_LABELS(kLoadGlobal);
+    CHECK_VECTOR_LABELS(kLoadUniform);
     CHECK_LABEL(kLoadSwizzle);
     CHECK_LABEL(kLoadSwizzleGlobal);
+    CHECK_LABEL(kLoadSwizzleUniform);
     CHECK_LABEL(kLoadExtended);
     CHECK_LABEL(kLoadExtendedGlobal);
+    CHECK_LABEL(kLoadExtendedUniform);
     CHECK_LABEL(kMatrixToMatrix);
     CHECK_LABEL(kMatrixMultiply);
     CHECK_VECTOR_MATRIX_LABELS(kNegateF);
@@ -658,6 +713,9 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     CHECK_LABEL(kReserve);
     CHECK_LABEL(kReturn);
     CHECK_LABEL(kScalarToMatrix);
+    CHECK_LABEL(kShiftLeft);
+    CHECK_LABEL(kShiftRightS);
+    CHECK_LABEL(kShiftRightU);
     CHECK_VECTOR_LABELS(kSin);
     CHECK_VECTOR_LABELS(kSqrt);
     CHECK_VECTOR_LABELS(kStore);
@@ -781,7 +839,7 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     }
 
     LABEL(kCallExternal) {
-        call_external(byteCode, ip, sp, baseIndex, mask());
+        CallExternal(byteCode, ip, sp, baseIndex, mask());
         NEXT();
     }
 
@@ -830,8 +888,8 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
 
     VECTOR_UNARY_FN_VEC(kCos, cosf)
 
-    VECTOR_BINARY_OP(kDivideS, fSigned, /)
-    VECTOR_BINARY_OP(kDivideU, fUnsigned, /)
+    VECTOR_BINARY_MASKED_OP(kDivideS, fSigned, /)
+    VECTOR_BINARY_MASKED_OP(kDivideU, fUnsigned, /)
     VECTOR_MATRIX_BINARY_OP(kDivideF, fFloat, /)
 
     LABEL(kDup4) PUSH(sp[1 - ip[0]]);
@@ -849,15 +907,15 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     }
 
     LABEL(kInverse2x2) {
-        inverse2x2(sp);
+        Inverse2x2(sp);
         NEXT();
     }
     LABEL(kInverse3x3) {
-        inverse3x3(sp);
+        Inverse3x3(sp);
         NEXT();
     }
     LABEL(kInverse4x4) {
-        inverse4x4(sp);
+        Inverse4x4(sp);
         NEXT();
     }
 
@@ -873,6 +931,14 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
     LABEL(kLoadGlobal3) sp[3] = globals[ip[1] + 2];
     LABEL(kLoadGlobal2) sp[2] = globals[ip[1] + 1];
     LABEL(kLoadGlobal)  sp[1] = globals[ip[1] + 0];
+                        sp += ip[0];
+                        ip += 2;
+                        NEXT();
+
+    LABEL(kLoadUniform4) sp[4].fFloat = uniforms[ip[1] + 3];
+    LABEL(kLoadUniform3) sp[3].fFloat = uniforms[ip[1] + 2];
+    LABEL(kLoadUniform2) sp[2].fFloat = uniforms[ip[1] + 1];
+    LABEL(kLoadUniform)  sp[1].fFloat = uniforms[ip[1] + 0];
                         sp += ip[0];
                         ip += 2;
                         NEXT();
@@ -907,6 +973,21 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         NEXT();
     }
 
+    LABEL(kLoadExtendedUniform) {
+        int count = READ8();
+        I32 src = POP().fSigned;
+        I32 m = mask();
+        for (int i = 0; i < count; ++i) {
+            for (int j = 0; j < VecWidth; ++j) {
+                if (m[j]) {
+                    sp[i + 1].fFloat[j] = uniforms[src[j] + i];
+                }
+            }
+        }
+        sp += count;
+        NEXT();
+    }
+
     LABEL(kLoadSwizzle) {
         int src = READ8();
         int count = READ8();
@@ -922,6 +1003,16 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         int count = READ8();
         for (int i = 0; i < count; ++i) {
             PUSH(globals[src + *(ip + i)]);
+        }
+        ip += count;
+        NEXT();
+    }
+
+    LABEL(kLoadSwizzleUniform) {
+        int src = READ8();
+        int count = READ8();
+        for (int i = 0; i < count; ++i) {
+            PUSH(F32(uniforms[src + *(ip + i)]));
         }
         ip += count;
         NEXT();
@@ -1030,9 +1121,9 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         NEXT();
     }
 
-    VECTOR_BINARY_FN(kRemainderF, fFloat, vec_mod<F32>)
-    VECTOR_BINARY_FN(kRemainderS, fSigned, vec_mod<I32>)
-    VECTOR_BINARY_FN(kRemainderU, fUnsigned, vec_mod<U32>)
+    VECTOR_BINARY_FN(kRemainderF, fFloat, VecMod)
+    VECTOR_BINARY_MASKED_OP(kRemainderS, fSigned, %)
+    VECTOR_BINARY_MASKED_OP(kRemainderU, fUnsigned, %)
 
     LABEL(kReserve)
         sp += READ8();
@@ -1091,6 +1182,16 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
         }
         NEXT();
     }
+
+    LABEL(kShiftLeft)
+        sp[0] = sp[0].fSigned << READ8();
+        NEXT();
+    LABEL(kShiftRightS)
+        sp[0] = sp[0].fSigned >> READ8();
+        NEXT();
+    LABEL(kShiftRightU)
+        sp[0] = sp[0].fUnsigned >> READ8();
+        NEXT();
 
     VECTOR_UNARY_FN_VEC(kSin, sinf)
     VECTOR_UNARY_FN(kSqrt, skvx::sqrt, fFloat)
@@ -1304,7 +1405,7 @@ static bool innerRun(const ByteCode* byteCode, const ByteCodeFunction* f, VValue
 #endif
 }
 
-} // namespace Interpreter
+}; // class Interpreter
 
 #endif // SK_ENABLE_SKSL_INTERPRETER
 
@@ -1315,7 +1416,7 @@ void ByteCodeFunction::disassemble() const {
     const uint8_t* ip = fCode.data();
     while (ip < fCode.data() + fCode.size()) {
         printf("%d: ", (int)(ip - fCode.data()));
-        ip = Interpreter::disassemble_instruction(ip);
+        ip = Interpreter::DisassembleInstruction(ip);
         printf("\n");
     }
 #endif
@@ -1400,10 +1501,15 @@ void ByteCodeFunction::preprocess(const void* labels[]) {
             case ByteCodeInstruction::kLoadGlobal:
             case ByteCodeInstruction::kLoadGlobal2:
             case ByteCodeInstruction::kLoadGlobal3:
-            case ByteCodeInstruction::kLoadGlobal4: READ16(); break;
+            case ByteCodeInstruction::kLoadGlobal4:
+            case ByteCodeInstruction::kLoadUniform:
+            case ByteCodeInstruction::kLoadUniform2:
+            case ByteCodeInstruction::kLoadUniform3:
+            case ByteCodeInstruction::kLoadUniform4: READ16(); break;
 
             case ByteCodeInstruction::kLoadSwizzle:
-            case ByteCodeInstruction::kLoadSwizzleGlobal: {
+            case ByteCodeInstruction::kLoadSwizzleGlobal:
+            case ByteCodeInstruction::kLoadSwizzleUniform: {
                 READ8();
                 int count = READ8();
                 ip += count;
@@ -1412,6 +1518,7 @@ void ByteCodeFunction::preprocess(const void* labels[]) {
 
             case ByteCodeInstruction::kLoadExtended:
             case ByteCodeInstruction::kLoadExtendedGlobal:
+            case ByteCodeInstruction::kLoadExtendedUniform:
                 READ8();
                 break;
 
@@ -1448,6 +1555,9 @@ void ByteCodeFunction::preprocess(const void* labels[]) {
             case ByteCodeInstruction::kReserve: READ8(); break;
             case ByteCodeInstruction::kReturn: READ8(); break;
             case ByteCodeInstruction::kScalarToMatrix: READ8(); READ8(); break;
+            case ByteCodeInstruction::kShiftLeft: READ8(); break;
+            case ByteCodeInstruction::kShiftRightS: READ8(); break;
+            case ByteCodeInstruction::kShiftRightU: READ8(); break;
             VECTOR_PREPROCESS(kSin)
             VECTOR_PREPROCESS_NO_COUNT(kSqrt)
 
@@ -1514,7 +1624,9 @@ void ByteCodeFunction::preprocess(const void* labels[]) {
 #endif
 }
 
-bool ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int N,
+bool ByteCode::run(const ByteCodeFunction* f,
+                   float* args, int argCount,
+                   float* outReturn, int returnCount,
                    const float* uniforms, int uniformCount) const {
 #if defined(SK_ENABLE_SKSL_INTERPRETER)
     Interpreter::VValue stack[128];
@@ -1523,67 +1635,50 @@ bool ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int
         return false;
     }
 
-    if (uniformCount != (int)fInputSlots.size()) {
+    if (argCount != f->fParameterCount ||
+        returnCount != f->fReturnCount ||
+        uniformCount != fUniformSlotCount) {
         return false;
     }
 
     Interpreter::VValue globals[32];
-    if (fGlobalCount > (int)SK_ARRAY_COUNT(globals)) {
+    if (fGlobalSlotCount > (int)SK_ARRAY_COUNT(globals)) {
         return false;
     }
-    for (uint8_t slot : fInputSlots) {
-        globals[slot].fFloat = *uniforms++;
+
+    // Transpose args into stack
+    {
+        float* src = args;
+        float* dst = (float*)stack;
+        for (int i = 0; i < argCount; ++i) {
+            *dst = *src++;
+            dst += VecWidth;
+        }
     }
 
-    int baseIndex = 0;
-
-    while (N) {
-        int w = std::min(N, Interpreter::VecWidth);
-
-        // Transpose args into stack
-        {
-            float* src = args;
-            for (int i = 0; i < w; ++i) {
-                float* dst = (float*)stack + i;
-                for (int j = f->fParameterCount; j > 0; --j) {
-                    *dst = *src++;
-                    dst += Interpreter::VecWidth;
-                }
-            }
-        }
-
-        bool stripedOutput = false;
-        float** outArray = outReturn ? &outReturn : nullptr;
-        if (!innerRun(this, f, stack, outArray, globals, stripedOutput, w, baseIndex)) {
-            return false;
-        }
-
-        // Transpose out parameters back
-        {
-            float* dst = args;
-            for (int i = 0; i < w; ++i) {
-                float* src = (float*)stack + i;
-                for (const auto& p : f->fParameters) {
-                    if (p.fIsOutParameter) {
-                        for (int j = p.fSlotCount; j > 0; --j) {
-                            *dst++ = *src;
-                            src += Interpreter::VecWidth;
-                        }
-                    } else {
-                        dst += p.fSlotCount;
-                        src += p.fSlotCount * Interpreter::VecWidth;
-                    }
-                }
-            }
-        }
-
-        args += f->fParameterCount * w;
-        if (outReturn) {
-            outReturn += f->fReturnCount * w;
-        }
-        N -= w;
-        baseIndex += w;
+    bool stripedOutput = false;
+    float** outArray = outReturn ? &outReturn : nullptr;
+    if (!Interpreter::InnerRun(this, f, stack, outArray, globals, uniforms, stripedOutput, 1, 0)) {
+        return false;
     }
+
+    // Transpose out parameters back
+    {
+        float* dst = args;
+        float* src = (float*)stack;
+        for (const auto& p : f->fParameters) {
+            if (p.fIsOutParameter) {
+                for (int i = p.fSlotCount; i > 0; --i) {
+                    *dst++ = *src;
+                    src += VecWidth;
+                }
+            } else {
+                dst += p.fSlotCount;
+                src += p.fSlotCount * VecWidth;
+            }
+        }
+    }
+
     return true;
 #else
     SkDEBUGFAIL("ByteCode interpreter not enabled");
@@ -1591,9 +1686,10 @@ bool ByteCode::run(const ByteCodeFunction* f, float* args, float* outReturn, int
 #endif
 }
 
-bool ByteCode::runStriped(const ByteCodeFunction* f, float* args[], int nargs, int N,
-                          const float* uniforms, int uniformCount,
-                          float* outArgs[], int outCount) const {
+bool ByteCode::runStriped(const ByteCodeFunction* f, int N,
+                          float* args[], int argCount,
+                          float* outReturn[], int returnCount,
+                          const float* uniforms, int uniformCount) const {
 #if defined(SK_ENABLE_SKSL_INTERPRETER)
     Interpreter::VValue stack[128];
     int stackNeeded = f->fParameterCount + f->fLocalCount + f->fStackCount;
@@ -1601,37 +1697,35 @@ bool ByteCode::runStriped(const ByteCodeFunction* f, float* args[], int nargs, i
         return false;
     }
 
-    if (nargs != f->fParameterCount ||
-        outCount != f->fReturnCount ||
-        uniformCount != (int)fInputSlots.size()) {
+    if (argCount != f->fParameterCount ||
+        returnCount != f->fReturnCount ||
+        uniformCount != fUniformSlotCount) {
         return false;
     }
 
     Interpreter::VValue globals[32];
-    if (fGlobalCount > (int)SK_ARRAY_COUNT(globals)) {
+    if (fGlobalSlotCount > (int)SK_ARRAY_COUNT(globals)) {
         return false;
-    }
-    for (uint8_t slot : fInputSlots) {
-        globals[slot].fFloat = *uniforms++;
     }
 
     // innerRun just takes outArgs, so clear it if the count is zero
-    if (outCount == 0) {
-        outArgs = nullptr;
+    if (returnCount == 0) {
+        outReturn = nullptr;
     }
 
     int baseIndex = 0;
 
     while (N) {
-        int w = std::min(N, Interpreter::VecWidth);
+        int w = std::min(N, VecWidth);
 
         // Copy args into stack
-        for (int i = 0; i < nargs; ++i) {
+        for (int i = 0; i < argCount; ++i) {
             memcpy(stack + i, args[i], w * sizeof(float));
         }
 
         bool stripedOutput = true;
-        if (!innerRun(this, f, stack, outArgs, globals, stripedOutput, w, baseIndex)) {
+        if (!Interpreter::InnerRun(this, f, stack, outReturn, globals, uniforms, stripedOutput, w,
+                                   baseIndex)) {
             return false;
         }
 
@@ -1647,7 +1741,7 @@ bool ByteCode::runStriped(const ByteCodeFunction* f, float* args[], int nargs, i
         }
 
         // Step each argument pointer ahead
-        for (int i = 0; i < nargs; ++i) {
+        for (int i = 0; i < argCount; ++i) {
             args[i] += w;
         }
         N -= w;

@@ -76,7 +76,7 @@ bool SkPixmap::extractSubset(SkPixmap* result, const SkIRect& subset) const {
         const size_t bpp = fInfo.bytesPerPixel();
         pixels = (const uint8_t*)fPixels + r.fTop * fRowBytes + r.fLeft * bpp;
     }
-    result->reset(fInfo.makeWH(r.width(), r.height()), pixels, fRowBytes);
+    result->reset(fInfo.makeDimensions(r.size()), pixels, fRowBytes);
     return true;
 }
 
@@ -163,7 +163,7 @@ bool SkPixmap::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t ds
     }
 
     const void* srcPixels = this->addr(rec.fX, rec.fY);
-    const SkImageInfo srcInfo = fInfo.makeWH(rec.fInfo.width(), rec.fInfo.height());
+    const SkImageInfo srcInfo = fInfo.makeDimensions(rec.fInfo.dimensions());
     SkConvertPixels(rec.fInfo, rec.fPixels, rec.fRowBytes, srcInfo, srcPixels, this->rowBytes());
     return true;
 }
@@ -341,9 +341,9 @@ SkColor SkPixmap::getColor(int x, int y) const {
                   b = ((value >> 20) & 0x3ff) * (1/1023.0f),
                   a = ((value >> 30) & 0x3  ) * (1/   3.0f);
             if (a != 0 && needsUnpremul) {
-                r *= (1.0f/a);
-                g *= (1.0f/a);
-                b *= (1.0f/a);
+                r = SkTPin(r/a, 0.0f, 1.0f);
+                g = SkTPin(g/a, 0.0f, 1.0f);
+                b = SkTPin(b/a, 0.0f, 1.0f);
             }
             return (uint32_t)( r * 255.0f ) << 16
                  | (uint32_t)( g * 255.0f ) <<  8

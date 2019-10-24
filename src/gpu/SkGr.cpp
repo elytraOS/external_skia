@@ -18,6 +18,7 @@
 #include "include/private/SkTemplates.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkBlendModePriv.h"
+#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMessageBus.h"
@@ -46,7 +47,7 @@
 
 GR_FP_SRC_STRING SKSL_DITHER_SRC = R"(
 // This controls the range of values added to color channels
-layout(key) in int rangeType;
+in int rangeType;
 
 void main(float x, float y, inout half4 color) {
     half value;
@@ -124,14 +125,15 @@ void GrInstallBitmapUniqueKeyInvalidator(const GrUniqueKey& key, uint32_t contex
 }
 
 sk_sp<GrTextureProxy> GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
-                                                     GrTextureProxy* baseProxy) {
+                                                     GrTextureProxy* baseProxy,
+                                                     GrColorType srcColorType) {
     SkASSERT(baseProxy);
 
     if (!ctx->priv().caps()->isFormatCopyable(baseProxy->backendFormat())) {
         return nullptr;
     }
-    return GrSurfaceProxy::Copy(ctx, baseProxy, GrMipMapped::kYes, SkBackingFit::kExact,
-                                SkBudgeted::kYes);
+    return GrSurfaceProxy::Copy(ctx, baseProxy, srcColorType, GrMipMapped::kYes,
+                                SkBackingFit::kExact, SkBudgeted::kYes);
 }
 
 sk_sp<GrTextureProxy> GrRefCachedBitmapTextureProxy(GrRecordingContext* ctx,
@@ -212,16 +214,16 @@ sk_sp<GrTextureProxy> GrMakeCachedImageProxy(GrProxyProvider* proxyProvider,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkPMColor4f SkColorToPMColor4f(SkColor c, const GrColorSpaceInfo& colorSpaceInfo) {
+SkPMColor4f SkColorToPMColor4f(SkColor c, const GrColorInfo& colorInfo) {
     SkColor4f color = SkColor4f::FromColor(c);
-    if (auto* xform = colorSpaceInfo.colorSpaceXformFromSRGB()) {
+    if (auto* xform = colorInfo.colorSpaceXformFromSRGB()) {
         color = xform->apply(color);
     }
     return color.premul();
 }
 
-SkColor4f SkColor4fPrepForDst(SkColor4f color, const GrColorSpaceInfo& colorSpaceInfo) {
-    if (auto* xform = colorSpaceInfo.colorSpaceXformFromSRGB()) {
+SkColor4f SkColor4fPrepForDst(SkColor4f color, const GrColorInfo& colorInfo) {
+    if (auto* xform = colorInfo.colorSpaceXformFromSRGB()) {
         color = xform->apply(color);
     }
     return color;
@@ -256,7 +258,7 @@ GrPixelConfig SkColorType2GrPixelConfig(const SkColorType type) {
         case kRGBA_F16_SkColorType:
             return kRGBA_half_GrPixelConfig;
         case kRGBA_F32_SkColorType:
-            return kRGBA_float_GrPixelConfig;
+            return kUnknown_GrPixelConfig;
         case kR8G8_unorm_SkColorType:
             return kRG_88_GrPixelConfig;
         case kR16G16_unorm_SkColorType:
@@ -329,16 +331,16 @@ static inline int32_t dither_range_type_for_config(GrColorType dstColorType) {
 #endif
 
 static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
-                                           const GrColorSpaceInfo& colorSpaceInfo,
+                                           const GrColorInfo& dstColorInfo,
                                            const SkPaint& skPaint,
                                            const SkMatrix& viewM,
                                            std::unique_ptr<GrFragmentProcessor>* shaderProcessor,
                                            SkBlendMode* primColorMode,
                                            GrPaint* grPaint) {
     // Convert SkPaint color to 4f format in the destination color space
-    SkColor4f origColor = SkColor4fPrepForDst(skPaint.getColor4f(), colorSpaceInfo);
+    SkColor4f origColor = SkColor4fPrepForDst(skPaint.getColor4f(), dstColorInfo);
 
-    GrFPArgs fpArgs(context, &viewM, skPaint.getFilterQuality(), &colorSpaceInfo);
+    GrFPArgs fpArgs(context, &viewM, skPaint.getFilterQuality(), &dstColorInfo);
 
     // Setup the initial color considering the shader, the SkPaint color, and the presence or not
     // of per-vertex colors.
@@ -427,10 +429,10 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
     SkColorFilter* colorFilter = skPaint.getColorFilter();
     if (colorFilter) {
         if (applyColorFilterToPaintColor) {
-            grPaint->setColor4f(
-                    colorFilter->filterColor4f(origColor, colorSpaceInfo.colorSpace()).premul());
+            SkColorSpace* dstCS = dstColorInfo.colorSpace();
+            grPaint->setColor4f(colorFilter->filterColor4f(origColor, dstCS, dstCS).premul());
         } else {
-            auto cfFP = colorFilter->asFragmentProcessor(context, colorSpaceInfo);
+            auto cfFP = colorFilter->asFragmentProcessor(context, dstColorInfo);
             if (cfFP) {
                 grPaint->addColorFragmentProcessor(std::move(cfFP));
             } else {
@@ -457,7 +459,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
 
 #ifndef SK_IGNORE_GPU_DITHER
     // Conservative default, in case GrPixelConfigToColorType() fails.
-    GrColorType ct = colorSpaceInfo.colorType();
+    GrColorType ct = dstColorInfo.colorType();
     if (SkPaintPriv::ShouldDither(skPaint, GrColorTypeToSkColorType(ct)) &&
         grPaint->numColorFragmentProcessors() > 0) {
         int32_t ditherRange = dither_range_type_for_config(ct);
@@ -471,7 +473,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
         }
     }
 #endif
-    if (GrColorTypeClampType(colorSpaceInfo.colorType()) == GrClampType::kManual) {
+    if (GrColorTypeClampType(dstColorInfo.colorType()) == GrClampType::kManual) {
         if (grPaint->numColorFragmentProcessors()) {
             grPaint->addColorFragmentProcessor(GrSaturateProcessor::Make());
         } else {
@@ -485,50 +487,50 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
     return true;
 }
 
-bool SkPaintToGrPaint(GrRecordingContext* context, const GrColorSpaceInfo& colorSpaceInfo,
+bool SkPaintToGrPaint(GrRecordingContext* context, const GrColorInfo& dstColorInfo,
                       const SkPaint& skPaint, const SkMatrix& viewM, GrPaint* grPaint) {
-    return skpaint_to_grpaint_impl(context, colorSpaceInfo, skPaint, viewM, nullptr, nullptr,
+    return skpaint_to_grpaint_impl(context, dstColorInfo, skPaint, viewM, nullptr, nullptr,
                                    grPaint);
 }
 
 /** Replaces the SkShader (if any) on skPaint with the passed in GrFragmentProcessor. */
 bool SkPaintToGrPaintReplaceShader(GrRecordingContext* context,
-                                   const GrColorSpaceInfo& colorSpaceInfo,
+                                   const GrColorInfo& dstColorInfo,
                                    const SkPaint& skPaint,
                                    std::unique_ptr<GrFragmentProcessor> shaderFP,
                                    GrPaint* grPaint) {
     if (!shaderFP) {
         return false;
     }
-    return skpaint_to_grpaint_impl(context, colorSpaceInfo, skPaint, SkMatrix::I(), &shaderFP,
+    return skpaint_to_grpaint_impl(context, dstColorInfo, skPaint, SkMatrix::I(), &shaderFP,
                                    nullptr, grPaint);
 }
 
 /** Ignores the SkShader (if any) on skPaint. */
 bool SkPaintToGrPaintNoShader(GrRecordingContext* context,
-                              const GrColorSpaceInfo& colorSpaceInfo,
+                              const GrColorInfo& dstColorInfo,
                               const SkPaint& skPaint,
                               GrPaint* grPaint) {
     // Use a ptr to a nullptr to to indicate that the SkShader is ignored and not replaced.
     std::unique_ptr<GrFragmentProcessor> nullShaderFP(nullptr);
-    return skpaint_to_grpaint_impl(context, colorSpaceInfo, skPaint, SkMatrix::I(), &nullShaderFP,
+    return skpaint_to_grpaint_impl(context, dstColorInfo, skPaint, SkMatrix::I(), &nullShaderFP,
                                    nullptr, grPaint);
 }
 
 /** Blends the SkPaint's shader (or color if no shader) with a per-primitive color which must
 be setup as a vertex attribute using the specified SkBlendMode. */
 bool SkPaintToGrPaintWithXfermode(GrRecordingContext* context,
-                                  const GrColorSpaceInfo& colorSpaceInfo,
+                                  const GrColorInfo& dstColorInfo,
                                   const SkPaint& skPaint,
                                   const SkMatrix& viewM,
                                   SkBlendMode primColorMode,
                                   GrPaint* grPaint) {
-    return skpaint_to_grpaint_impl(context, colorSpaceInfo, skPaint, viewM, nullptr, &primColorMode,
+    return skpaint_to_grpaint_impl(context, dstColorInfo, skPaint, viewM, nullptr, &primColorMode,
                                    grPaint);
 }
 
 bool SkPaintToGrPaintWithTexture(GrRecordingContext* context,
-                                 const GrColorSpaceInfo& colorSpaceInfo,
+                                 const GrColorInfo& dstColorInfo,
                                  const SkPaint& paint,
                                  const SkMatrix& viewM,
                                  std::unique_ptr<GrFragmentProcessor> fp,
@@ -537,8 +539,8 @@ bool SkPaintToGrPaintWithTexture(GrRecordingContext* context,
     std::unique_ptr<GrFragmentProcessor> shaderFP;
     if (textureIsAlphaOnly) {
         if (const auto* shader = as_SB(paint.getShader())) {
-            shaderFP = shader->asFragmentProcessor(GrFPArgs(
-                    context, &viewM, paint.getFilterQuality(), &colorSpaceInfo));
+            shaderFP = shader->asFragmentProcessor(
+                    GrFPArgs(context, &viewM, paint.getFilterQuality(), &dstColorInfo));
             if (!shaderFP) {
                 return false;
             }
@@ -555,10 +557,9 @@ bool SkPaintToGrPaintWithTexture(GrRecordingContext* context,
         }
     }
 
-    return SkPaintToGrPaintReplaceShader(context, colorSpaceInfo, paint, std::move(shaderFP),
+    return SkPaintToGrPaintReplaceShader(context, dstColorInfo, paint, std::move(shaderFP),
                                          grPaint);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 

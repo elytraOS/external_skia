@@ -84,9 +84,8 @@ GrCCPathProcessor::GrCCPathProcessor(CoverageMode coverageMode, const GrTexture*
                                      const SkMatrix& viewMatrixIfUsingLocalCoords)
         : INHERITED(kGrCCPathProcessor_ClassID)
         , fCoverageMode(coverageMode)
-        , fAtlasAccess(atlasTexture->texturePriv().textureType(), GrSamplerState::Filter::kNearest,
-                       GrSamplerState::WrapMode::kClamp, swizzle)
-        , fAtlasSize(SkISize::Make(atlasTexture->width(), atlasTexture->height()))
+        , fAtlasAccess(GrSamplerState::ClampNearest(), atlasTexture->backendFormat(), swizzle)
+        , fAtlasDimensions(atlasTexture->dimensions())
         , fAtlasOrigin(atlasOrigin) {
     // TODO: Can we just assert that atlas has GrCCAtlas::kTextureOrigin and remove fAtlasOrigin?
     this->setInstanceAttributes(kInstanceAttribs, SK_ARRAY_COUNT(kInstanceAttribs));
@@ -108,8 +107,9 @@ private:
     void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& primProc,
                  FPCoordTransformIter&& transformIter) override {
         const auto& proc = primProc.cast<GrCCPathProcessor>();
-        pdman.set2f(
-                fAtlasAdjustUniform, 1.0f / proc.fAtlasSize.fWidth, 1.0f / proc.fAtlasSize.fHeight);
+        pdman.set2f(fAtlasAdjustUniform,
+                    1.0f / proc.fAtlasDimensions.fWidth,
+                    1.0f / proc.fAtlasDimensions.fHeight);
         this->setTransformDataHelper(proc.fLocalMatrix, pdman, &transformIter);
     }
 
@@ -141,8 +141,14 @@ void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& 
                              baseInstance, enablePrimitiveRestart);
     mesh.setVertexData(resources.refVertexBuffer());
 
-    flushState->opsRenderPass()->draw(*this, pipeline, fixedDynamicState, nullptr, &mesh, 1,
-                                      bounds);
+    GrProgramInfo programInfo(flushState->drawOpArgs().numSamples(),
+                              flushState->drawOpArgs().origin(),
+                              pipeline,
+                              *this,
+                              fixedDynamicState,
+                              nullptr, 0);
+
+    flushState->opsRenderPass()->draw(programInfo, &mesh, 1, bounds);
 }
 
 void GrCCPathProcessor::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {

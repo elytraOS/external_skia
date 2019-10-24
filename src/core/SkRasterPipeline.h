@@ -74,7 +74,7 @@
     M(matrix_translate) M(matrix_scale_translate)                  \
     M(matrix_2x3) M(matrix_3x3) M(matrix_3x4) M(matrix_4x5) M(matrix_4x3) \
     M(matrix_perspective)                                          \
-    M(parametric) M(gamma_)                                        \
+    M(parametric) M(gamma_) M(PQish) M(HLGish) M(HLGinvish)        \
     M(mirror_x)   M(repeat_x)                                      \
     M(mirror_y)   M(repeat_y)                                      \
     M(decal_x)    M(decal_y)   M(decal_x_and_y)                    \
@@ -160,8 +160,8 @@ struct SkRasterPipeline_CallbackCtx {
 };
 
 namespace SkSL {
-struct ByteCode;
-struct ByteCodeFunction;
+class ByteCode;
+class ByteCodeFunction;
 }
 
 struct SkRasterPipeline_InterpreterCtx {
@@ -224,9 +224,6 @@ public:
     void append(StockStage, void* = nullptr);
     void append(StockStage stage, const void* ctx) { this->append(stage, const_cast<void*>(ctx)); }
     void append(StockStage, uintptr_t ctx);
-    // For raw functions (i.e. from a JIT).  Don't use this unless you know exactly what fn needs to
-    // be. :)
-    void append(void* fn, void* ctx);
 
     // Append all stages to this pipeline.
     void extend(const SkRasterPipeline&);
@@ -264,14 +261,15 @@ public:
 
     void append_gamut_clamp_if_normalized(const SkImageInfo&);
 
+    void append_transfer_function(const skcms_TransferFunction&);
+
     bool empty() const { return fStages == nullptr; }
 
 private:
     struct StageList {
         StageList* prev;
-        uint64_t   stage;
+        StockStage stage;
         void*      ctx;
-        bool       rawFunction;
     };
 
     using StartPipelineFn = void(*)(size_t,size_t,size_t,size_t, void** program);

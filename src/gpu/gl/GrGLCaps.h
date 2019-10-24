@@ -109,7 +109,8 @@ public:
              const GrGLInterface* glInterface);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
-    bool isFormatCompressed(const GrBackendFormat&) const override;
+    bool isFormatCompressed(const GrBackendFormat&,
+                            SkImage::CompressionType* compressionType = nullptr) const override;
 
     bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat&) const override;
     bool isFormatTexturable(const GrBackendFormat&) const override;
@@ -132,6 +133,9 @@ public:
         return this->maxRenderTargetSampleCount(format.asGLFormat());
     }
     int maxRenderTargetSampleCount(GrGLFormat) const;
+
+    size_t bytesPerPixel(GrGLFormat) const;
+    size_t bytesPerPixel(const GrBackendFormat&) const override;
 
     bool isFormatCopyable(const GrBackendFormat&) const override;
 
@@ -404,7 +408,12 @@ public:
 
     bool samplerObjectSupport() const { return fSamplerObjectSupport; }
 
+    bool tiledRenderingSupport() const { return fTiledRenderingSupport; }
+
     bool fbFetchRequiresEnablePerSample() const { return fFBFetchRequiresEnablePerSample; }
+
+    /* Is there support for enabling/disabling sRGB writes for sRGB-capable color buffers? */
+    bool srgbWriteControl() const { return fSRGBWriteControl; }
 
     GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&,
                                                   bool isAlphaChannel) const override;
@@ -434,14 +443,12 @@ private:
     bool hasPathRenderingSupport(const GrGLContextInfo&, const GrGLInterface*);
 
     struct FormatWorkarounds {
-        bool fDisableTextureRedForMesa = false;
         bool fDisableSRGBRenderWithMSAAForMacAMD = false;
-        bool fDisablePerFormatTextureStorageForCommandBufferES2 = false;
-        bool fDisableNonRedSingleChannelTexStorageForANGLEGL = false;
+        bool fDisableRGBA16FTexStorageForCrBug1008003 = false;
         bool fDisableBGRATextureStorageForIntelWindowsES = false;
         bool fDisableRGB8ForMali400 = false;
         bool fDisableLuminance16F = false;
-        bool fDisableAlpha8Renderable = false;
+        bool fDontDisableTexStorageOnAndroid = false;
     };
 
     void applyDriverCorrectnessWorkarounds(const GrGLContextInfo&, const GrContextOptions&,
@@ -504,7 +511,9 @@ private:
     bool fProgramBinarySupport : 1;
     bool fProgramParameterSupport : 1;
     bool fSamplerObjectSupport : 1;
+    bool fTiledRenderingSupport : 1;
     bool fFBFetchRequiresEnablePerSample : 1;
+    bool fSRGBWriteControl : 1;
 
     // Driver workarounds
     bool fDoManualMipmapping : 1;
@@ -646,7 +655,9 @@ private:
         // formats. Also used to upload zeros to initially clear a texture.
         GrGLenum fDefaultExternalFormat = 0;
         GrGLenum fDefaultExternalType = 0;
-        GrGLenum fTexSubImageZeroDataBpp = 0;
+
+        // This value is only valid for regular formats. Compressed formats will be 0.
+        GrGLenum fBytesPerPixel = 0;
 
         enum {
             // This indicates that a stencil format has not yet been determined for the config.

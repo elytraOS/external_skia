@@ -38,14 +38,14 @@ public:
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
-    GrBackendTexture createBackendTexture(int w, int h,
-                                          const GrBackendFormat &,
-                                          GrMipMapped,
-                                          GrRenderable,
-                                          const void* pixels,
-                                          size_t rowBytes,
-                                          const SkColor4f* color,
-                                          GrProtected isProtected) override;
+    GrBackendTexture onCreateBackendTexture(int w, int h,
+                                            const GrBackendFormat&,
+                                            GrMipMapped,
+                                            GrRenderable,
+                                            const SkPixmap srcData[],
+                                            int numMipLevels,
+                                            const SkColor4f* color,
+                                            GrProtected isProtected) override;
     void deleteBackendTexture(const GrBackendTexture&) override;
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
@@ -63,7 +63,7 @@ public:
                                                                 int numStencilSamples) override;
 
     GrOpsRenderPass* getOpsRenderPass(
-            GrRenderTarget*, GrSurfaceOrigin, const SkRect& bounds,
+            GrRenderTarget*, GrSurfaceOrigin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
             const SkTArray<GrTextureProxy*, true>& sampledProxies) override;
@@ -89,11 +89,7 @@ public:
     sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
     sk_sp<GrDawnProgram> getOrCreateRenderPipeline(GrRenderTarget*,
-                                                   GrSurfaceOrigin origin,
-                                                   const GrPipeline&,
-                                                   const GrPrimitiveProcessor&,
-                                                   const GrTextureProxy* const* primProcProxies,
-                                                   bool hasPoints,
+                                                   const GrProgramInfo& programInfo,
                                                    GrPrimitiveType primitiveType);
 
     dawn::Sampler getOrCreateSampler(const GrSamplerState& samplerState);
@@ -154,8 +150,8 @@ private:
                               GrColorType surfaceColorType, GrColorType bufferColorType,
                               GrGpuBuffer* transferBuffer, size_t offset) override;
 
-    void onResolveRenderTarget(GrRenderTarget* target) override {
-    }
+    void onResolveRenderTarget(GrRenderTarget*, const SkIRect&, GrSurfaceOrigin,
+                               ForExternalIO) override {}
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 

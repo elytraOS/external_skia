@@ -20,7 +20,6 @@ public:
             , fNumSemaphores(numSemaphores){}
 
 private:
-    void onPrepare(GrOpFlushState*) override {}
     bool onIsUsed(GrSurfaceProxy* proxy) const override {
         SkASSERT(proxy != fTarget.get());  // This case should be handled by GrRenderTask.
         return false;
@@ -28,7 +27,7 @@ private:
     void handleInternalAllocationFailure() override {}
     void gatherProxyIntervals(GrResourceAllocator*) const override;
 
-    ExpectedOutcome onMakeClosed(const GrCaps&) override {
+    ExpectedOutcome onMakeClosed(const GrCaps&, SkIRect*) override {
         return ExpectedOutcome::kTargetUnchanged;
     }
 

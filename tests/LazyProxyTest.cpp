@@ -107,7 +107,7 @@ public:
                     GrSurfaceProxy::UseAllocator::kYes);
 
             this->setBounds(SkRectPriv::MakeLargest(), GrOp::HasAABloat::kNo,
-                            GrOp::IsZeroArea::kNo);
+                            GrOp::IsHairline::kNo);
         }
 
         const char* name() const override { return "LazyProxyTest::Op"; }
@@ -144,8 +144,7 @@ public:
                     format, GrRenderable::kYes, 1, GrProtected::kNo, kBottomLeft_GrSurfaceOrigin,
                     kAlpha_half_GrPixelConfig, *proxyProvider->caps(),
                     GrSurfaceProxy::UseAllocator::kYes);
-            fAccess.reset(fLazyProxy, GrSamplerState::Filter::kNearest,
-                          GrSamplerState::WrapMode::kClamp);
+            fAccess.reset(fLazyProxy, GrSamplerState::ClampNearest());
             this->setTextureSamplerCnt(1);
         }
 
@@ -358,7 +357,7 @@ private:
         SkASSERT(fLazyProxy.get());
 
         this->setBounds(SkRect::MakeIWH(kSize, kSize),
-                        HasAABloat::kNo, IsZeroArea::kNo);
+                        HasAABloat::kNo, IsHairline::kNo);
     }
 
     const char* name() const override { return "LazyFailedInstantiationTestOp"; }

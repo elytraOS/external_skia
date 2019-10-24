@@ -21,6 +21,7 @@
 class GrAtlasManager;
 class GrBackendSemaphore;
 class GrCaps;
+class GrClientMappedBufferManager;
 class GrContextPriv;
 class GrContextThreadSafeProxy;
 class GrFragmentProcessor;
@@ -363,8 +364,9 @@ public:
 
     void storeVkPipelineCacheData();
 
-    static size_t ComputeTextureSize(SkColorType type, int width, int height, GrMipMapped,
-                                     bool useNextPow2 = false);
+    // Returns the gpu memory size of the the texture that backs the passed in SkImage. Returns 0 if
+    // the SkImage is not texture backed.
+    static size_t ComputeImageSize(sk_sp<SkImage> image, GrMipMapped, bool useNextPow2 = false);
 
     /*
      * Retrieve the default GrBackendFormat for a given SkColorType and renderability.
@@ -455,6 +457,29 @@ public:
     GrBackendTexture createBackendTexture(const SkSurfaceCharacterization& characterization,
                                           const SkColor4f& color);
 
+    // If possible, create a backend texture initialized with the provided pixmap data. The client
+    // should ensure that the returned backend texture is valid.
+    // If successful, the created backend texture will be compatible with the provided
+    // pixmap(s). Compatible, in this case, means that the backend format will be the result
+    // of calling defaultBackendFormat on the base pixmap's colortype.
+    // If numLevels is 1 a non-mipMapped texture will result. If a mipMapped texture is desired
+    // the data for all the mipmap levels must be provided. In the mipmapped case all the
+    // colortypes of the provided pixmaps must be the same. Additionally, all the miplevels
+    // must be sized correctly (please see SkMipMap::ComputeLevelSize and ComputeLevelCount).
+    // Note: the pixmap's alphatypes and colorspaces are ignored.
+    // For the Vulkan backend the layout of the created VkImage will be:
+    //      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    // regardless of the renderability setting
+    GrBackendTexture createBackendTexture(const SkPixmap srcData[], int numLevels,
+                                          GrRenderable, GrProtected);
+
+    // Helper version of above for a single level.
+    GrBackendTexture createBackendTexture(const SkPixmap& srcData,
+                                          GrRenderable renderable,
+                                          GrProtected isProtected) {
+        return this->createBackendTexture(&srcData, 1, renderable, isProtected);
+    }
+
     void deleteBackendTexture(GrBackendTexture);
 
     // This interface allows clients to pre-compile shaders and populate the runtime program cache.
@@ -509,15 +534,10 @@ private:
     GrContextOptions::PersistentCache*      fPersistentCache;
     GrContextOptions::ShaderErrorHandler*   fShaderErrorHandler;
 
+    std::unique_ptr<GrClientMappedBufferManager> fMappedBufferManager;
+
     // TODO: have the GrClipStackClip use renderTargetContexts and rm this friending
     friend class GrContextPriv;
-
-    /**
-     * These functions create premul <-> unpremul effects, using the specialized round-trip effects
-     * from GrConfigConversionEffect.
-     */
-    std::unique_ptr<GrFragmentProcessor> createPMToUPMEffect(std::unique_ptr<GrFragmentProcessor>);
-    std::unique_ptr<GrFragmentProcessor> createUPMToPMEffect(std::unique_ptr<GrFragmentProcessor>);
 
     typedef GrRecordingContext INHERITED;
 };

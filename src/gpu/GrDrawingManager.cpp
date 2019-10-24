@@ -13,6 +13,7 @@
 #include "include/private/SkDeferredDisplayList.h"
 #include "src/core/SkTTopoSort.h"
 #include "src/gpu/GrAuditTrail.h"
+#include "src/gpu/GrClientMappedBufferManager.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrCopyRenderTask.h"
 #include "src/gpu/GrGpu.h"
@@ -248,6 +249,7 @@ GrSemaphoresSubmitted GrDrawingManager::flush(GrSurfaceProxy* proxies[], int num
         }
         return GrSemaphoresSubmitted::kNo; // Can't flush while DDL recording
     }
+    direct->priv().clientMappedBufferManager()->process();
 
     GrGpu* gpu = direct->priv().getGpu();
     if (!gpu) {
@@ -531,7 +533,8 @@ GrSemaphoresSubmitted GrDrawingManager::flushSurfaces(GrSurfaceProxy* proxies[],
             SkASSERT(rtProxy);
             if (rtProxy->isMSAADirty()) {
                 SkASSERT(rtProxy->peekRenderTarget());
-                gpu->resolveRenderTarget(rtProxy->peekRenderTarget());
+                gpu->resolveRenderTarget(rtProxy->peekRenderTarget(), rtProxy->msaaDirtyRect(),
+                                         rtProxy->origin(), GrGpu::ForExternalIO::kYes);
                 rtProxy->markMSAAResolved();
             }
         }
@@ -573,6 +576,12 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
     fActiveOpsTask = nullptr;
 
     fDAG.swap(&ddl->fRenderTasks);
+
+    for (auto renderTask : ddl->fRenderTasks) {
+        renderTask->prePrepare(fContext);
+    }
+
+    ddl->fOpPOD = fContext->priv().detachOpPOD();
 
     if (fPathRendererChain) {
         if (auto ccpr = fPathRendererChain->getCoverageCountingPathRenderer()) {
@@ -805,14 +814,16 @@ bool GrDrawingManager::newCopyRenderTask(sk_sp<GrSurfaceProxy> srcProxy,
                                          const SkIPoint& dstPoint) {
     SkDEBUGCODE(this->validate());
     SkASSERT(fContext);
-    this->closeRenderTasksForNewRenderTask(dstProxy.get());
 
-    GrRenderTask* task = fDAG.add(GrCopyRenderTask::Make(srcProxy, srcRect, dstProxy, dstPoint));
+    this->closeRenderTasksForNewRenderTask(dstProxy.get());
+    const GrCaps& caps = *fContext->priv().caps();
+
+    GrRenderTask* task =
+            fDAG.add(GrCopyRenderTask::Make(srcProxy, srcRect, dstProxy, dstPoint, &caps));
     if (!task) {
         return false;
     }
 
-    const GrCaps& caps = *fContext->priv().caps();
 
     // We always say GrMipMapped::kNo here since we are always just copying from the base layer to
     // another base layer. We don't need to make sure the whole mip map chain is valid.
@@ -900,19 +911,19 @@ std::unique_ptr<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext
         return nullptr;
     }
 
-    // SkSurface catches bad color space usage at creation. This check handles anything that slips
-    // by, including internal usage.
-    if (!SkSurface_Gpu::Valid(fContext->priv().caps(), sProxy->backendFormat())) {
-        SkDEBUGFAIL("Invalid config and colorspace combination");
-        return nullptr;
-    }
-
     sk_sp<GrRenderTargetProxy> renderTargetProxy(sk_ref_sp(sProxy->asRenderTargetProxy()));
+
+    GrSurfaceOrigin origin = renderTargetProxy->origin();
+    GrSwizzle texSwizzle = renderTargetProxy->textureSwizzle();
+    GrSwizzle outSwizzle = renderTargetProxy->outputSwizzle();
 
     return std::unique_ptr<GrRenderTargetContext>(
             new GrRenderTargetContext(fContext,
                                       std::move(renderTargetProxy),
                                       colorType,
+                                      origin,
+                                      texSwizzle,
+                                      outSwizzle,
                                       std::move(colorSpace),
                                       surfaceProps,
                                       managedOpsTask));
@@ -927,18 +938,15 @@ std::unique_ptr<GrTextureContext> GrDrawingManager::makeTextureContext(
         return nullptr;
     }
 
-    // SkSurface catches bad color space usage at creation. This check handles anything that slips
-    // by, including internal usage.
-    if (!SkSurface_Gpu::Valid(fContext->priv().caps(), sProxy->backendFormat())) {
-        SkDEBUGFAIL("Invalid config and colorspace combination");
-        return nullptr;
-    }
-
     // GrTextureRenderTargets should always be using a GrRenderTargetContext
     SkASSERT(!sProxy->asRenderTargetProxy());
 
     sk_sp<GrTextureProxy> textureProxy(sk_ref_sp(sProxy->asTextureProxy()));
 
+    GrSurfaceOrigin origin = textureProxy->origin();
+    GrSwizzle texSwizzle = textureProxy->textureSwizzle();
+
     return std::unique_ptr<GrTextureContext>(new GrTextureContext(
-            fContext, std::move(textureProxy), colorType, alphaType, std::move(colorSpace)));
+            fContext, std::move(textureProxy), colorType, alphaType, std::move(colorSpace), origin,
+            texSwizzle));
 }

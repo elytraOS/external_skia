@@ -10,11 +10,10 @@
 #include "include/gpu/GrContext.h"
 #include "include/gpu/GrTexture.h"
 #include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkMipMap.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrContextPriv.h"
-#include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrGpu.h"
+#include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrResourceProvider.h"
@@ -267,9 +266,32 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                 desc.fConfig = config;
             }
 
-            uint32_t components = GrColorTypeComponentFlags(combo.fColorType);
-            uint32_t expectedClearColor =
-                    (components & kAlpha_SkColorTypeComponentFlag) ? 0 : 0xFF000000;
+            auto checkColor = [reporter](const GrCaps::TestFormatColorTypeCombination& combo,
+                                         uint32_t readColor) {
+                // We expect that if there is no alpha in the src color type and we read it to a
+                // color type with alpha that we will get one for alpha rather than zero. We used to
+                // require this but the Intel Iris 6100 on Win 10 test bot doesn't put one in the
+                // alpha channel when reading back from GL_RG16 or GL_RG16F. So now we allow either.
+                uint32_t components = GrColorTypeComponentFlags(combo.fColorType);
+                bool allowAlphaOne = !(components & kAlpha_SkColorTypeComponentFlag);
+                if (allowAlphaOne) {
+                    if (readColor != 0x00000000 && readColor != 0xFF000000) {
+                        ERRORF(reporter,
+                               "Failed on ct %s format %s 0x%08x is not 0x00000000 or 0xFF000000",
+                               GrColorTypeToStr(combo.fColorType), combo.fFormat.toStr().c_str(),
+                               readColor);
+                        return false;
+                    }
+                } else {
+                    if (readColor) {
+                        ERRORF(reporter, "Failed on ct %s format %s 0x%08x != 0x00000000",
+                               GrColorTypeToStr(combo.fColorType), combo.fFormat.toStr().c_str(),
+                               readColor);
+                        return false;
+                    }
+                }
+                return true;
+            };
 
             for (auto renderable : {GrRenderable::kNo, GrRenderable::kYes}) {
                 if (renderable == GrRenderable::kYes &&
@@ -292,12 +314,7 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                             if (texCtx->readPixels(readback.info(), readback.writable_addr(),
                                                    readback.rowBytes(), {0, 0})) {
                                 for (int i = 0; i < kSize * kSize; ++i) {
-                                    if (expectedClearColor != readback.addr32()[i]) {
-                                        ERRORF(reporter,
-                                               "Failed on ct %s format %s 0x%x != 0x%x",
-                                               GrColorTypeToStr(combo.fColorType),
-                                               combo.fFormat.toStr().c_str(),
-                                               expectedClearColor, readback.addr32()[i]);
+                                    if (!checkColor(combo, readback.addr32()[i])) {
                                         break;
                                     }
                                 }
@@ -328,11 +345,7 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                         if (surfCtx->readPixels(readback.info(), readback.writable_addr(),
                                                 readback.rowBytes(), {0, 0})) {
                             for (int i = 0; i < kSize * kSize; ++i) {
-                                if (expectedClearColor != readback.addr32()[i]) {
-                                    ERRORF(reporter, "Failed on ct %s format %s 0x%x != 0x%x",
-                                           GrColorTypeToStr(combo.fColorType),
-                                           combo.fFormat.toStr().c_str(),
-                                           expectedClearColor, readback.addr32()[i]);
+                                if (!checkColor(combo, readback.addr32()[i])) {
                                     break;
                                 }
                             }
@@ -382,9 +395,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture, reporter, context_info) {
     // that they'd succeed if the texture wasn't kRead. We want to be sure we're failing with
     // kRead for the right reason.
     for (auto ioType : {kRead_GrIOType, kRW_GrIOType}) {
-        auto backendTex = context->priv().createBackendTexture(&srcPixmap, 1,
-                                                               GrRenderable::kYes,
-                                                               GrProtected::kNo);
+        auto backendTex = context->createBackendTexture(&srcPixmap, 1,
+                                                        GrRenderable::kYes, GrProtected::kNo);
 
         auto proxy = proxyProvider->wrapBackendTexture(backendTex, GrColorType::kRGBA_8888,
                                                        kTopLeft_GrSurfaceOrigin,
@@ -594,10 +606,11 @@ DEF_GPUTEST(TextureIdleProcTest, reporter, options) {
                         GrMipMapsStatus::kNotAllocated, GrInternalSurfaceFlags ::kNone,
                         SkBackingFit::kExact, budgeted, GrProtected::kNo,
                         GrSurfaceProxy::UseAllocator::kYes);
-                rtc->drawTexture(GrNoClip(), proxy, GrSamplerState::Filter::kNearest,
-                                 SkBlendMode::kSrcOver, SkPMColor4f(), SkRect::MakeWH(w, h),
-                                 SkRect::MakeWH(w, h), GrAA::kNo, GrQuadAAFlags::kNone,
-                                 SkCanvas::kFast_SrcRectConstraint, SkMatrix::I(), nullptr);
+                rtc->drawTexture(GrNoClip(), proxy, GrColorType::kRGBA_8888,
+                                 GrSamplerState::Filter::kNearest, SkBlendMode::kSrcOver,
+                                 SkPMColor4f(), SkRect::MakeWH(w, h), SkRect::MakeWH(w, h),
+                                 GrAA::kNo, GrQuadAAFlags::kNone, SkCanvas::kFast_SrcRectConstraint,
+                                 SkMatrix::I(), nullptr);
                 // We still have the proxy, which should remain instantiated, thereby keeping the
                 // texture not purgeable.
                 REPORTER_ASSERT(reporter, idleIDs.find(2) == idleIDs.end());
@@ -607,10 +620,11 @@ DEF_GPUTEST(TextureIdleProcTest, reporter, options) {
                 REPORTER_ASSERT(reporter, idleIDs.find(2) == idleIDs.end());
 
                 // This time we move the proxy into the draw.
-                rtc->drawTexture(GrNoClip(), std::move(proxy), GrSamplerState::Filter::kNearest,
-                                 SkBlendMode::kSrcOver, SkPMColor4f(), SkRect::MakeWH(w, h),
-                                 SkRect::MakeWH(w, h), GrAA::kNo, GrQuadAAFlags::kNone,
-                                 SkCanvas::kFast_SrcRectConstraint, SkMatrix::I(), nullptr);
+                rtc->drawTexture(GrNoClip(), std::move(proxy), GrColorType::kRGBA_8888,
+                                 GrSamplerState::Filter::kNearest, SkBlendMode::kSrcOver,
+                                 SkPMColor4f(), SkRect::MakeWH(w, h), SkRect::MakeWH(w, h),
+                                 GrAA::kNo, GrQuadAAFlags::kNone, SkCanvas::kFast_SrcRectConstraint,
+                                 SkMatrix::I(), nullptr);
                 REPORTER_ASSERT(reporter, idleIDs.find(2) == idleIDs.end());
                 context->flush();
                 context->priv().getGpu()->testingOnly_flushGpuAndSync();
@@ -653,9 +667,10 @@ DEF_GPUTEST(TextureIdleProcTest, reporter, options) {
                             auto proxy = context->priv().proxyProvider()->testingOnly_createWrapped(
                                     texture, GrColorType::kRGBA_8888, kTopLeft_GrSurfaceOrigin);
                             rtc->drawTexture(
-                                    GrNoClip(), proxy, GrSamplerState::Filter::kNearest,
-                                    SkBlendMode::kSrcOver, SkPMColor4f(), SkRect::MakeWH(w, h),
-                                    SkRect::MakeWH(w, h), GrAA::kNo, GrQuadAAFlags::kNone,
+                                    GrNoClip(), proxy, GrColorType::kRGBA_8888,
+                                    GrSamplerState::Filter::kNearest, SkBlendMode::kSrcOver,
+                                    SkPMColor4f(), SkRect::MakeWH(w, h), SkRect::MakeWH(w, h),
+                                    GrAA::kNo, GrQuadAAFlags::kNone,
                                     SkCanvas::kFast_SrcRectConstraint, SkMatrix::I(), nullptr);
                             if (drawType == DrawType::kDrawAndFlush) {
                                 context->flush();

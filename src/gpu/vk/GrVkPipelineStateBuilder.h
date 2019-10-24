@@ -40,8 +40,7 @@ public:
     public:
         static bool Build(Desc*,
                           GrRenderTarget*,
-                          const GrPrimitiveProcessor&,
-                          const GrPipeline&,
+                          const GrProgramInfo&,
                           const GrStencilSettings&,
                           GrPrimitiveType primitiveType,
                           GrVkGpu* gpu);
@@ -63,10 +62,8 @@ public:
     * @return true if generation was successful.
     */
     static GrVkPipelineState* CreatePipelineState(GrVkGpu*,
-                                                  GrRenderTarget*, GrSurfaceOrigin,
-                                                  const GrPrimitiveProcessor&,
-                                                  const GrTextureProxy* const primProcProxies[],
-                                                  const GrPipeline&,
+                                                  GrRenderTarget*,
+                                                  const GrProgramInfo&,
                                                   const GrStencilSettings&,
                                                   GrPrimitiveType,
                                                   Desc*,
@@ -80,11 +77,7 @@ public:
     void finalizeFragmentSecondaryColor(GrShaderVar& outputColor) override;
 
 private:
-    GrVkPipelineStateBuilder(GrVkGpu*, GrRenderTarget*, GrSurfaceOrigin,
-                             const GrPipeline&,
-                             const GrPrimitiveProcessor&,
-                             const GrTextureProxy* const primProcProxies[],
-                             GrProgramDesc*);
+    GrVkPipelineStateBuilder(GrVkGpu*, GrRenderTarget*, const GrProgramInfo&, GrProgramDesc*);
 
     GrVkPipelineState* finalize(const GrStencilSettings&,
                                 GrPrimitiveType primitiveType,
@@ -96,7 +89,7 @@ private:
                              VkPipelineShaderStageCreateInfo* outStageInfo);
 
     void storeShadersInCache(const SkSL::String shaders[], const SkSL::Program::Inputs inputs[],
-                             bool isSkSL, const SkSL::Program::Settings& settings);
+                             bool isSkSL);
 
     bool createVkShaderModule(VkShaderStageFlagBits stage,
                               const SkSL::String& sksl,

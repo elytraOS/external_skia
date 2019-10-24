@@ -22,13 +22,14 @@
 #include "include/utils/SkNoDrawCanvas.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkMakeUnique.h"
-#include "src/core/SkStrikeInterface.h"
+#include "src/core/SkStrikeForGPU.h"
 #include "src/core/SkTLazy.h"
 
 class Deserializer;
 class Serializer;
 enum SkAxisAlignment : uint32_t;
 class SkDescriptor;
+class SkAutoDescriptor;
 class SkStrike;
 struct SkPackedGlyphID;
 enum SkScalerContextFlags : uint32_t;
@@ -66,7 +67,7 @@ private:
 using SkDiscardableHandleId = uint32_t;
 
 // This class is not thread-safe.
-class SkStrikeServer final : public SkStrikeCacheInterface {
+class SkStrikeServer final : public SkStrikeForGPUCacheInterface {
 public:
     // An interface used by the server to create handles for pinning SkStrike
     // entries on the remote client.
@@ -113,9 +114,9 @@ public:
                                    SkScalerContextFlags flags,
                                    SkScalerContextEffects* effects);
 
-    SkScopedStrike findOrCreateScopedStrike(const SkDescriptor& desc,
-                                            const SkScalerContextEffects& effects,
-                                            const SkTypeface& typeface) override;
+    SkScopedStrikeForGPU findOrCreateScopedStrike(const SkDescriptor& desc,
+                                                  const SkScalerContextEffects& effects,
+                                                  const SkTypeface& typeface) override;
 
     static void AddGlyphForTesting(
             RemoteStrike* cache, SkPackedGlyphID glyphID, bool asPath);
@@ -220,5 +221,8 @@ private:
     SkStrikeCache* const fStrikeCache;
     const bool fIsLogging;
 };
+
+// For exposure to fuzzing only.
+bool SkFuzzDeserializeSkDescriptor(sk_sp<SkData> bytes, SkAutoDescriptor* ad);
 
 #endif  // SkRemoteGlyphCache_DEFINED

@@ -382,8 +382,9 @@ public:
             , fIsHairline(isHairline) {
         fPaths.emplace_back(PathData{path, tolerance});
 
-        this->setBounds(devBounds, HasAABloat::kNo,
-                        isHairline ? IsZeroArea::kYes : IsZeroArea::kNo);
+        HasAABloat aaBloat = (aaType == GrAAType::kNone) ? HasAABloat ::kNo : HasAABloat::kYes;
+        this->setBounds(devBounds, aaBloat,
+                        isHairline ? IsHairline::kYes : IsHairline::kNo);
     }
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
@@ -587,9 +588,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
     SkScalar srcSpaceTol = GrPathUtils::scaleToleranceToSrc(tol, viewMatrix, path.getBounds());
 
     SkRect devBounds;
-    GetPathDevBounds(path,
-                     renderTargetContext->asRenderTargetProxy()->worstCaseWidth(),
-                     renderTargetContext->asRenderTargetProxy()->worstCaseHeight(),
+    GetPathDevBounds(path, renderTargetContext->asRenderTargetProxy()->backingStoreDimensions(),
                      viewMatrix, &devBounds);
 
     for (int p = 0; p < passCount; ++p) {

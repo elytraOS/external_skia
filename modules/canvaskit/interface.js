@@ -8,6 +8,11 @@
 CanvasKit.onRuntimeInitialized = function() {
   // All calls to 'this' need to go in externs.js so closure doesn't minify them away.
 
+  // buffer is the underlying ArrayBuffer that is the WASM memory blob.
+  // It was removed from Emscripten proper in https://github.com/emscripten-core/emscripten/pull/8277
+  // but it is convenient to have a reference to, so we add it back in.
+  CanvasKit.buffer = CanvasKit.HEAPU8.buffer;
+
   // Add some helpers for matrices. This is ported from SkMatrix.cpp
   // to save complexity and overhead of going back and forth between
   // C++ and JS layers.
@@ -595,11 +600,11 @@ CanvasKit.onRuntimeInitialized = function() {
     if (typeof str === 'string') {
       // lengthBytesUTF8 and stringToUTF8Array are defined in the emscripten
       // JS.  See https://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html#stringToUTF8
-      // Add 1 for null terminator
-      var strLen = lengthBytesUTF8(str) + 1;
-      var strPtr = CanvasKit._malloc(strLen);
-
-      stringToUTF8(str, strPtr, strLen);
+      var strLen = lengthBytesUTF8(str);
+      // Add 1 for null terminator, which we need when copying/converting, but can ignore
+      // when we call into Skia.
+      var strPtr = CanvasKit._malloc(strLen + 1);
+      stringToUTF8(str, strPtr, strLen + 1);
       this._drawSimpleText(strPtr, strLen, x, y, font, paint);
     } else {
       this._drawShapedText(str, x, y, paint);
@@ -629,7 +634,7 @@ CanvasKit.onRuntimeInitialized = function() {
 
     // The first typed array is just a view into memory. Because we will
     // be free-ing that, we call slice to make a persistent copy.
-    var pixels = new Uint8Array(CanvasKit.HEAPU8.buffer, pptr, len).slice();
+    var pixels = new Uint8Array(CanvasKit.buffer, pptr, len).slice();
     CanvasKit._free(pptr);
     return pixels;
   }
@@ -704,12 +709,43 @@ CanvasKit.onRuntimeInitialized = function() {
     return retVal;
   }
 
+  // arguments should all be arrayBuffers or be an array of arrayBuffers.
+  CanvasKit.SkFontMgr.FromData = function() {
+    if (!arguments.length) {
+      SkDebug('Could not make SkFontMgr from no font sources');
+      return null;
+    }
+    var fonts = arguments;
+    if (fonts.length === 1 && Array.isArray(fonts[0])) {
+      fonts = arguments[0];
+    }
+    if (!fonts.length) {
+      SkDebug('Could not make SkFontMgr from no font sources');
+      return null;
+    }
+    var dPtrs = [];
+    var sizes = [];
+    for (var i = 0; i < fonts.length; i++) {
+      var data = new Uint8Array(fonts[i]);
+      var dptr = copy1dArray(data, CanvasKit.HEAPU8);
+      dPtrs.push(dptr);
+      sizes.push(data.byteLength);
+    }
+    // Pointers are 32 bit unsigned ints
+    var datasPtr = copy1dArray(dPtrs, CanvasKit.HEAPU32);
+    var sizesPtr = copy1dArray(sizes, CanvasKit.HEAPU32);
+    var fm = CanvasKit.SkFontMgr._fromData(datasPtr, sizesPtr, fonts.length);
+    // The SkFontMgr has taken ownership of the bytes we allocated in the for loop.
+    CanvasKit._free(datasPtr);
+    CanvasKit._free(sizesPtr);
+    return fm;
+  }
+
   // fontData should be an arrayBuffer
   CanvasKit.SkFontMgr.prototype.MakeTypefaceFromData = function(fontData) {
     var data = new Uint8Array(fontData);
 
-    var fptr = CanvasKit._malloc(data.byteLength);
-    CanvasKit.HEAPU8.set(data, fptr);
+    var fptr = copy1dArray(data, CanvasKit.HEAPU8);
     var font = this._makeTypefaceFromData(fptr, data.byteLength);
     if (!font) {
       SkDebug('Could not decode font data');

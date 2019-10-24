@@ -10,6 +10,7 @@
 
 #include "include/core/SkColor.h"
 #include "include/core/SkString.h"
+#include "include/private/SkMutex.h"
 #include "include/private/SkTHash.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
@@ -51,7 +52,7 @@ private:
 
 class FileResourceProvider final : public skottie::ResourceProvider {
 public:
-    static sk_sp<FileResourceProvider> Make(SkString base_dir);
+    static sk_sp<FileResourceProvider> Make(SkString base_dir, bool predecode = false);
 
     sk_sp<SkData> load(const char resource_path[], const char resource_name[]) const override;
 
@@ -59,11 +60,60 @@ public:
                                               const char[]) const override;
 
 private:
-    explicit FileResourceProvider(SkString);
+    FileResourceProvider(SkString, bool);
 
     const SkString fDir;
+    const bool     fPredecode;
 
     using INHERITED = skottie::ResourceProvider;
+};
+
+class ResourceProviderProxyBase : public skottie::ResourceProvider {
+protected:
+    explicit ResourceProviderProxyBase(sk_sp<ResourceProvider>);
+
+    sk_sp<SkData> load(const char[], const char[]) const override;
+    sk_sp<skottie::ImageAsset> loadImageAsset(const char[], const char[],
+                                              const char[]) const override;
+    sk_sp<SkData> loadFont(const char[], const char[]) const override;
+
+private:
+    const sk_sp<ResourceProvider> fProxy;
+};
+
+class CachingResourceProvider final : public ResourceProviderProxyBase {
+public:
+    static sk_sp<CachingResourceProvider> Make(sk_sp<ResourceProvider> rp) {
+        return rp ? sk_sp<CachingResourceProvider>(new CachingResourceProvider(std::move(rp)))
+                  : nullptr;
+    }
+
+private:
+    explicit CachingResourceProvider(sk_sp<ResourceProvider>);
+
+    sk_sp<skottie::ImageAsset> loadImageAsset(const char[], const char[],
+                                              const char[]) const override;
+
+    mutable SkMutex                                          fMutex;
+    mutable SkTHashMap<SkString, sk_sp<skottie::ImageAsset>> fImageCache;
+
+    using INHERITED = ResourceProviderProxyBase;
+};
+
+class DataURIResourceProviderProxy final : public ResourceProviderProxyBase {
+public:
+    static sk_sp<DataURIResourceProviderProxy> Make(sk_sp<ResourceProvider> rp,
+                                                    bool predecode = false);
+
+private:
+    DataURIResourceProviderProxy(sk_sp<ResourceProvider>, bool);
+
+    sk_sp<skottie::ImageAsset> loadImageAsset(const char[], const char[],
+                                              const char[]) const override;
+
+    const bool fPredecode;
+
+    using INHERITED = ResourceProviderProxyBase;
 };
 
 /**

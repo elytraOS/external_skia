@@ -11,6 +11,7 @@
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/utils/SkAnimCodecPlayer.h"
+#include "include/utils/SkBase64.h"
 #include "src/core/SkMakeUnique.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
@@ -77,13 +78,15 @@ sk_sp<SkImage> MultiFrameImageAsset::getFrame(float t) {
     return frame;
 }
 
-sk_sp<FileResourceProvider> FileResourceProvider::Make(SkString base_dir) {
+sk_sp<FileResourceProvider> FileResourceProvider::Make(SkString base_dir, bool predecode) {
     return sk_isdir(base_dir.c_str())
-        ? sk_sp<FileResourceProvider>(new FileResourceProvider(std::move(base_dir)))
+        ? sk_sp<FileResourceProvider>(new FileResourceProvider(std::move(base_dir), predecode))
         : nullptr;
 }
 
-FileResourceProvider::FileResourceProvider(SkString base_dir) : fDir(std::move(base_dir)) {}
+FileResourceProvider::FileResourceProvider(SkString base_dir, bool predecode)
+    : fDir(std::move(base_dir))
+    , fPredecode(predecode) {}
 
 sk_sp<SkData> FileResourceProvider::load(const char resource_path[],
                                          const char resource_name[]) const {
@@ -95,7 +98,88 @@ sk_sp<SkData> FileResourceProvider::load(const char resource_path[],
 sk_sp<skottie::ImageAsset> FileResourceProvider::loadImageAsset(const char resource_path[],
                                                                 const char resource_name[],
                                                                 const char[]) const {
-    return MultiFrameImageAsset::Make(this->load(resource_path, resource_name));
+    return MultiFrameImageAsset::Make(this->load(resource_path, resource_name), fPredecode);
+}
+
+ResourceProviderProxyBase::ResourceProviderProxyBase(sk_sp<ResourceProvider> rp)
+    : fProxy(std::move(rp)) {}
+
+sk_sp<SkData> ResourceProviderProxyBase::load(const char resource_path[],
+                                              const char resource_name[]) const {
+    return fProxy ? fProxy->load(resource_path, resource_name)
+                  : nullptr;
+}
+
+sk_sp<skottie::ImageAsset> ResourceProviderProxyBase::loadImageAsset(const char rpath[],
+                                                                     const char rname[],
+                                                                     const char rid[]) const {
+    return fProxy ? fProxy->loadImageAsset(rpath, rname, rid)
+                  : nullptr;
+}
+
+sk_sp<SkData> ResourceProviderProxyBase::loadFont(const char name[], const char url[]) const {
+    return fProxy ? fProxy->loadFont(name, url)
+                  : nullptr;
+}
+
+CachingResourceProvider::CachingResourceProvider(sk_sp<ResourceProvider> rp)
+    : INHERITED(std::move(rp)) {}
+
+sk_sp<skottie::ImageAsset> CachingResourceProvider::loadImageAsset(const char resource_path[],
+                                                                   const char resource_name[],
+                                                                   const char resource_id[]) const {
+    SkAutoMutexExclusive amx(fMutex);
+
+    const SkString key(resource_id);
+    if (const auto* asset = fImageCache.find(key)) {
+        return *asset;
+    }
+
+    auto asset = this->INHERITED::loadImageAsset(resource_path, resource_name, resource_id);
+    fImageCache.set(key, asset);
+
+    return asset;
+}
+
+sk_sp<DataURIResourceProviderProxy> DataURIResourceProviderProxy::Make(sk_sp<ResourceProvider> rp,
+                                                                       bool predecode) {
+    return sk_sp<DataURIResourceProviderProxy>(
+            new DataURIResourceProviderProxy(std::move(rp), predecode));
+}
+
+DataURIResourceProviderProxy::DataURIResourceProviderProxy(sk_sp<ResourceProvider> rp,
+                                                           bool predecode)
+    : INHERITED(std::move(rp))
+    , fPredecode(predecode) {}
+
+sk_sp<skottie::ImageAsset> DataURIResourceProviderProxy::loadImageAsset(const char rpath[],
+                                                                        const char rname[],
+                                                                        const char rid[]) const {
+    // We only handle B64 encoded image dataURIs: data:image/<type>;base64,<data>
+    // (https://en.wikipedia.org/wiki/Data_URI_scheme)
+    static constexpr char kDataURIImagePrefix[] = "data:image/",
+                          kDataURIEncodingStr[] = ";base64,";
+
+    if (!strncmp(rname, kDataURIImagePrefix, SK_ARRAY_COUNT(kDataURIImagePrefix) - 1)) {
+        const char* encoding_start = strstr(rname + SK_ARRAY_COUNT(kDataURIImagePrefix) - 1,
+                                            kDataURIEncodingStr);
+        if (encoding_start) {
+            const char* data_start = encoding_start + SK_ARRAY_COUNT(kDataURIEncodingStr) - 1;
+
+            // TODO: SkBase64::decode ergonomics are... interesting.
+            SkBase64 b64;
+            if (SkBase64::kNoError == b64.decode(data_start, strlen(data_start))) {
+                return MultiFrameImageAsset::Make(SkData::MakeWithProc(b64.getData(),
+                                                                       b64.getDataSize(),
+                                                      [](const void* ptr, void*) {
+                                                          delete[] static_cast<const char*>(ptr);
+                                                      }, /*ctx=*/nullptr),
+                                                  fPredecode);
+            }
+        }
+    }
+
+    return this->INHERITED::loadImageAsset(rpath, rname, rid);
 }
 
 class CustomPropertyManager::PropertyInterceptor final : public skottie::PropertyObserver {

@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkTypes.h"
 #include "tests/Test.h"
 
 #include <array>
@@ -17,9 +16,11 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrOpsRenderPass.h"
+#include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
@@ -292,7 +293,7 @@ private:
         , fPrepareFn(prepareFn)
         , fExecuteFn(executeFn){
         this->setBounds(SkRect::MakeIWH(kImageWidth, kImageHeight),
-                        HasAABloat::kNo, IsZeroArea::kNo);
+                        HasAABloat::kNo, IsHairline::kNo);
     }
 
     const char* name() const override { return "GrMeshTestOp"; }
@@ -410,7 +411,14 @@ sk_sp<const GrBuffer> DrawMeshHelper::getIndexBuffer() {
 void DrawMeshHelper::drawMesh(const GrMesh& mesh) {
     GrPipeline pipeline(GrScissorTest::kDisabled, SkBlendMode::kSrc, GrSwizzle::RGBA());
     GrMeshTestProcessor mtp(mesh.isInstanced(), mesh.hasVertexData());
-    fState->opsRenderPass()->draw(mtp, pipeline, nullptr, nullptr, &mesh, 1,
+
+    GrProgramInfo programInfo(fState->drawOpArgs().numSamples(),
+                              fState->drawOpArgs().origin(),
+                              pipeline,
+                              mtp,
+                              nullptr, nullptr, 0);
+
+    fState->opsRenderPass()->draw(programInfo, &mesh, 1,
                                   SkRect::MakeIWH(kImageWidth, kImageHeight));
 }
 

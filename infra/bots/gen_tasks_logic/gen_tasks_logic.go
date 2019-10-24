@@ -177,10 +177,10 @@ var (
 	// used where necessary.
 	EXTRA_PROPS = map[string]string{
 		"buildbucket_build_id": specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
-		"patch_issue":          specs.PLACEHOLDER_ISSUE,
+		"patch_issue":          specs.PLACEHOLDER_ISSUE_INT,
 		"patch_ref":            specs.PLACEHOLDER_PATCH_REF,
 		"patch_repo":           specs.PLACEHOLDER_PATCH_REPO,
-		"patch_set":            specs.PLACEHOLDER_PATCHSET,
+		"patch_set":            specs.PLACEHOLDER_PATCHSET_INT,
 		"patch_storage":        specs.PLACEHOLDER_PATCH_STORAGE,
 		"repository":           specs.PLACEHOLDER_REPO,
 		"revision":             specs.PLACEHOLDER_REVISION,
@@ -305,10 +305,10 @@ func CheckoutRoot() string {
 func LoadJson(filename string, dest interface{}) {
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
-		glog.Fatal(err)
+		glog.Fatalf("Unable to read %q: %s", filename, err)
 	}
 	if err := json.Unmarshal(b, dest); err != nil {
-		glog.Fatal(err)
+		glog.Fatalf("Unable to parse %q: %s", filename, err)
 	}
 }
 
@@ -662,12 +662,13 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 				"iPadMini4": "iPad5,1",
 				"iPhone6":   "iPhone7,2",
 				"iPhone7":   "iPhone9,1",
+				"iPhone8":   "iPhone10,1",
 				"iPadPro":   "iPad6,3",
 			}[parts["model"]]
 			if !ok {
 				glog.Fatalf("Entry %q not found in iOS mapping.", parts["model"])
 			}
-			d["device"] = device
+			d["device_type"] = device
 		} else if strings.Contains(parts["extra_config"], "SwiftShader") {
 			if parts["model"] != "GCE" || d["os"] != DEFAULT_OS_DEBIAN || parts["cpu_or_gpu_value"] != "SwiftShader" {
 				glog.Fatalf("Please update defaultSwarmDimensions for SwiftShader %s %s %s.", parts["os"], parts["model"], parts["cpu_or_gpu_value"])
@@ -1096,6 +1097,9 @@ func (b *builder) compile(name string, parts map[string]string) string {
 		if strings.Contains(name, "MoltenVK") {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("moltenvk"))
 		}
+		if strings.Contains(name, "iOS") {
+			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("provisioning_profile_ios"))
+		}
 	}
 
 	// Add the task.
@@ -1105,19 +1109,6 @@ func (b *builder) compile(name string, parts map[string]string) string {
 	// is listed in jobs.
 	if !util.In(name, b.jobs) {
 		glog.Fatalf("Job %q is missing from the jobs list!", name)
-	}
-
-	// Upload the skiaserve binary only for Linux Android compile bots.
-	// See skbug.com/7399 for context.
-	if parts["configuration"] == "Release" &&
-		parts["extra_config"] == "Android" &&
-		!strings.Contains(parts["os"], "Win") &&
-		!strings.Contains(parts["os"], "Mac") {
-		uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, b.jobNameSchema.Sep, name)
-		task := b.kitchenTask(uploadName, "upload_skiaserve", "swarm_recipe.isolate", b.cfg.ServiceAccountUploadBinary, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
-		task.Dependencies = append(task.Dependencies, name)
-		b.MustAddTask(uploadName, task)
-		return uploadName
 	}
 
 	return name
@@ -1471,7 +1462,7 @@ func (b *builder) presubmit(name string) string {
 	task.CipdPackages = append(task.CipdPackages, &specs.CipdPackage{
 		Name:    "infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build",
 		Path:    "recipe_bundle",
-		Version: "refs/heads/master",
+		Version: "git_revision:a8bcedad6768e206c4d2bd1718caa849f29cd42d",
 	})
 	task.Dependencies = []string{} // No bundled recipes for this one.
 	b.MustAddTask(name, task)

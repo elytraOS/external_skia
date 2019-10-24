@@ -5,9 +5,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+ - Experimental `CanvasKit.Malloc`, which can be used to create a
+   TypedArray backed by the C++ WASM memory. This can save a copy in some cases
+   (e.g. SkColorFilter.MakeMatrix). This is an advanced feature, so use it with care.
+ - `SkCanvas.clipRRect`, `SkCanvas.drawColor`
+
+## [0.8.0] - 2019-10-21
 
 ### Added
  - `CanvasKit.MakeAnimatedImageFromEncoded`, `SkCanvas.drawAnimatedImage`.
+ - `CanvasKit.SkFontMgr.FromData` which takes several ArrayBuffers of font data, parses
+   them, reading the metadata (e.g. family names) and stores them into a SkFontMgr.
+ - SkParagraph as an optional set of APIs for dealing with text layout.
+
+### Changed
+ - The `no_font` compile option should strip out more dead code related to fonts.
+ - and `no_embedded_font` option now allows creating a `SkFontMgr.FromData` instead of
+   always having an empty one.
+ - Updated to emscripten 1.38.47
+ - Switch to WebGL 2.0, but fall back to 1.0 when unavailable - bug.skia.org/9052
+
+### Fixed
+ - Null terminator bug in draw text - skbug.com/9314
 
 ## [0.7.0] - 2019-09-18
 

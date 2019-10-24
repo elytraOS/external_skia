@@ -53,7 +53,7 @@ sk_sp<GrGpu> GrMockGpu::Make(const GrMockOptions* mockOptions,
 }
 
 GrOpsRenderPass* GrMockGpu::getOpsRenderPass(
-                                GrRenderTarget* rt, GrSurfaceOrigin origin, const SkRect& bounds,
+                                GrRenderTarget* rt, GrSurfaceOrigin origin, const SkIRect& bounds,
                                 const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
                                 const GrOpsRenderPass::StencilLoadAndStoreInfo&,
                                 const SkTArray<GrTextureProxy*, true>& sampledProxies) {
@@ -258,14 +258,14 @@ GrStencilAttachment* GrMockGpu::createStencilAttachmentForRenderTarget(
     return new GrMockStencilAttachment(this, width, height, kBits, rt->numSamples());
 }
 
-GrBackendTexture GrMockGpu::createBackendTexture(int w, int h,
-                                                 const GrBackendFormat& format,
-                                                 GrMipMapped mipMapped,
-                                                 GrRenderable /* renderable */,
-                                                 const void* /* pixels */,
-                                                 size_t /* rowBytes */,
-                                                 const SkColor4f* /* color */,
-                                                 GrProtected /* isProtected */) {
+GrBackendTexture GrMockGpu::onCreateBackendTexture(int w, int h,
+                                                   const GrBackendFormat& format,
+                                                   GrMipMapped mipMapped,
+                                                   GrRenderable /* renderable */,
+                                                   const SkPixmap /*srcData*/[],
+                                                   int /*numMipLevels*/,
+                                                   const SkColor4f* /* color */,
+                                                   GrProtected /* isProtected */) {
     auto colorType = format.asMockColorType();
     if (!this->caps()->isFormatTexturable(format)) {
         return GrBackendTexture();  // invalid

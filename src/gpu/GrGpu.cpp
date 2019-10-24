@@ -12,12 +12,14 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContext.h"
 #include "src/core/SkMathPriv.h"
+#include "src/core/SkMipMap.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrMesh.h"
+#include "src/gpu/GrNativeRect.h"
 #include "src/gpu/GrPathRendering.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTargetPriv.h"
@@ -579,8 +581,13 @@ bool GrGpu::regenerateMipMapLevels(GrTexture* texture) {
     SkASSERT(texture);
     SkASSERT(this->caps()->mipMapSupport());
     SkASSERT(texture->texturePriv().mipMapped() == GrMipMapped::kYes);
-    SkASSERT(texture->texturePriv().mipMapsAreDirty());
-    SkASSERT(!texture->asRenderTarget() || !texture->asRenderTarget()->needsResolve());
+    if (!texture->texturePriv().mipMapsAreDirty()) {
+        // This can happen when the proxy expects mipmaps to be dirty, but they are not dirty on the
+        // actual target. This may be caused by things that the drawingManager could not predict,
+        // i.e., ops that don't draw anything, aborting a draw for exceptional circumstances, etc.
+        // NOTE: This goes away once we quit tracking mipmap state on the actual texture.
+        return true;
+    }
     if (texture->readOnly()) {
         return false;
     }
@@ -596,10 +603,11 @@ void GrGpu::resetTextureBindings() {
     this->onResetTextureBindings();
 }
 
-void GrGpu::resolveRenderTarget(GrRenderTarget* target) {
+void GrGpu::resolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
+                                GrSurfaceOrigin origin, ForExternalIO forExternalIO) {
     SkASSERT(target);
     this->handleDirtyContext();
-    this->onResolveRenderTarget(target);
+    this->onResolveRenderTarget(target, resolveRect, origin, forExternalIO);
 }
 
 void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const SkIRect* bounds,
@@ -608,15 +616,6 @@ void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const 
     SkASSERT(!surface->readOnly());
     // Mark any MIP chain and resolve buffer as dirty if and only if there is a non-empty bounds.
     if (nullptr == bounds || !bounds->isEmpty()) {
-        if (GrRenderTarget* target = surface->asRenderTarget()) {
-            SkIRect flippedBounds;
-            if (kBottomLeft_GrSurfaceOrigin == origin && bounds) {
-                flippedBounds = {bounds->fLeft, surface->height() - bounds->fBottom,
-                                 bounds->fRight, surface->height() - bounds->fTop};
-                bounds = &flippedBounds;
-            }
-            target->flagAsNeedingResolve(bounds);
-        }
         GrTexture* texture = surface->asTexture();
         if (texture && 1 == mipLevels) {
             texture->texturePriv().markMipMapsDirty();
@@ -701,6 +700,76 @@ void GrGpu::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>*
     keys->push_back(SkString("shader_compilations")); values->push_back(fShaderCompilations);
 }
 
-#endif
+#endif // GR_GPU_STATS
+#endif // GR_TEST_UTILS
 
-#endif
+
+bool GrGpu::MipMapsAreCorrect(int baseWidth, int baseHeight, GrMipMapped mipMapped,
+                              const SkPixmap srcData[], int numMipLevels) {
+    if (!srcData) {
+        return true;
+    }
+
+    if (baseWidth != srcData[0].width() || baseHeight != srcData[0].height()) {
+        return false;
+    }
+
+    if (mipMapped == GrMipMapped::kYes) {
+        if (numMipLevels != SkMipMap::ComputeLevelCount(baseWidth, baseHeight) + 1) {
+            return false;
+        }
+
+        SkColorType colorType = srcData[0].colorType();
+
+        int currentWidth = baseWidth;
+        int currentHeight = baseHeight;
+        for (int i = 1; i < numMipLevels; ++i) {
+            currentWidth = SkTMax(1, currentWidth / 2);
+            currentHeight = SkTMax(1, currentHeight / 2);
+
+            if (srcData[i].colorType() != colorType) { // all levels must have same colorType
+                return false;
+            }
+
+            if (srcData[i].width() != currentWidth || srcData[i].height() != currentHeight) {
+                return false;
+            }
+        }
+    } else if (numMipLevels != 1) {
+        return false;
+    }
+
+    return true;
+}
+
+GrBackendTexture GrGpu::createBackendTexture(int w, int h, const GrBackendFormat& format,
+                                             GrMipMapped mipMapped, GrRenderable renderable,
+                                             const SkPixmap srcData[], int numMipLevels,
+                                             const SkColor4f* color, GrProtected isProtected) {
+    const GrCaps* caps = this->caps();
+
+    if (!format.isValid()) {
+        return {};
+    }
+
+    if (caps->isFormatCompressed(format)) {
+        // Compressed formats must go through the createCompressedBackendTexture API
+        return {};
+    }
+
+    if (w < 1 || w > caps->maxTextureSize() || h < 1 || h > caps->maxTextureSize()) {
+        return {};
+    }
+
+    // TODO: maybe just ignore the mipMapped parameter in this case
+    if (mipMapped == GrMipMapped::kYes && !this->caps()->mipMapSupport()) {
+        return {};
+    }
+
+    if (!MipMapsAreCorrect(w, h, mipMapped, srcData, numMipLevels)) {
+        return {};
+    }
+
+    return this->onCreateBackendTexture(w, h, format, mipMapped, renderable,
+                                        srcData, numMipLevels, color, isProtected);
+}

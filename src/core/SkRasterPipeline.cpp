@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include <algorithm>
@@ -24,10 +25,15 @@ void SkRasterPipeline::append(StockStage stage, void* ctx) {
     SkASSERT(stage !=                 set_rgb);  // Please use append_set_rgb().
     SkASSERT(stage !=       unbounded_set_rgb);  // Please use append_set_rgb().
     SkASSERT(stage !=             clamp_gamut);  // Please use append_gamut_clamp_if_normalized().
+    SkASSERT(stage !=              parametric);  // Please use append_transfer_function().
+    SkASSERT(stage !=                  gamma_);  // Please use append_transfer_function().
+    SkASSERT(stage !=                   PQish);  // Please use append_transfer_function().
+    SkASSERT(stage !=                  HLGish);  // Please use append_transfer_function().
+    SkASSERT(stage !=               HLGinvish);  // Please use append_transfer_function().
     this->unchecked_append(stage, ctx);
 }
 void SkRasterPipeline::unchecked_append(StockStage stage, void* ctx) {
-    fStages = fAlloc->make<StageList>( StageList{fStages, (uint64_t) stage, ctx, false} );
+    fStages = fAlloc->make<StageList>( StageList{fStages, stage, ctx} );
     fNumStages   += 1;
     fSlotsNeeded += ctx ? 2 : 1;
 }
@@ -35,11 +41,6 @@ void SkRasterPipeline::append(StockStage stage, uintptr_t ctx) {
     void* ptrCtx;
     memcpy(&ptrCtx, &ctx, sizeof(ctx));
     this->append(stage, ptrCtx);
-}
-void SkRasterPipeline::append(void* fn, void* ctx) {
-    fStages = fAlloc->make<StageList>( StageList{fStages, (uint64_t) fn, ctx, true} );
-    fNumStages   += 1;
-    fSlotsNeeded += ctx ? 2 : 1;
 }
 
 void SkRasterPipeline::extend(const SkRasterPipeline& src) {
@@ -272,6 +273,24 @@ void SkRasterPipeline::append_store(SkColorType ct, const SkRasterPipeline_Memor
     }
 }
 
+void SkRasterPipeline::append_transfer_function(const skcms_TransferFunction& tf) {
+    void* ctx = const_cast<void*>(static_cast<const void*>(&tf));
+    switch (classify_transfer_fn(tf)) {
+        case Bad_TF: SkASSERT(false); break;
+
+        case TFKind::sRGBish_TF:
+            if (tf.a == 1 && tf.b == 0 && tf.c == 0 && tf.d == 0 && tf.e == 0 && tf.f == 0) {
+                this->unchecked_append(gamma_, ctx);
+            } else {
+                this->unchecked_append(parametric, ctx);
+            }
+            break;
+        case PQish_TF:     this->unchecked_append(PQish,     ctx); break;
+        case HLGish_TF:    this->unchecked_append(HLGish,    ctx); break;
+        case HLGinvish_TF: this->unchecked_append(HLGinvish, ctx); break;
+    }
+}
+
 void SkRasterPipeline::append_gamut_clamp_if_normalized(const SkImageInfo& dstInfo) {
     // N.B. we _do_ clamp for kRGBA_F16Norm_SkColorType... because it's normalized.
     if (dstInfo.colorType() != kRGBA_F16_SkColorType &&
@@ -289,8 +308,7 @@ SkRasterPipeline::StartPipelineFn SkRasterPipeline::build_pipeline(void** ip) co
     // Stages are stored backwards in fStages, so we reverse here, back to front.
     *--ip = (void*)SkOpts::just_return_lowp;
     for (const StageList* st = fStages; st; st = st->prev) {
-        SkOpts::StageFn fn;
-        if (!st->rawFunction && (fn = SkOpts::stages_lowp[st->stage])) {
+        if (auto fn = SkOpts::stages_lowp[st->stage]) {
             if (st->ctx) {
                 *--ip = st->ctx;
             }
@@ -309,11 +327,7 @@ SkRasterPipeline::StartPipelineFn SkRasterPipeline::build_pipeline(void** ip) co
         if (st->ctx) {
             *--ip = st->ctx;
         }
-        if (st->rawFunction) {
-            *--ip = (void*)st->stage;
-        } else {
-            *--ip = (void*)SkOpts::stages_highp[st->stage];
-        }
+        *--ip = (void*)SkOpts::stages_highp[st->stage];
     }
     return SkOpts::start_pipeline_highp;
 }

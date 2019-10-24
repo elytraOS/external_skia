@@ -35,7 +35,11 @@ void MetalWindowContext::initializeContext() {
     fQueue = [fDevice newCommandQueue];
 
     if (fDisplayParams.fMSAASampleCount > 1) {
-        if (![fDevice supportsTextureSampleCount:fDisplayParams.fMSAASampleCount]) {
+        if (@available(macOS 10.11, iOS 9.0, *)) {
+            if (![fDevice supportsTextureSampleCount:fDisplayParams.fMSAASampleCount]) {
+                return;
+            }
+        } else {
             return;
         }
     }
@@ -72,28 +76,27 @@ void MetalWindowContext::destroyContext() {
 sk_sp<SkSurface> MetalWindowContext::getBackbufferSurface() {
     sk_sp<SkSurface> surface;
     if (fContext) {
-        GrMTLHandle drawable;
         surface = SkSurface::MakeFromCAMetalLayer(fContext.get(), (__bridge GrMTLHandle)fMetalLayer,
                                                   kTopLeft_GrSurfaceOrigin, fSampleCount,
                                                   kBGRA_8888_SkColorType,
                                                   fDisplayParams.fColorSpace,
                                                   &fDisplayParams.fSurfaceProps,
-                                                  &drawable);
-        // ARC is off in sk_app, so we need to release the CF ref manually
-        fCurrentDrawable = (id<CAMetalDrawable>)drawable;
-        CFRelease(drawable);
+                                                  &fDrawableHandle);
     }
 
     return surface;
 }
 
 void MetalWindowContext::swapBuffers() {
+    // ARC is off in sk_app, so we need to release the CF ref manually
+    id<CAMetalDrawable> currentDrawable = (id<CAMetalDrawable>)fDrawableHandle;
+    CFRelease(fDrawableHandle);
+
     id<MTLCommandBuffer> commandBuffer = [fQueue commandBuffer];
     commandBuffer.label = @"Present";
 
-    [commandBuffer presentDrawable:fCurrentDrawable];
+    [commandBuffer presentDrawable:currentDrawable];
     [commandBuffer commit];
-    fCurrentDrawable = nil;
 }
 
 void MetalWindowContext::setDisplayParams(const DisplayParams& params) {

@@ -181,10 +181,16 @@ public:
     sk_sp<GrGpuBuffer> createBuffer(size_t size, GrGpuBufferType intendedType,
                                     GrAccessPattern accessPattern, const void* data = nullptr);
 
+    enum class ForExternalIO : bool {
+        kYes = true,
+        kNo = false
+    };
+
     /**
      * Resolves MSAA.
      */
-    void resolveRenderTarget(GrRenderTarget*);
+    void resolveRenderTarget(GrRenderTarget*, const SkIRect& resolveRect, GrSurfaceOrigin,
+                             ForExternalIO);
 
     /**
      * Uses the base of the texture to recompute the contents of the other levels.
@@ -333,7 +339,7 @@ public:
     // Returns a GrOpsRenderPass which GrOpsTasks send draw commands to instead of directly
     // to the Gpu object. The 'bounds' rect is the content rect of the renderTarget.
     virtual GrOpsRenderPass* getOpsRenderPass(
-            GrRenderTarget* renderTarget, GrSurfaceOrigin, const SkRect& bounds,
+            GrRenderTarget* renderTarget, GrSurfaceOrigin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
             const SkTArray<GrTextureProxy*, true>& sampledProxies) = 0;
@@ -451,15 +457,24 @@ public:
     /**
      * Creates a texture directly in the backend API without wrapping it in a GrTexture.
      * Must be matched with a call to deleteBackendTexture().
-     * Right now, the color is ignored if pixel data is provided.
-     * In the future, if neither a color nor pixels are provided then the backend texture
-     * will be uninitialized.
+     *
+     * If srcData is provided it will be used to initialize the texture. If srcData is
+     * not provided but a color is then it is used to initialize the texture. If neither
+     * srcData nor a color is provided then the texture is left uninitialized.
+     *
+     * If srcData is provided and mipMapped is kYes then data for all the miplevels must be
+     * provided (or the method will fail). If only a color is provided and mipMapped is kYes
+     * then all the mip levels will be allocated and initialized to the color. If neither
+     * srcData nor a color is provided but mipMapped is kYes then the mip levels will be allocated
+     * but left uninitialized.
+     *
+     * Note: if more than one pixmap is provided (i.e., for mipmap levels) they must all share
+     * the same SkColorType.
      */
-    virtual GrBackendTexture createBackendTexture(int w, int h, const GrBackendFormat&,
-                                                  GrMipMapped, GrRenderable,
-                                                  const void* pixels, size_t rowBytes,
-                                                  const SkColor4f* color,
-                                                  GrProtected isProtected) = 0;
+    GrBackendTexture createBackendTexture(int w, int h, const GrBackendFormat&,
+                                          GrMipMapped, GrRenderable,
+                                          const SkPixmap srcData[], int numMipLevels,
+                                          const SkColor4f* color, GrProtected isProtected);
 
     /**
      * Frees a texture created by createBackendTexture(). If ownership of the backend
@@ -489,6 +504,13 @@ public:
      * This is for testing purposes only.
      */
     virtual void testingOnly_flushGpuAndSync() = 0;
+
+    /**
+     * Inserted as a pair around a block of code to do a GPU frame capture.
+     * Currently only works with the Metal backend.
+     */
+    virtual void testingOnly_startCapture() {}
+    virtual void testingOnly_endCapture() {}
 #endif
 
     // width and height may be larger than rt (if underlying API allows it).
@@ -534,6 +556,9 @@ public:
     virtual void storeVkPipelineCacheData() {}
 
 protected:
+    static bool MipMapsAreCorrect(int baseWidth, int baseHeight, GrMipMapped,
+                                  const SkPixmap srcData[], int numMipLevels);
+
     // Handles cases where a surface will be updated without a call to flushRenderTarget.
     void didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const SkIRect* bounds,
                            uint32_t mipLevels = 1) const;
@@ -544,6 +569,11 @@ protected:
     sk_sp<const GrCaps>              fCaps;
 
 private:
+    virtual GrBackendTexture onCreateBackendTexture(int w, int h, const GrBackendFormat&,
+                                                    GrMipMapped, GrRenderable,
+                                                    const SkPixmap srcData[], int numMipLevels,
+                                                    const SkColor4f* color, GrProtected) = 0;
+
     // called when the 3D context state is unknown. Subclass should emit any
     // assumed 3D context state and dirty any state cache.
     virtual void onResetContext(uint32_t resetBits) = 0;
@@ -612,7 +642,8 @@ private:
                                       GrGpuBuffer* transferBuffer, size_t offset) = 0;
 
     // overridden by backend-specific derived class to perform the resolve
-    virtual void onResolveRenderTarget(GrRenderTarget* target) = 0;
+    virtual void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
+                                       GrSurfaceOrigin resolveOrigin, ForExternalIO) = 0;
 
     // overridden by backend specific derived class to perform mip map level regeneration.
     virtual bool onRegenerateMipMapLevels(GrTexture*) = 0;

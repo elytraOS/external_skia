@@ -26,7 +26,7 @@ class SkParticleDrawable;
 class SkParticleExternalValue;
 
 namespace SkSL {
-    struct ByteCode;
+    class ByteCode;
 }
 
 class SkParticleEffectParams : public SkRefCnt {
@@ -132,7 +132,7 @@ public:
 
     // Start playing this effect, specifying initial values for the emitter's properties
     void start(double now, bool looping, SkPoint position, SkVector heading, float scale,
-               SkVector velocity, float spin, SkColor4f color, float frame);
+               SkVector velocity, float spin, SkColor4f color, float frame, uint32_t flags);
 
     // Start playing this effect, with default values for the emitter's properties
     void start(double now, bool looping) {
@@ -143,7 +143,8 @@ public:
                     { 0.0f, 0.0f },              // velocity
                     0.0f,                        // spin
                     { 1.0f, 1.0f, 1.0f, 1.0f },  // color
-                    0.0f);                       // sprite frame
+                    0.0f,                        // sprite frame
+                    0);                          // flags
     }
 
     void update(double now);
@@ -155,6 +156,34 @@ public:
     }
     int getCount() const { return fCount; }
 
+    float     getRate()     const { return fState.fRate;     }
+    int       getBurst()    const { return fState.fBurst;    }
+    SkPoint   getPosition() const { return fState.fPosition; }
+    SkVector  getHeading()  const { return fState.fHeading;  }
+    float     getScale()    const { return fState.fScale;    }
+    SkVector  getVelocity() const { return fState.fVelocity; }
+    float     getSpin()     const { return fState.fSpin;     }
+    SkColor4f getColor()    const { return fState.fColor;    }
+    float     getFrame()    const { return fState.fFrame;    }
+    uint32_t  getFlags()    const { return fState.fFlags;    }
+
+    void setRate    (float     r) { fState.fRate     = r; }
+    void setBurst   (int       b) { fState.fBurst    = b; }
+    void setPosition(SkPoint   p) { fState.fPosition = p; }
+    void setHeading (SkVector  h) { fState.fHeading  = h; }
+    void setScale   (float     s) { fState.fScale    = s; }
+    void setVelocity(SkVector  v) { fState.fVelocity = v; }
+    void setSpin    (float     s) { fState.fSpin     = s; }
+    void setColor   (SkColor4f c) { fState.fColor    = c; }
+    void setFrame   (float     f) { fState.fFrame    = f; }
+    void setFlags   (uint32_t  f) { fState.fFlags    = f; }
+
+    const SkSL::ByteCode* effectCode() const { return fParams->fEffectProgram.fByteCode.get(); }
+    const SkSL::ByteCode* particleCode() const { return fParams->fParticleProgram.fByteCode.get(); }
+
+    float* effectUniforms() { return fEffectUniforms.data(); }
+    float* particleUniforms() { return fParticleUniforms.data(); }
+
     static void RegisterParticleTypes();
 
 private:
@@ -164,7 +193,7 @@ private:
     void advanceTime(double now);
 
     void processEffectSpawnRequests(double now);
-    int runEffectScript(double now, const char* entry);
+    void runEffectScript(double now, const char* entry);
 
     void processParticleSpawnRequests(double now, int start);
     void runParticleScript(double now, const char* entry, int start, int count);
@@ -178,13 +207,9 @@ private:
     double fLastTime;
     float  fSpawnRemainder;
 
-    // Effect-associated values exposed to script. They are some mix of uniform and inout,
-    // depending on whether we're executing per-effect or per-particle scripts.
+    // C++ version of the SkSL Effect struct. This is the inout parameter to per-effect scripts,
+    // and provided as a uniform (named 'effect') to the per-particle scripts.
     struct EffectState {
-        float fDeltaTime;
-
-        // Above this line is always uniform. Below is uniform for particles, inout for effect.
-
         float fAge;
         float fLifetime;
         int   fLoopCount;
@@ -199,6 +224,7 @@ private:
         float     fSpin;
         SkColor4f fColor;
         float     fFrame;
+        uint32_t  fFlags;
     };
     EffectState fState;
 
@@ -207,6 +233,8 @@ private:
 
     // Cached
     int fCapacity;
+    SkTArray<float, true> fEffectUniforms;
+    SkTArray<float, true> fParticleUniforms;
 
     // Private interface used by SkEffectBinding and SkEffectExternalValue to spawn sub effects
     friend class SkEffectExternalValue;

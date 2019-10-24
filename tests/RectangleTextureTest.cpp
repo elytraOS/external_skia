@@ -33,7 +33,7 @@ static void test_basic_draw_as_src(skiatest::Reporter* reporter, GrContext* cont
                         GrSamplerState::Filter::kMipMap}) {
         rtContext->clear(nullptr, SkPMColor4f::FromBytes_RGBA(0xDDCCBBAA),
                          GrRenderTargetContext::CanClearFullscreen::kYes);
-        auto fp = GrSimpleTextureEffect::Make(rectProxy, SkMatrix::I(), filter);
+        auto fp = GrSimpleTextureEffect::Make(rectProxy, colorType, SkMatrix::I(), filter);
         GrPaint paint;
         paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
         paint.addColorFragmentProcessor(std::move(fp));
@@ -106,8 +106,10 @@ static void test_copy_to_surface(skiatest::Reporter* reporter,
     for (auto renderable : {GrRenderable::kNo, GrRenderable::kYes}) {
         auto origin = dstContext->asSurfaceProxy()->origin();
         auto src = sk_gpu_test::MakeTextureProxyFromData(
-                context, renderable, dstContext->width(), dstContext->height(),
-                kRGBA_8888_SkColorType, kPremul_SkAlphaType, origin, pixels.get(), 0);
+                context, renderable, origin,
+                {GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr, dstContext->width(),
+                 dstContext->height()},
+                pixels.get(), 0);
         // If this assert ever fails we can add a fallback to do copy as draw, but until then we can
         // be more restrictive.
         SkAssertResult(dstContext->testCopy(src.get()));

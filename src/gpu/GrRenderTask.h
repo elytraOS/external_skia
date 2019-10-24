@@ -29,6 +29,8 @@ public:
 
     void makeClosed(const GrCaps&);
 
+    void prePrepare(GrRecordingContext* context) { this->onPrePrepare(context); }
+
     // These two methods are only invoked at flush time
     void prepare(GrOpFlushState* flushState);
     bool execute(GrOpFlushState* flushState) { return this->onExecute(flushState); }
@@ -96,7 +98,12 @@ protected:
         kTargetDirty,
     };
 
-    virtual ExpectedOutcome onMakeClosed(const GrCaps&) = 0;
+    // Performs any work to finalize this renderTask prior to execution. If returning
+    // ExpectedOutcome::kTargetDiry, the caller is also responsible to fill out the area it will
+    // modify in targetUpdateBounds.
+    //
+    // targetUpdateBounds must not extend beyond the proxy bounds.
+    virtual ExpectedOutcome onMakeClosed(const GrCaps&, SkIRect* targetUpdateBounds) = 0;
 
     sk_sp<GrSurfaceProxy> fTarget;
 
@@ -178,7 +185,9 @@ private:
         }
     };
 
-    virtual void onPrepare(GrOpFlushState* flushState) = 0;
+    // Only the GrOpsTask currently overrides this virtual
+    virtual void onPrePrepare(GrRecordingContext*) {}
+    virtual void onPrepare(GrOpFlushState*) {} // Only the GrOpsTask overrides this virtual
     virtual bool onExecute(GrOpFlushState* flushState) = 0;
 
     const uint32_t         fUniqueID;
