@@ -50,22 +50,21 @@ struct GrDawnProgram : public SkRefCnt {
     };
     typedef GrGLSLBuiltinUniformHandles BuiltinUniformHandles;
     GrDawnProgram(const GrDawnUniformHandler::UniformInfoArray& uniforms,
-                  uint32_t geometryUniformSize,
-                  uint32_t fragmentUniformSize)
-      : fDataManager(uniforms, geometryUniformSize, fragmentUniformSize) {
+                  uint32_t uniformBufferSize)
+      : fDataManager(uniforms, uniformBufferSize) {
     }
     std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
     std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
     int fFragmentProcessorCnt;
-    dawn::BindGroupLayout fBindGroupLayout;
-    dawn::RenderPipeline fRenderPipeline;
+    wgpu::BindGroupLayout fBindGroupLayout;
+    wgpu::RenderPipeline fRenderPipeline;
     GrDawnProgramDataManager fDataManager;
     RenderTargetState fRenderTargetState;
     BuiltinUniformHandles fBuiltinUniformHandles;
 
     void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin);
-    dawn::BindGroup setData(GrDawnGpu* gpu, const GrRenderTarget*, const GrProgramInfo&);
+    wgpu::BindGroup setData(GrDawnGpu* gpu, const GrRenderTarget*, const GrProgramInfo&);
 };
 
 class GrDawnProgramBuilder : public GrGLSLProgramBuilder {
@@ -74,9 +73,9 @@ public:
                                       GrRenderTarget* rt,
                                       const GrProgramInfo& programInfo,
                                       GrPrimitiveType primitiveType,
-                                      dawn::TextureFormat colorFormat,
+                                      wgpu::TextureFormat colorFormat,
                                       bool hasDepthStencil,
-                                      dawn::TextureFormat depthStencilFormat,
+                                      wgpu::TextureFormat depthStencilFormat,
                                       GrProgramDesc* desc);
     const GrCaps* caps() const override;
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
@@ -90,7 +89,7 @@ private:
                          GrRenderTarget*,
                          const GrProgramInfo&,
                          GrProgramDesc*);
-    dawn::ShaderModule createShaderModule(const GrGLSLShaderBuilder&, SkSL::Program::Kind,
+    wgpu::ShaderModule createShaderModule(const GrGLSLShaderBuilder&, SkSL::Program::Kind,
                                           bool flipY, SkSL::Program::Inputs* inputs);
     GrDawnGpu*             fGpu;
     GrDawnVaryingHandler   fVaryingHandler;

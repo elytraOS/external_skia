@@ -10,12 +10,21 @@
 
 #ifdef Always
 #undef Always
+static constexpr int Always = 2;
+#endif
+#ifdef Success
+#undef Success
+static constexpr int Success = 0;
+#endif
+#ifdef None
+#undef None
+static constexpr int None = 0L;
 #endif
 #include "dawn/dawncpp.h"
 
 struct GrDawnImageInfo {
-    dawn::Texture       fTexture;
-    dawn::TextureFormat fFormat;
+    wgpu::Texture       fTexture;
+    wgpu::TextureFormat fFormat;
     uint32_t            fLevelCount;
     GrDawnImageInfo() : fTexture(nullptr), fFormat(), fLevelCount(0) {
     }

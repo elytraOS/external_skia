@@ -791,11 +791,11 @@ namespace skvm {
     void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
 
     Assembler::Label Assembler::here() {
-        return { (int)this->size(), Label::None, {} };
+        return { (int)this->size(), Label::NotYetSet, {} };
     }
 
     int Assembler::disp19(Label* l) {
-        SkASSERT(l->kind == Label::None ||
+        SkASSERT(l->kind == Label::NotYetSet ||
                  l->kind == Label::ARMDisp19);
         l->kind = Label::ARMDisp19;
         l->references.push_back(here().offset);
@@ -804,7 +804,7 @@ namespace skvm {
     }
 
     int Assembler::disp32(Label* l) {
-        SkASSERT(l->kind == Label::None ||
+        SkASSERT(l->kind == Label::NotYetSet ||
                  l->kind == Label::X86Disp32);
         l->kind = Label::X86Disp32;
         l->references.push_back(here().offset);
@@ -1187,6 +1187,8 @@ namespace skvm {
                 case 2: return ((void(*)(int,void*,void*            ))b)(n,a[0],a[1]          );
                 case 3: return ((void(*)(int,void*,void*,void*      ))b)(n,a[0],a[1],a[2]     );
                 case 4: return ((void(*)(int,void*,void*,void*,void*))b)(n,a[0],a[1],a[2],a[3]);
+                case 5: return ((void(*)(int,void*,void*,void*,void*,void*))b)
+                                (n,a[0],a[1],a[2],a[3],a[4]);
                 default: SkUNREACHABLE;  // TODO
             }
         }

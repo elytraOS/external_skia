@@ -192,9 +192,12 @@ private:
         using Domain = GrQuadPerEdgeAA::Domain;
         static constexpr SkRect kEmptyDomain = SkRect::MakeEmpty();
 
+        auto indexBufferOption = GrQuadPerEdgeAA::CalcIndexBufferOption(fHelper.aaType(),
+                                                                        fQuads.count());
+
         VertexSpec vertexSpec(fQuads.deviceQuadType(), fColorType, fQuads.localQuadType(),
                               fHelper.usesLocalCoords(), Domain::kNo, fHelper.aaType(),
-                              fHelper.compatibleWithCoverageAsAlpha());
+                              fHelper.compatibleWithCoverageAsAlpha(), indexBufferOption);
         // Make sure that if the op thought it was a solid color, the vertex spec does not use
         // local coords.
         SkASSERT(!fHelper.isTrivial() || !fHelper.usesLocalCoords());
@@ -244,10 +247,16 @@ private:
         TRACE_EVENT0("skia.gpu", TRACE_FUNC);
         const auto* that = t->cast<FillRectOp>();
 
-        if ((fHelper.aaType() == GrAAType::kCoverage ||
-             that->fHelper.aaType() == GrAAType::kCoverage) &&
-            fQuads.count() + that->fQuads.count() > GrQuadPerEdgeAA::kNumAAQuadsInIndexBuffer) {
-            // This limit on batch size seems to help on Adreno devices
+        bool upgradeToCoverageAAOnMerge = false;
+        if (fHelper.aaType() != that->fHelper.aaType()) {
+            if (!CanUpgradeAAOnMerge(fHelper.aaType(), that->fHelper.aaType())) {
+                return CombineResult::kCannotCombine;
+            }
+            upgradeToCoverageAAOnMerge = true;
+        }
+
+        if (CombinedQuadCountWillOverflow(fHelper.aaType(), upgradeToCoverageAAOnMerge,
+                                          fQuads.count() + that->fQuads.count())) {
             return CombineResult::kCannotCombine;
         }
 
@@ -268,7 +277,7 @@ private:
         // The helper stores the aa type, but isCompatible(with true arg) allows the two ops' aa
         // types to be none and coverage, in which case this op's aa type must be lifted to coverage
         // so that quads with no aa edges can be batched with quads that have some/all edges aa'ed.
-        if (fHelper.aaType() == GrAAType::kNone && that->fHelper.aaType() == GrAAType::kCoverage) {
+        if (upgradeToCoverageAAOnMerge) {
             fHelper.setAAType(GrAAType::kCoverage);
         }
 

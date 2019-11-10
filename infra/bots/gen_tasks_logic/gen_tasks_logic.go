@@ -268,7 +268,8 @@ type Config struct {
 	Project string `json:"project"`
 
 	// Service accounts.
-	ServiceAccountCompile         string `json:"service_account_compile"`
+	ServiceAccountAndroidFrameworkCompile         string `json:"service_account_android_framework_compile"`
+	ServiceAccountCompile		string `json:"service_account_compile"`
 	ServiceAccountHousekeeper     string `json:"service_account_housekeeper"`
 	ServiceAccountRecreateSKPs    string `json:"service_account_recreate_skps"`
 	ServiceAccountUploadBinary    string `json:"service_account_upload_binary"`
@@ -1153,7 +1154,8 @@ func (b *builder) housekeeper(name string) string {
 // the name of the last task in the generated chain of tasks, which the Job
 // should add as a dependency.
 func (b *builder) androidFrameworkCompile(name string) string {
-	task := b.kitchenTask(name, "android_compile", "compile_android_framework.isolate", b.cfg.ServiceAccountCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
+	task := b.kitchenTask(name, "android_compile", "compile_android_framework.isolate", b.cfg.ServiceAccountAndroidFrameworkCompile, b.linuxGceDimensions(MACHINE_TYPE_SMALL), EXTRA_PROPS, OUTPUT_NONE)
+	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	timeout(task, 2*time.Hour)
 	b.MustAddTask(name, task)
 	return name
@@ -1418,6 +1420,11 @@ func (b *builder) perf(name string, parts map[string]string, compileTaskName str
 	} else if strings.Contains(parts["extra_config"], "Skottie") {
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("lottie-samples"))
 	}
+
+	if strings.Contains(name, "Android") && strings.Contains(name, "CPU") {
+		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("text_blob_traces"))
+	}
+
 	iid := b.internalHardwareLabel(parts)
 	if iid != nil {
 		task.Command = append(task.Command, fmt.Sprintf("internal_hardware_label=%d", *iid))

@@ -424,11 +424,10 @@ void SkGpuDevice::drawImageQuad(const SkImage* image, const SkRect* srcRect, con
     SkBitmap bm;
     if (this->shouldTileImage(image, &src, constraint, paint.getFilterQuality(), ctm, srcToDst)) {
         // only support tiling as bitmap at the moment, so force raster-version
-        if (!as_IB(image)->getROPixels(&bm)) {
+        if (as_IB(image)->getROPixels(&bm)) {
+            this->drawBitmapRect(bm, &src, dst, paint, constraint);
             return;
         }
-        this->drawBitmapRect(bm, &src, dst, paint, constraint);
-        return;
     }
 
     // This is the funnel for all non-tiled bitmap/image draw calls. Log a histogram entry.
@@ -591,8 +590,8 @@ void SkGpuDevice::drawTextureProducer(GrTextureProducer* producer,
     SkRect src;
     SkRect dst;
     SkMatrix srcToDst;
-    ImageDrawMode mode = optimize_sample_area(SkISize::Make(producer->width(), producer->height()),
-                                              srcRect, dstRect, nullptr, &src, &dst, &srcToDst);
+    ImageDrawMode mode = optimize_sample_area(producer->dimensions(), srcRect, dstRect, nullptr,
+                                              &src, &dst, &srcToDst);
     if (mode == ImageDrawMode::kSkip) {
         return;
     }

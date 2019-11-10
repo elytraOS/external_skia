@@ -27,6 +27,11 @@ public:
     /** Abstract interface that represents a destination for a GrMeshDrawOp. */
     class Target;
 
+    static bool CanUpgradeAAOnMerge(GrAAType aa1, GrAAType aa2) {
+        return (aa1 == GrAAType::kNone && aa2 == GrAAType::kCoverage) ||
+               (aa1 == GrAAType::kCoverage && aa2 == GrAAType::kNone);
+    }
+
 protected:
     GrMeshDrawOp(uint32_t classID);
 
@@ -36,7 +41,7 @@ protected:
     public:
         PatternHelper(Target*, GrPrimitiveType, size_t vertexStride,
                       sk_sp<const GrBuffer> indexBuffer, int verticesPerRepetition,
-                      int indicesPerRepetition, int repeatCount);
+                      int indicesPerRepetition, int repeatCount, int maxRepetitions);
 
         /** Called to issue draws to the GrMeshDrawOp::Target.*/
         void recordDraw(Target*, sk_sp<const GrGeometryProcessor>) const;
@@ -48,15 +53,13 @@ protected:
     protected:
         PatternHelper() = default;
         void init(Target*, GrPrimitiveType, size_t vertexStride, sk_sp<const GrBuffer> indexBuffer,
-                  int verticesPerRepetition, int indicesPerRepetition, int repeatCount);
+                  int verticesPerRepetition, int indicesPerRepetition, int repeatCount,
+                  int maxRepetitions);
 
     private:
         void* fVertices = nullptr;
         GrMesh* fMesh = nullptr;
     };
-
-    static const int kVerticesPerQuad = 4;
-    static const int kIndicesPerQuad = 6;
 
     /** A specialization of InstanceHelper for quad rendering. */
     class QuadHelper : private PatternHelper {
@@ -70,6 +73,15 @@ protected:
     private:
         typedef PatternHelper INHERITED;
     };
+
+    static bool CombinedQuadCountWillOverflow(GrAAType aaType,
+                                              bool willBeUpgradedToAA,
+                                              int combinedQuadCount) {
+        bool willBeAA = (aaType == GrAAType::kCoverage) || willBeUpgradedToAA;
+
+        return combinedQuadCount > (willBeAA ? GrResourceProvider::MaxNumAAQuads()
+                                             : GrResourceProvider::MaxNumNonAAQuads());
+    }
 
 private:
     void onPrePrepare(GrRecordingContext* context, const GrAppliedClip* clip) final {
