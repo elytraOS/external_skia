@@ -44,11 +44,11 @@ private:
 
     bool onAppendStages(const SkStageRec&) const override;
 
-    bool program(skvm::Builder*,
-                 SkColorSpace* dstCS,
-                 skvm::Arg uniforms, int offset,
-                 skvm::I32* r, skvm::I32* g, skvm::I32* b, skvm::I32* a) const override;
-    size_t uniforms(SkColorSpace* dstCS, uint8_t* uniform_buffer) const override;
+    bool onProgram(skvm::Builder*,
+                   SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
 
     SkColor fColor;
 };
@@ -69,6 +69,12 @@ private:
 
     void flatten(SkWriteBuffer&) const override;
     bool onAppendStages(const SkStageRec&) const override;
+
+    bool onProgram(skvm::Builder*,
+                   SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
 
     sk_sp<SkColorSpace> fColorSpace;
     const SkColor4f     fColor;

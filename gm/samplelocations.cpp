@@ -237,11 +237,13 @@ private:
 
         SampleLocationsTestProcessor primProc(fGradType);
 
-        GrProgramInfo programInfo(flushState->drawOpArgs().numSamples(),
+        GrProgramInfo programInfo(flushState->proxy()->numSamples(),
+                                  flushState->proxy()->numStencilSamples(),
                                   flushState->drawOpArgs().origin(),
                                   pipeline,
                                   primProc,
-                                  nullptr, nullptr, 0);
+                                  nullptr, nullptr, 0,
+                                  GrPrimitiveType::kTriangleStrip);
 
         GrMesh mesh(GrPrimitiveType::kTriangleStrip);
         mesh.setInstanced(nullptr, 200*200, 0, 4);
@@ -262,8 +264,8 @@ DrawResult SampleLocationsGM::onDraw(
         *errorMsg = "Requires support for sample locations.";
         return DrawResult::kSkip;
     }
-    if (!ctx->priv().caps()->shaderCaps()->sampleVariablesSupport()) {
-        *errorMsg = "Requires support for sample variables.";
+    if (!ctx->priv().caps()->shaderCaps()->sampleMaskSupport()) {
+        *errorMsg = "Requires support for sample mask.";
         return DrawResult::kSkip;
     }
     if (rtc->numSamples() <= 1 && !ctx->priv().caps()->mixedSamplesSupport()) {

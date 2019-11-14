@@ -178,10 +178,11 @@ SK_API bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alph
     It can be used to visualize the YUV planes or to explicitly post process the YUV channels.
 */
 enum SkYUVColorSpace {
-    kJPEG_SkYUVColorSpace,                               //!< describes full range
-    kRec601_SkYUVColorSpace,                             //!< describes SDTV range
-    kRec709_SkYUVColorSpace,                             //!< describes HDTV range
-    kIdentity_SkYUVColorSpace,                           //!< maps Y->R, U->G, V->B
+    kJPEG_SkYUVColorSpace,                      //!< describes full range
+    kRec601_SkYUVColorSpace,                    //!< describes SDTV range
+    kRec709_SkYUVColorSpace,                    //!< describes HDTV range
+    kBT2020_SkYUVColorSpace,                    //!< describes UHDTV range, non-constant-luminance
+    kIdentity_SkYUVColorSpace,                  //!< maps Y->R, U->G, V->B
 
     kLastEnum_SkYUVColorSpace = kIdentity_SkYUVColorSpace, //!< last valid value
 };
@@ -421,11 +422,12 @@ public:
         Parameters are not validated to see if their values are legal, or that the
         combination is supported.
 
-        @param size  width and height, each must be zero or greater
-        @return      created SkImageInfo
+        @param dimensions  width and height, each must be zero or greater
+        @param cs          range of colors; may be nullptr
+        @return            created SkImageInfo
     */
-    static SkImageInfo MakeN32Premul(const SkISize& size) {
-        return MakeN32Premul(size.width(), size.height());
+    static SkImageInfo MakeN32Premul(SkISize dimensions, sk_sp<SkColorSpace> cs = nullptr) {
+        return Make(dimensions, kN32_SkColorType, kPremul_SkAlphaType, std::move(cs));
     }
 
     /** Creates SkImageInfo from integral dimensions width and height, kAlpha_8_SkColorType,
@@ -437,6 +439,15 @@ public:
     */
     static SkImageInfo MakeA8(int width, int height) {
         return Make({width, height}, kAlpha_8_SkColorType, kPremul_SkAlphaType, nullptr);
+    }
+    /** Creates SkImageInfo from integral dimensions, kAlpha_8_SkColorType,
+        kPremul_SkAlphaType, with SkColorSpace set to nullptr.
+
+        @param dimensions   pixel row and column count; must be zero or greater
+        @return             created SkImageInfo
+    */
+    static SkImageInfo MakeA8(SkISize dimensions) {
+        return Make(dimensions, kAlpha_8_SkColorType, kPremul_SkAlphaType, nullptr);
     }
 
     /** Creates SkImageInfo from integral dimensions width and height, kUnknown_SkColorType,

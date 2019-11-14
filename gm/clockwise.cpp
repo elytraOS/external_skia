@@ -169,11 +169,13 @@ private:
 
         ClockwiseTestProcessor primProc(fReadSkFragCoord);
 
-        GrProgramInfo programInfo(flushState->drawOpArgs().numSamples(),
+        GrProgramInfo programInfo(flushState->proxy()->numSamples(),
+                                  flushState->proxy()->numStencilSamples(),
                                   flushState->drawOpArgs().origin(),
                                   pipeline,
                                   primProc,
-                                  nullptr, nullptr, 0);
+                                  nullptr, nullptr, 0,
+                                  GrPrimitiveType::kTriangleStrip);
 
         flushState->opsRenderPass()->draw(programInfo, &mesh, 1, SkRect::MakeXYWH(0, fY, 100, 100));
     }

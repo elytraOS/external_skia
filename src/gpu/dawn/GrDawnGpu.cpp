@@ -88,22 +88,20 @@ public:
     static bool Build(Desc* desc,
                       GrRenderTarget* rt,
                       const GrProgramInfo& programInfo,
-                      GrPrimitiveType primitiveType,
                       bool hasDepthStencil,
-                      GrGpu* gpu) {
-        if (!GrProgramDesc::Build(desc, rt, programInfo, primitiveType, gpu)) {
+                      const GrCaps& caps) {
+        if (!GrProgramDesc::Build(desc, rt, programInfo, caps)) {
             return false;
         }
         GrProcessorKeyBuilder b(&desc->key());
 
-        GrStencilSettings stencil;
-        const GrPipeline& pipeline = programInfo.pipeline();
-        stencil.reset(*pipeline.getUserStencil(), pipeline.hasStencilClip(), 8);
+        GrStencilSettings stencil = programInfo.nonGLStencilSettings();
         stencil.genKey(&b);
+
         b.add32(rt->config());
         b.add32(static_cast<int32_t>(hasDepthStencil));
-        b.add32(get_blend_info_key(pipeline));
-        b.add32(static_cast<uint32_t>(primitiveType));
+        b.add32(get_blend_info_key(programInfo.pipeline()));
+        b.add32(static_cast<uint32_t>(programInfo.primitiveType()));
         return true;
     }
 };
@@ -305,23 +303,19 @@ GrStencilAttachment* GrDawnGpu::createStencilAttachmentForRenderTarget(const GrR
     return stencil;
 }
 
-GrBackendTexture GrDawnGpu::onCreateBackendTexture(int width, int height,
+GrBackendTexture GrDawnGpu::onCreateBackendTexture(SkISize dimensions,
                                                    const GrBackendFormat& backendFormat,
-                                                   GrMipMapped mipMapped,
                                                    GrRenderable renderable,
-                                                   const SkPixmap srcData[],
+                                                   const BackendTextureData* data,
                                                    int numMipLevels,
-                                                   const SkColor4f* color,
                                                    GrProtected isProtected) {
     wgpu::TextureFormat format;
     if (!backendFormat.asDawnFormat(&format)) {
         return GrBackendTexture();
     }
 
-    SkASSERT(width <= this->caps()->maxTextureSize() && height <= this->caps()->maxTextureSize());
-
     // FIXME: Dawn doesn't support mipmapped render targets (yet).
-    if (GrMipMapped::kYes == mipMapped && GrRenderable::kYes == renderable) {
+    if (numMipLevels > 1 && GrRenderable::kYes == renderable) {
         return GrBackendTexture();
     }
 
@@ -335,33 +329,27 @@ GrBackendTexture GrDawnGpu::onCreateBackendTexture(int width, int height,
         desc.usage |= wgpu::TextureUsage::OutputAttachment;
     }
 
-    desc.size.width = width;
-    desc.size.height = height;
+    desc.size.width = dimensions.width();
+    desc.size.height = dimensions.height();
     desc.size.depth = 1;
     desc.format = format;
-
-    // Figure out the number of mip levels.
-    if (srcData) {
-        desc.mipLevelCount = numMipLevels;
-    } else if (GrMipMapped::kYes == mipMapped) {
-        desc.mipLevelCount = SkMipMap::ComputeLevelCount(width, height) + 1;
-    }
+    desc.mipLevelCount = numMipLevels;
 
     wgpu::Texture tex = this->device().CreateTexture(&desc);
 
     size_t bpp = GrDawnBytesPerPixel(format);
-    size_t baseLayerSize = bpp * width * height;
+    size_t baseLayerSize = bpp * dimensions.width() * dimensions.height();
     const void* pixels;
     SkAutoMalloc defaultStorage(baseLayerSize);
-    if (srcData) {
-        pixels = srcData->addr();
+    if (data && data->type() == BackendTextureData::Type::kPixmaps) {
+        pixels = data->pixmap(0).addr();
     } else {
         pixels = defaultStorage.get();
         memset(defaultStorage.get(), 0, baseLayerSize);
     }
     wgpu::Device device = this->device();
     wgpu::CommandEncoder copyEncoder = fDevice.CreateCommandEncoder();
-    int w = width, h = height;
+    int w = dimensions.width(), h = dimensions.height();
     for (uint32_t i = 0; i < desc.mipLevelCount; i++) {
         size_t origRowBytes = bpp * w;
         size_t rowBytes = GrDawnRoundRowBytes(origRowBytes);
@@ -401,7 +389,7 @@ GrBackendTexture GrDawnGpu::onCreateBackendTexture(int width, int height,
     info.fTexture = tex;
     info.fFormat = desc.format;
     info.fLevelCount = desc.mipLevelCount;
-    return GrBackendTexture(width, height, info);
+    return GrBackendTexture(dimensions.width(), dimensions.height(), info);
 }
 
 void GrDawnGpu::deleteBackendTexture(const GrBackendTexture& tex) {
@@ -628,11 +616,10 @@ sk_sp<GrSemaphore> GrDawnGpu::prepareTextureForCrossContextUsage(GrTexture* text
 
 sk_sp<GrDawnProgram> GrDawnGpu::getOrCreateRenderPipeline(
         GrRenderTarget* rt,
-        const GrProgramInfo& programInfo,
-        GrPrimitiveType primitiveType) {
+        const GrProgramInfo& programInfo) {
     bool hasDepthStencil = rt->renderTargetPriv().getStencilAttachment() != nullptr;
     Desc desc;
-    if (!Desc::Build(&desc, rt, programInfo, primitiveType, hasDepthStencil, this)) {
+    if (!Desc::Build(&desc, rt, programInfo, hasDepthStencil, *this->caps())) {
         return nullptr;
     }
 
@@ -645,7 +632,7 @@ sk_sp<GrDawnProgram> GrDawnGpu::getOrCreateRenderPipeline(
     wgpu::TextureFormat stencilFormat = wgpu::TextureFormat::Depth24PlusStencil8;
 
     sk_sp<GrDawnProgram> program = GrDawnProgramBuilder::Build(
-        this, rt, programInfo, primitiveType, colorFormat,
+        this, rt, programInfo, colorFormat,
         hasDepthStencil, stencilFormat, &desc);
     fRenderPipelineCache.insert(desc, program);
     return program;

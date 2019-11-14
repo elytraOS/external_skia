@@ -388,8 +388,7 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         this->applyDriverCorrectnessWorkarounds(properties);
     }
 
-    this->applyOptionsOverrides(contextOptions);
-    fShaderCaps->applyOptionsOverrides(contextOptions);
+    this->finishInitialization(contextOptions);
 }
 
 void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties& properties) {
@@ -461,29 +460,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     }
 }
 
-int get_max_sample_count(VkSampleCountFlags flags) {
-    SkASSERT(flags & VK_SAMPLE_COUNT_1_BIT);
-    if (!(flags & VK_SAMPLE_COUNT_2_BIT)) {
-        return 0;
-    }
-    if (!(flags & VK_SAMPLE_COUNT_4_BIT)) {
-        return 2;
-    }
-    if (!(flags & VK_SAMPLE_COUNT_8_BIT)) {
-        return 4;
-    }
-    if (!(flags & VK_SAMPLE_COUNT_16_BIT)) {
-        return 8;
-    }
-    if (!(flags & VK_SAMPLE_COUNT_32_BIT)) {
-        return 16;
-    }
-    if (!(flags & VK_SAMPLE_COUNT_64_BIT)) {
-        return 32;
-    }
-    return 64;
-}
-
 void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
                           VkPhysicalDevice physDev,
                           const VkPhysicalDeviceProperties& properties,
@@ -496,6 +472,15 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     // we ever find that need.
     static const uint32_t kMaxVertexAttributes = 64;
     fMaxVertexAttributes = SkTMin(properties.limits.maxVertexInputAttributes, kMaxVertexAttributes);
+
+    if (extensions.hasExtension(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME, 1)) {
+        // We "disable" multisample by colocating all samples at pixel center.
+        fMultisampleDisableSupport = true;
+    }
+
+    if (extensions.hasExtension(VK_NV_FRAMEBUFFER_MIXED_SAMPLES_EXTENSION_NAME, 1)) {
+        fMixedSamplesSupport = true;
+    }
 
     // We could actually query and get a max size for each config, however maxImageDimension2D will
     // give the minimum max size across all configs. So for simplicity we will use that for now.
@@ -1187,12 +1172,8 @@ void GrVkCaps::FormatInfo::initSampleCounts(const GrVkInterface* interface,
     if (flags & VK_SAMPLE_COUNT_16_BIT) {
         fColorSampleCounts.push_back(16);
     }
-    if (flags & VK_SAMPLE_COUNT_32_BIT) {
-        fColorSampleCounts.push_back(32);
-    }
-    if (flags & VK_SAMPLE_COUNT_64_BIT) {
-        fColorSampleCounts.push_back(64);
-    }
+    // Standard sample locations are not defined for more than 16 samples, and we don't need more
+    // than 16. Omit 32 and 64.
 }
 
 void GrVkCaps::FormatInfo::init(const GrVkInterface* interface,
@@ -1597,6 +1578,11 @@ static GrPixelConfig validate_image_info(VkFormat format, GrColorType ct, bool h
         case GrColorType::kAlpha_8xxx:
         case GrColorType::kAlpha_F32xxx:
         case GrColorType::kGray_8xxx:
+        case GrColorType::kRGB_888:
+        case GrColorType::kR_8:
+        case GrColorType::kR_16:
+        case GrColorType::kR_F16:
+        case GrColorType::kGray_F16:
             break;
     }
 
@@ -1715,6 +1701,24 @@ int GrVkCaps::getFragmentUniformBinding() const {
 
 int GrVkCaps::getFragmentUniformSet() const {
     return GrVkUniformHandler::kUniformBufferDescSet;
+}
+
+void GrVkCaps::addExtraSamplerKey(GrProcessorKeyBuilder* b,
+                                  const GrSamplerState& samplerState,
+                                  const GrBackendFormat& format) const {
+    const GrVkYcbcrConversionInfo* ycbcrInfo = format.getVkYcbcrConversionInfo();
+    if (!ycbcrInfo) {
+        return;
+    }
+
+    GrVkSampler::Key key = GrVkSampler::GenerateKey(samplerState, *ycbcrInfo);
+
+    size_t numInts = (sizeof(key) + 3) / 4;
+
+    uint32_t* tmp = b->add32n(numInts);
+
+    tmp[numInts - 1] = 0;
+    memcpy(tmp, &key, sizeof(key));
 }
 
 #if GR_TEST_UTILS

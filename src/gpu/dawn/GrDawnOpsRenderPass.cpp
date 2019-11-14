@@ -141,17 +141,13 @@ void GrDawnOpsRenderPass::setScissorState(const GrProgramInfo& programInfo) {
     fPassEncoder.SetScissorRect(rect.x(), rect.y(), rect.width(), rect.height());
 }
 
-void GrDawnOpsRenderPass::applyState(const GrProgramInfo& programInfo,
-                                     const GrPrimitiveType primitiveType) {
-    sk_sp<GrDawnProgram> program = fGpu->getOrCreateRenderPipeline(fRenderTarget,
-                                                                   programInfo,
-                                                                   primitiveType);
-    auto bindGroup = program->setData(fGpu, fRenderTarget, programInfo);
+void GrDawnOpsRenderPass::applyState(GrDawnProgram* program, const GrProgramInfo& programInfo) {
+    auto bindGroup = program->setUniformData(fGpu, fRenderTarget, programInfo);
     fPassEncoder.SetPipeline(program->fRenderPipeline);
     fPassEncoder.SetBindGroup(0, bindGroup, 0, nullptr);
     const GrPipeline& pipeline = programInfo.pipeline();
     if (pipeline.isStencilEnabled()) {
-        fPassEncoder.SetStencilReference(pipeline.getUserStencil()->fFront.fRef);
+        fPassEncoder.SetStencilReference(pipeline.getUserStencil()->fCCWFace.fRef);
     }
     GrXferProcessor::BlendInfo blendInfo = pipeline.getXferProcessor().getBlendInfo();
     const float* c = blendInfo.fBlendConstant.vec();
@@ -167,8 +163,21 @@ void GrDawnOpsRenderPass::onDraw(const GrProgramInfo& programInfo,
     if (!meshCount) {
         return;
     }
+    sk_sp<GrDawnProgram> program = fGpu->getOrCreateRenderPipeline(fRenderTarget, programInfo);
+    if (!programInfo.hasDynamicPrimProcTextures()) {
+        auto textures = programInfo.hasFixedPrimProcTextures() ? programInfo.fixedPrimProcTextures()
+                                                               : nullptr;
+        auto bindGroup = program->setTextures(fGpu, programInfo, textures);
+        fPassEncoder.SetBindGroup(1, bindGroup, 0, nullptr);
+    }
     for (int i = 0; i < meshCount; ++i) {
-        applyState(programInfo, meshes[0].primitiveType());
+        SkASSERT(meshes[i].primitiveType() == programInfo.primitiveType());
+        if (programInfo.hasDynamicPrimProcTextures()) {
+            auto textures = programInfo.dynamicPrimProcTextures(i);
+            auto bindGroup = program->setTextures(fGpu, programInfo, textures);
+            fPassEncoder.SetBindGroup(1, bindGroup, 0, nullptr);
+        }
+        this->applyState(program.get(), programInfo);
         meshes[i].sendToGpu(this);
     }
 }

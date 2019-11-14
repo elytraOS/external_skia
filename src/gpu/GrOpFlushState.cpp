@@ -38,7 +38,7 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
 
     GrPipeline::InitArgs pipelineArgs;
     pipelineArgs.fInputFlags = pipelineFlags;
-    pipelineArgs.fDstProxy = this->dstProxy();
+    pipelineArgs.fDstProxyView = this->dstProxyView();
     pipelineArgs.fCaps = &this->caps();
     pipelineArgs.fUserStencil = stencilSettings;
     pipelineArgs.fOutputSwizzle = this->drawOpArgs().outputSwizzle();
@@ -55,12 +55,14 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
         }
 
         GrProgramInfo programInfo(this->proxy()->numSamples(),
+                                  this->proxy()->numStencilSamples(),
                                   this->proxy()->origin(),
                                   *pipeline,
                                   *fCurrDraw->fGeometryProcessor,
                                   fCurrDraw->fFixedDynamicState,
                                   fCurrDraw->fDynamicStateArrays,
-                                  fCurrDraw->fMeshCnt);
+                                  fCurrDraw->fMeshCnt,
+                                  fCurrDraw->fPrimitiveType);
 
         this->opsRenderPass()->draw(programInfo, fCurrDraw->fMeshes,
                                     fCurrDraw->fMeshCnt, chainBounds);
@@ -140,7 +142,8 @@ GrDeferredUploadToken GrOpFlushState::addASAPUpload(GrDeferredTextureUploadFn&& 
 void GrOpFlushState::recordDraw(
         sk_sp<const GrGeometryProcessor> gp, const GrMesh meshes[], int meshCnt,
         const GrPipeline::FixedDynamicState* fixedDynamicState,
-        const GrPipeline::DynamicStateArrays* dynamicStateArrays) {
+        const GrPipeline::DynamicStateArrays* dynamicStateArrays,
+        GrPrimitiveType primitiveType) {
     SkASSERT(fOpArgs);
     SkDEBUGCODE(fOpArgs->validate());
     bool firstDraw = fDraws.begin() == fDraws.end();
@@ -163,6 +166,7 @@ void GrOpFlushState::recordDraw(
     draw.fMeshes = meshes;
     draw.fMeshCnt = meshCnt;
     draw.fOp = fOpArgs->op();
+    draw.fPrimitiveType = primitiveType;
     if (firstDraw) {
         fBaseDrawToken = token;
     }

@@ -30,8 +30,7 @@ GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice>
     this->initFormatTable();
     this->initStencilFormat(device);
 
-    this->applyOptionsOverrides(contextOptions);
-    fShaderCaps->applyOptionsOverrides(contextOptions);
+    this->finishInitialization(contextOptions);
 
     // The following are disabled due to the unfinished Metal backend, not because Metal itself
     // doesn't support it.
@@ -128,6 +127,23 @@ void GrMtlCaps::initFeatureSet(MTLFeatureSet featureSet) {
     SK_ABORT("Requested an unsupported feature set");
 }
 
+bool GrMtlCaps::canCopyAsBlit(GrSurface* dst, int dstSampleCount,
+                              GrSurface* src, int srcSampleCount,
+                              const SkIRect& srcRect, const SkIPoint& dstPoint,
+                              bool areDstSrcSameObj) const {
+    id<MTLTexture> dstTex = GrGetMTLTextureFromSurface(dst);
+    id<MTLTexture> srcTex = GrGetMTLTextureFromSurface(src);
+    if (srcTex.framebufferOnly || dstTex.framebufferOnly) {
+        return false;
+    }
+
+    MTLPixelFormat dstFormat = dstTex.pixelFormat;
+    MTLPixelFormat srcFormat = srcTex.pixelFormat;
+
+    return this->canCopyAsBlit(dstFormat, dstSampleCount, srcFormat, srcSampleCount,
+                               srcRect, dstPoint, areDstSrcSameObj);
+}
+
 bool GrMtlCaps::canCopyAsBlit(MTLPixelFormat dstFormat, int dstSampleCount,
                               MTLPixelFormat srcFormat, int srcSampleCount,
                               const SkIRect& srcRect, const SkIPoint& dstPoint,
@@ -184,6 +200,8 @@ bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy
     }
     SkASSERT((dstSampleCnt > 0) == SkToBool(dst->asRenderTargetProxy()));
     SkASSERT((srcSampleCnt > 0) == SkToBool(src->asRenderTargetProxy()));
+
+    // TODO: need some way to detect whether the proxy is framebufferOnly
 
     return this->canCopyAsBlit(GrBackendFormatAsMTLPixelFormat(dst->backendFormat()), dstSampleCnt,
                                GrBackendFormatAsMTLPixelFormat(src->backendFormat()), srcSampleCnt,
@@ -950,6 +968,11 @@ static constexpr GrPixelConfig validate_sized_format(GrMTLPixelFormat grFormat, 
         case GrColorType::kAlpha_8xxx:
         case GrColorType::kAlpha_F32xxx:
         case GrColorType::kGray_8xxx:
+        case GrColorType::kRGB_888:
+        case GrColorType::kR_8:
+        case GrColorType::kR_16:
+        case GrColorType::kR_F16:
+        case GrColorType::kGray_F16:
             return kUnknown_GrPixelConfig;
     }
     SkUNREACHABLE;

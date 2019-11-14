@@ -47,7 +47,8 @@ std::unique_ptr<GrFillRRectOp> GrFillRRectOp::Make(
         }
     } else {
         if (GrAAType::kMSAA == aaType) {
-            if (!caps.sampleLocationsSupport() || !caps.shaderCaps()->sampleVariablesSupport()) {
+            if (!caps.sampleLocationsSupport() || !caps.shaderCaps()->sampleMaskSupport() ||
+                caps.shaderCaps()->canOnlyUseSampleMaskWithStencil()) {
                 return nullptr;
             }
         }
@@ -742,7 +743,7 @@ void GrFillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
         initArgs.fInputFlags = GrPipeline::InputFlags::kHWAntialias;
     }
     initArgs.fCaps = &flushState->caps();
-    initArgs.fDstProxy = flushState->drawOpArgs().dstProxy();
+    initArgs.fDstProxyView = flushState->drawOpArgs().dstProxyView();
     initArgs.fOutputSwizzle = flushState->drawOpArgs().outputSwizzle();
     auto clip = flushState->detachAppliedClip();
     GrPipeline::FixedDynamicState* fixedDynamicState =
@@ -751,12 +752,14 @@ void GrFillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
                                                                      std::move(fProcessors),
                                                                      std::move(clip));
 
-    GrProgramInfo programInfo(flushState->drawOpArgs().numSamples(),
+    GrProgramInfo programInfo(flushState->proxy()->numSamples(),
+                              flushState->proxy()->numStencilSamples(),
                               flushState->drawOpArgs().origin(),
                               *pipeline,
                               *proc,
                               fixedDynamicState,
-                              nullptr, 0);
+                              nullptr, 0,
+                              GrPrimitiveType::kTriangles);
 
     GrMesh* mesh = flushState->allocator()->make<GrMesh>(GrPrimitiveType::kTriangles);
     mesh->setIndexedInstanced(

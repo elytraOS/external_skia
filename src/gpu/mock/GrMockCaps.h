@@ -34,10 +34,9 @@ public:
         fShaderCaps->fMaxFragmentSamplers = options.fMaxFragmentSamplers;
         fShaderCaps->fShaderDerivativeSupport = options.fShaderDerivativeSupport;
         fShaderCaps->fDualSourceBlendingSupport = options.fDualSourceBlendingSupport;
-        fShaderCaps->fSampleVariablesSupport = true;
-        fShaderCaps->fSampleVariablesStencilSupport = true;
+        fShaderCaps->fSampleMaskSupport = true;
 
-        this->applyOptionsOverrides(contextOptions);
+        this->finishInitialization(contextOptions);
     }
 
     bool isFormatSRGB(const GrBackendFormat& format) const override {

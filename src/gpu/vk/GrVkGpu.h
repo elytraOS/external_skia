@@ -48,6 +48,9 @@ public:
     const GrVkInterface* vkInterface() const { return fInterface.get(); }
     const GrVkCaps& vkCaps() const { return *fVkCaps; }
 
+    bool isDeviceLost() const { return fDeviceIsLost; }
+    void setDeviceLost() { fDeviceIsLost = true; }
+
     GrVkMemoryAllocator* memoryAllocator() const { return fMemoryAllocator.get(); }
 
     VkPhysicalDevice physicalDevice() const { return fPhysicalDevice; }
@@ -153,9 +156,6 @@ public:
                     VkDeviceSize dstOffset, VkDeviceSize size);
     bool updateBuffer(GrVkBuffer* buffer, const void* src, VkDeviceSize offset, VkDeviceSize size);
 
-    uint32_t getExtraSamplerKeyForProgram(const GrSamplerState&,
-                                          const GrBackendFormat& format) override;
-
     enum PersistentCacheKeyType : uint32_t {
         kShader_PersistentCacheKeyType = 0,
         kPipelineCache_PersistentCacheKeyType = 1,
@@ -163,7 +163,7 @@ public:
 
     void storeVkPipelineCacheData() override;
 
-    void beginRenderPass(const GrVkRenderPass*,
+    bool beginRenderPass(const GrVkRenderPass*,
                          const VkClearValue* colorClear,
                          GrVkRenderTarget*, GrSurfaceOrigin,
                          const SkIRect& bounds, bool forSecondaryCB);
@@ -177,10 +177,12 @@ private:
 
     void destroyResources();
 
-    GrBackendTexture onCreateBackendTexture(int w, int h, const GrBackendFormat&,
-                                            GrMipMapped, GrRenderable,
-                                            const SkPixmap srcData[], int numMipLevels,
-                                            const SkColor4f* color, GrProtected) override;
+    GrBackendTexture onCreateBackendTexture(SkISize,
+                                            const GrBackendFormat&,
+                                            GrRenderable,
+                                            const BackendTextureData*,
+                                            int numMipLevels,
+                                            GrProtected) override;
     sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
                                      const GrBackendFormat& format,
                                      GrRenderable,
@@ -263,15 +265,19 @@ private:
     void resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect& srcRect,
                       const SkIPoint& dstPoint);
 
-    bool createVkImageForBackendSurface(VkFormat vkFormat, int w, int h, bool texturable,
-                                        bool renderable, GrMipMapped mipMapped,
-                                        const SkPixmap srcData[], int numMipLevels,
-                                        const SkColor4f* color, GrVkImageInfo* info,
-                                        GrProtected isProtected);
+    bool createVkImageForBackendSurface(VkFormat,
+                                        SkISize,
+                                        bool texturable,
+                                        bool renderable,
+                                        const BackendTextureData*,
+                                        int numMipLevels,
+                                        GrVkImageInfo*,
+                                        GrProtected);
 
     sk_sp<const GrVkInterface>                            fInterface;
     sk_sp<GrVkMemoryAllocator>                            fMemoryAllocator;
     sk_sp<GrVkCaps>                                       fVkCaps;
+    bool                                                  fDeviceIsLost = false;
 
     VkInstance                                            fInstance;
     VkPhysicalDevice                                      fPhysicalDevice;

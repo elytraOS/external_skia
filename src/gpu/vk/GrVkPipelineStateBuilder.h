@@ -38,12 +38,7 @@ public:
      */
     class Desc : public GrProgramDesc {
     public:
-        static bool Build(Desc*,
-                          GrRenderTarget*,
-                          const GrProgramInfo&,
-                          const GrStencilSettings&,
-                          GrPrimitiveType primitiveType,
-                          GrVkGpu* gpu);
+        static bool Build(Desc*, GrRenderTarget*, const GrProgramInfo&, const GrCaps&);
 
         size_t shaderKeyLength() const { return fShaderKeyLength; }
 
@@ -64,8 +59,6 @@ public:
     static GrVkPipelineState* CreatePipelineState(GrVkGpu*,
                                                   GrRenderTarget*,
                                                   const GrProgramInfo&,
-                                                  const GrStencilSettings&,
-                                                  GrPrimitiveType,
                                                   Desc*,
                                                   VkRenderPass compatibleRenderPass);
 
@@ -79,10 +72,7 @@ public:
 private:
     GrVkPipelineStateBuilder(GrVkGpu*, GrRenderTarget*, const GrProgramInfo&, GrProgramDesc*);
 
-    GrVkPipelineState* finalize(const GrStencilSettings&,
-                                GrPrimitiveType primitiveType,
-                                VkRenderPass compatibleRenderPass,
-                                Desc*);
+    GrVkPipelineState* finalize(VkRenderPass compatibleRenderPass, Desc*);
 
     // returns number of shader stages
     int loadShadersFromCache(SkReader32* cached, VkShaderModule outShaderModules[],

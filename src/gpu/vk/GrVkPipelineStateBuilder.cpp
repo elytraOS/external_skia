@@ -24,8 +24,6 @@ GrVkPipelineState* GrVkPipelineStateBuilder::CreatePipelineState(
         GrVkGpu* gpu,
         GrRenderTarget* renderTarget,
         const GrProgramInfo& programInfo,
-        const GrStencilSettings& stencil,
-        GrPrimitiveType primitiveType,
         Desc* desc,
         VkRenderPass compatibleRenderPass) {
     // ensure that we use "." as a decimal separator when creating SkSL code
@@ -39,7 +37,7 @@ GrVkPipelineState* GrVkPipelineStateBuilder::CreatePipelineState(
         return nullptr;
     }
 
-    return builder.finalize(stencil, primitiveType, compatibleRenderPass, desc);
+    return builder.finalize(compatibleRenderPass, desc);
 }
 
 GrVkPipelineStateBuilder::GrVkPipelineStateBuilder(GrVkGpu* gpu,
@@ -148,9 +146,7 @@ void GrVkPipelineStateBuilder::storeShadersInCache(const SkSL::String shaders[],
     this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data);
 }
 
-GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrStencilSettings& stencil,
-                                                      GrPrimitiveType primitiveType,
-                                                      VkRenderPass compatibleRenderPass,
+GrVkPipelineState* GrVkPipelineStateBuilder::finalize(VkRenderPass compatibleRenderPass,
                                                       Desc* desc) {
     VkDescriptorSetLayout dsLayout[2];
     VkPipelineLayout pipelineLayout;
@@ -179,10 +175,8 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrStencilSettings& s
     layoutCreateInfo.pushConstantRangeCount = 0;
     layoutCreateInfo.pPushConstantRanges = nullptr;
 
-    GR_VK_CALL_ERRCHECK(fGpu->vkInterface(), CreatePipelineLayout(fGpu->device(),
-                                                                  &layoutCreateInfo,
-                                                                  nullptr,
-                                                                  &pipelineLayout));
+    GR_VK_CALL_ERRCHECK(fGpu, CreatePipelineLayout(fGpu->device(), &layoutCreateInfo, nullptr,
+                                                   &pipelineLayout));
 
     // We need to enable the following extensions so that the compiler can correctly make spir-v
     // from our glsl shaders.
@@ -295,8 +289,10 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrStencilSettings& s
             this->storeShadersInCache(shaders, inputs, isSkSL);
         }
     }
-        GrVkPipeline* pipeline = resourceProvider.createPipeline(fProgramInfo, stencil,
-            shaderStageInfo, numShaderStages, primitiveType, compatibleRenderPass, pipelineLayout);
+
+    GrVkPipeline* pipeline = resourceProvider.createPipeline(fProgramInfo, shaderStageInfo,
+                                                             numShaderStages, compatibleRenderPass,
+                                                             pipelineLayout);
     for (int i = 0; i < kGrShaderTypeCount; ++i) {
         // This if check should not be needed since calling destroy on a VK_NULL_HANDLE is allowed.
         // However this is causing a crash in certain drivers (e.g. NVidia).
@@ -330,10 +326,8 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrStencilSettings& s
 bool GrVkPipelineStateBuilder::Desc::Build(Desc* desc,
                                            GrRenderTarget* renderTarget,
                                            const GrProgramInfo& programInfo,
-                                           const GrStencilSettings& stencil,
-                                           GrPrimitiveType primitiveType,
-                                           GrVkGpu* gpu) {
-    if (!GrProgramDesc::Build(desc, renderTarget, programInfo, primitiveType, gpu)) {
+                                           const GrCaps& caps) {
+    if (!GrProgramDesc::Build(desc, renderTarget, programInfo, caps)) {
         return false;
     }
 
@@ -345,13 +339,24 @@ bool GrVkPipelineStateBuilder::Desc::Build(Desc* desc,
     desc->fShaderKeyLength = SkToU32(keyLength);
 
     GrVkRenderTarget* vkRT = (GrVkRenderTarget*)renderTarget;
-    vkRT->simpleRenderPass()->genKey(&b);
+    // TODO: support failure in getSimpleRenderPass
+    SkASSERT(vkRT->getSimpleRenderPass());
+    vkRT->getSimpleRenderPass()->genKey(&b);
 
+    GrStencilSettings stencil = programInfo.nonGLStencilSettings();
     stencil.genKey(&b);
 
-    b.add32(programInfo.pipeline().getBlendInfoKey());
+    programInfo.pipeline().genKey(&b, caps);
+    b.add32(programInfo.numRasterSamples());
 
-    b.add32((uint32_t)primitiveType);
+    // Vulkan requires the full primitive type as part of its key
+    b.add32((uint32_t)programInfo.primitiveType());
+
+    if (caps.mixedSamplesSupport()) {
+        // Add "0" to indicate that coverage modulation will not be enabled, or the (non-zero)
+        // raster sample count if it will.
+        b.add32(!programInfo.isMixedSampled() ? 0 : programInfo.numRasterSamples());
+    }
 
     return true;
 }

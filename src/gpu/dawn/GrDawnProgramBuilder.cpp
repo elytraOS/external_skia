@@ -15,11 +15,12 @@
 #include "src/sksl/SkSLCompiler.h"
 
 static SkSL::String sksl_to_spirv(const GrDawnGpu* gpu, const char* shaderString,
-                                  SkSL::Program::Kind kind, bool flipY,
+                                  SkSL::Program::Kind kind, bool flipY, uint32_t rtHeightOffset,
                                   SkSL::Program::Inputs* inputs) {
     SkSL::Program::Settings settings;
     settings.fCaps = gpu->caps()->shaderCaps();
     settings.fFlipY = flipY;
+    settings.fRTHeightOffset = rtHeightOffset;
     std::unique_ptr<SkSL::Program> program = gpu->shaderCompiler()->convertProgram(
         kind,
         shaderString,
@@ -235,21 +236,23 @@ static wgpu::StencilStateFaceDescriptor to_stencil_state_face(const GrStencilSet
 }
 
 static wgpu::DepthStencilStateDescriptor create_depth_stencil_state(
-        const GrStencilSettings& stencilSettings,
-        wgpu::TextureFormat depthStencilFormat,
-        GrSurfaceOrigin origin) {
+        const GrProgramInfo& programInfo,
+        wgpu::TextureFormat depthStencilFormat) {
+    GrStencilSettings stencilSettings = programInfo.nonGLStencilSettings();
+    GrSurfaceOrigin origin = programInfo.origin();
+
     wgpu::DepthStencilStateDescriptor state;
     state.format = depthStencilFormat;
     if (!stencilSettings.isDisabled()) {
         if (stencilSettings.isTwoSided()) {
-            auto front = stencilSettings.front(origin);
-            auto back = stencilSettings.front(origin);
+            auto front = stencilSettings.postOriginCCWFace(origin);
+            auto back = stencilSettings.postOriginCWFace(origin);
             state.stencilFront = to_stencil_state_face(front);
             state.stencilBack = to_stencil_state_face(back);
             state.stencilReadMask = front.fTestMask;
             state.stencilWriteMask = front.fWriteMask;
         } else {
-            auto frontAndBack = stencilSettings.frontAndBack();
+            auto frontAndBack = stencilSettings.singleSidedFace();
             state.stencilBack = state.stencilFront = to_stencil_state_face(frontAndBack);
             state.stencilReadMask = frontAndBack.fTestMask;
             state.stencilWriteMask = frontAndBack.fWriteMask;
@@ -290,7 +293,6 @@ static wgpu::BindGroupBinding make_bind_group_binding(uint32_t binding,
 sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
                                                  GrRenderTarget* renderTarget,
                                                  const GrProgramInfo& programInfo,
-                                                 GrPrimitiveType primitiveType,
                                                  wgpu::TextureFormat colorFormat,
                                                  bool hasDepthStencil,
                                                  wgpu::TextureFormat depthStencilFormat,
@@ -308,52 +310,59 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
     builder.finalizeShaders();
 
     SkSL::Program::Inputs vertInputs, fragInputs;
-    GrDawnUniformHandler::UniformInfoArray& uniforms = builder.fUniformHandler.fUniforms;
-    uint32_t uniformBufferSize = builder.fUniformHandler.fCurrentUBOOffset;
-    sk_sp<GrDawnProgram> result(new GrDawnProgram(uniforms, uniformBufferSize));
     bool flipY = programInfo.origin() != kTopLeft_GrSurfaceOrigin;
     auto vsModule = builder.createShaderModule(builder.fVS, SkSL::Program::kVertex_Kind, flipY,
                                                &vertInputs);
     auto fsModule = builder.createShaderModule(builder.fFS, SkSL::Program::kFragment_Kind, flipY,
                                                &fragInputs);
+    GrDawnUniformHandler::UniformInfoArray& uniforms = builder.fUniformHandler.fUniforms;
+    uint32_t uniformBufferSize = builder.fUniformHandler.fCurrentUBOOffset;
+    sk_sp<GrDawnProgram> result(new GrDawnProgram(uniforms, uniformBufferSize));
     result->fGeometryProcessor = std::move(builder.fGeometryProcessor);
     result->fXferProcessor = std::move(builder.fXferProcessor);
     result->fFragmentProcessors = std::move(builder.fFragmentProcessors);
     result->fFragmentProcessorCnt = builder.fFragmentProcessorCnt;
-    std::vector<wgpu::BindGroupLayoutBinding> layoutBindings;
+    std::vector<wgpu::BindGroupLayoutBinding> uniformLayoutBindings;
     if (0 != uniformBufferSize) {
-        layoutBindings.push_back({ GrDawnUniformHandler::kUniformBinding,
-                                   wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
-                                   wgpu::BindingType::UniformBuffer});
+        uniformLayoutBindings.push_back({ GrDawnUniformHandler::kUniformBinding,
+                                          wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
+                                          wgpu::BindingType::UniformBuffer});
     }
-    uint32_t binding = GrDawnUniformHandler::kSamplerBindingBase;
+    wgpu::BindGroupLayoutDescriptor uniformBindGroupLayoutDesc;
+    uniformBindGroupLayoutDesc.bindingCount = uniformLayoutBindings.size();
+    uniformBindGroupLayoutDesc.bindings = uniformLayoutBindings.data();
+    result->fBindGroupLayouts[0] =
+        gpu->device().CreateBindGroupLayout(&uniformBindGroupLayoutDesc);
+    uint32_t binding = 0;
+    std::vector<wgpu::BindGroupLayoutBinding> textureLayoutBindings;
     for (int i = 0; i < builder.fUniformHandler.fSamplers.count(); ++i) {
-        layoutBindings.push_back({ binding++, wgpu::ShaderStage::Fragment,
-                                   wgpu::BindingType::Sampler});
-        layoutBindings.push_back({ binding++, wgpu::ShaderStage::Fragment,
-                                   wgpu::BindingType::SampledTexture});
+        textureLayoutBindings.push_back({ binding++, wgpu::ShaderStage::Fragment,
+                                          wgpu::BindingType::Sampler});
+        textureLayoutBindings.push_back({ binding++, wgpu::ShaderStage::Fragment,
+                                          wgpu::BindingType::SampledTexture});
     }
-    wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc;
-    bindGroupLayoutDesc.bindingCount = layoutBindings.size();
-    bindGroupLayoutDesc.bindings = layoutBindings.data();
-    result->fBindGroupLayout = gpu->device().CreateBindGroupLayout(&bindGroupLayoutDesc);
+    wgpu::BindGroupLayoutDescriptor textureBindGroupLayoutDesc;
+    textureBindGroupLayoutDesc.bindingCount = textureLayoutBindings.size();
+    textureBindGroupLayoutDesc.bindings = textureLayoutBindings.data();
+    result->fBindGroupLayouts[1] =
+        gpu->device().CreateBindGroupLayout(&textureBindGroupLayoutDesc);
     wgpu::PipelineLayoutDescriptor pipelineLayoutDesc;
-    pipelineLayoutDesc.bindGroupLayoutCount = 1;
-    pipelineLayoutDesc.bindGroupLayouts = &result->fBindGroupLayout;
+    pipelineLayoutDesc.bindGroupLayoutCount = 2;
+    pipelineLayoutDesc.bindGroupLayouts = &result->fBindGroupLayouts[0];
     auto pipelineLayout = gpu->device().CreatePipelineLayout(&pipelineLayoutDesc);
     result->fBuiltinUniformHandles = builder.fUniformHandles;
     const GrPipeline& pipeline = programInfo.pipeline();
     auto colorState = create_color_state(gpu, pipeline, colorFormat);
     wgpu::DepthStencilStateDescriptor depthStencilState;
-    GrStencilSettings stencil;
-    if (pipeline.isStencilEnabled()) {
-        int numStencilBits = renderTarget->renderTargetPriv().numStencilBits();
-        stencil.reset(*pipeline.getUserStencil(), pipeline.hasStencilClip(), numStencilBits);
-    }
-    depthStencilState = create_depth_stencil_state(stencil, depthStencilFormat,
-                                                   programInfo.origin());
 
-    std::vector<wgpu::VertexBufferDescriptor> inputs;
+#ifdef SK_DEBUG
+    if (pipeline.isStencilEnabled()) {
+        SkASSERT(renderTarget->renderTargetPriv().numStencilBits() == 8);
+    }
+#endif
+    depthStencilState = create_depth_stencil_state(programInfo, depthStencilFormat);
+
+    std::vector<wgpu::VertexBufferLayoutDescriptor> inputs;
 
     std::vector<wgpu::VertexAttributeDescriptor> vertexAttributes;
     const GrPrimitiveProcessor& primProc = programInfo.primProc();
@@ -369,8 +378,8 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
             offset += attrib.sizeAlign4();
             i++;
         }
-        wgpu::VertexBufferDescriptor input;
-        input.stride = offset;
+        wgpu::VertexBufferLayoutDescriptor input;
+        input.arrayStride = offset;
         input.stepMode = wgpu::InputStepMode::Vertex;
         input.attributeCount = vertexAttributes.size();
         input.attributes = &vertexAttributes.front();
@@ -389,17 +398,17 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
             offset += attrib.sizeAlign4();
             i++;
         }
-        wgpu::VertexBufferDescriptor input;
-        input.stride = offset;
+        wgpu::VertexBufferLayoutDescriptor input;
+        input.arrayStride = offset;
         input.stepMode = wgpu::InputStepMode::Instance;
         input.attributeCount = instanceAttributes.size();
         input.attributes = &instanceAttributes.front();
         inputs.push_back(input);
     }
-    wgpu::VertexInputDescriptor vertexInput;
-    vertexInput.indexFormat = wgpu::IndexFormat::Uint16;
-    vertexInput.bufferCount = inputs.size();
-    vertexInput.buffers = &inputs.front();
+    wgpu::VertexStateDescriptor vertexState;
+    vertexState.indexFormat = wgpu::IndexFormat::Uint16;
+    vertexState.vertexBufferCount = inputs.size();
+    vertexState.vertexBuffers = &inputs.front();
 
     wgpu::ProgrammableStageDescriptor vsDesc;
     vsDesc.module = vsModule;
@@ -413,8 +422,8 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
     rpDesc.layout = pipelineLayout;
     rpDesc.vertexStage = vsDesc;
     rpDesc.fragmentStage = &fsDesc;
-    rpDesc.vertexInput = &vertexInput;
-    rpDesc.primitiveTopology = to_dawn_primitive_topology(primitiveType);
+    rpDesc.vertexState = &vertexState;
+    rpDesc.primitiveTopology = to_dawn_primitive_topology(programInfo.primitiveType());
     if (hasDepthStencil) {
         rpDesc.depthStencilState = &depthStencilState;
     }
@@ -446,7 +455,11 @@ wgpu::ShaderModule GrDawnProgramBuilder::createShaderModule(const GrGLSLShaderBu
     printf("converting program:\n%s\n", sksl.c_str());
 #endif
 
-    SkSL::String spirvSource = sksl_to_spirv(fGpu, source.c_str(), kind, flipY, inputs);
+    SkSL::String spirvSource = sksl_to_spirv(fGpu, source.c_str(), kind, flipY,
+                                             fUniformHandler.getRTHeightOffset(), inputs);
+    if (inputs->fRTHeight) {
+        this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
+    }
 
     wgpu::ShaderModuleDescriptor desc;
     desc.codeSize = spirvSource.size() / 4;
@@ -480,8 +493,8 @@ void GrDawnProgram::setRenderTargetState(const GrRenderTarget* rt, GrSurfaceOrig
     }
 }
 
-static void setTexture(GrDawnGpu* gpu, const GrSamplerState& state, GrTexture* texture,
-                       std::vector<wgpu::BindGroupBinding> *bindings, int* binding) {
+static void set_texture(GrDawnGpu* gpu, const GrSamplerState& state, GrTexture* texture,
+                        std::vector<wgpu::BindGroupBinding> *bindings, int* binding) {
     // FIXME: could probably cache samplers in GrDawnProgram
     wgpu::Sampler sampler = gpu->getOrCreateSampler(state);
     bindings->push_back(make_bind_group_binding((*binding)++, sampler));
@@ -490,8 +503,8 @@ static void setTexture(GrDawnGpu* gpu, const GrSamplerState& state, GrTexture* t
     bindings->push_back(make_bind_group_binding((*binding)++, textureView));
 }
 
-wgpu::BindGroup GrDawnProgram::setData(GrDawnGpu* gpu, const GrRenderTarget* renderTarget,
-                                       const GrProgramInfo& programInfo) {
+wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarget* renderTarget,
+                                              const GrProgramInfo& programInfo) {
     std::vector<wgpu::BindGroupBinding> bindings;
     GrDawnRingBuffer::Slice slice;
     uint32_t uniformBufferSize = fDataManager.uniformBufferSize();
@@ -506,38 +519,58 @@ wgpu::BindGroup GrDawnProgram::setData(GrDawnGpu* gpu, const GrRenderTarget* ren
     const GrPrimitiveProcessor& primProc = programInfo.primProc();
     fGeometryProcessor->setData(fDataManager, primProc,
                                 GrFragmentProcessor::CoordTransformIter(pipeline));
-    int binding = GrDawnUniformHandler::kSamplerBindingBase;
-    auto primProcTextures = programInfo.hasFixedPrimProcTextures() ?
-                                programInfo.fixedPrimProcTextures() : nullptr;
-
-    for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
-        auto& sampler = primProc.textureSampler(i);
-        setTexture(gpu, sampler.samplerState(), primProcTextures[i]->peekTexture(), &bindings,
-                   &binding);
-    }
     GrFragmentProcessor::Iter iter(pipeline);
     GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
     const GrFragmentProcessor* fp = iter.next();
     GrGLSLFragmentProcessor* glslFP = glslIter.next();
     while (fp && glslFP) {
         glslFP->setData(fDataManager, *fp);
-        for (int i = 0; i < fp->numTextureSamplers(); ++i) {
-            auto& s = fp->textureSampler(i);
-            setTexture(gpu, s.samplerState(), s.peekTexture(), &bindings, &binding);
-        }
         fp = iter.next();
         glslFP = glslIter.next();
     }
     SkIPoint offset;
     GrTexture* dstTexture = pipeline.peekDstTexture(&offset);
     fXferProcessor->setData(fDataManager, pipeline.getXferProcessor(), dstTexture, offset);
-    if (GrTextureProxy* proxy = pipeline.dstTextureProxy()) {
-        GrFragmentProcessor::TextureSampler sampler(sk_ref_sp(proxy));
-        setTexture(gpu, sampler.samplerState(), sampler.peekTexture(), &bindings, &binding);
-    }
     fDataManager.uploadUniformBuffers(gpu, slice);
     wgpu::BindGroupDescriptor descriptor;
-    descriptor.layout = fBindGroupLayout;
+    descriptor.layout = fBindGroupLayouts[0];
+    descriptor.bindingCount = bindings.size();
+    descriptor.bindings = bindings.data();
+    return gpu->device().CreateBindGroup(&descriptor);
+}
+
+wgpu::BindGroup GrDawnProgram::setTextures(GrDawnGpu* gpu,
+                                           const GrProgramInfo& programInfo,
+                                           const GrTextureProxy* const primProcTextures[]) {
+    std::vector<wgpu::BindGroupBinding> bindings;
+    int binding = 0;
+    const GrPipeline& pipeline = programInfo.pipeline();
+    const GrPrimitiveProcessor& primProc = programInfo.primProc();
+    if (primProcTextures) {
+        for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
+            auto& sampler = primProc.textureSampler(i);
+            set_texture(gpu, sampler.samplerState(), primProcTextures[i]->peekTexture(), &bindings,
+                        &binding);
+        }
+    }
+    GrFragmentProcessor::Iter iter(pipeline);
+    GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
+    const GrFragmentProcessor* fp = iter.next();
+    GrGLSLFragmentProcessor* glslFP = glslIter.next();
+    while (fp && glslFP) {
+        for (int i = 0; i < fp->numTextureSamplers(); ++i) {
+            auto& s = fp->textureSampler(i);
+            set_texture(gpu, s.samplerState(), s.peekTexture(), &bindings, &binding);
+        }
+        fp = iter.next();
+        glslFP = glslIter.next();
+    }
+    SkIPoint offset;
+    if (GrTexture* dstTexture = pipeline.peekDstTexture(&offset)) {
+        set_texture(gpu, GrSamplerState::ClampNearest(), dstTexture, &bindings, &binding);
+    }
+    wgpu::BindGroupDescriptor descriptor;
+    descriptor.layout = fBindGroupLayouts[1];
     descriptor.bindingCount = bindings.size();
     descriptor.bindings = bindings.data();
     return gpu->device().CreateBindGroup(&descriptor);

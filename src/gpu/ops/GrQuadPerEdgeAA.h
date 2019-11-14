@@ -96,6 +96,19 @@ namespace GrQuadPerEdgeAA {
         CoverageMode coverageMode() const;
         size_t vertexSize() const;
 
+        bool needsIndexBuffer() const { return this->indexBufferOption() !=
+                                               IndexBufferOption::kTriStrips; }
+
+        GrPrimitiveType primitiveType() const {
+            switch (this->indexBufferOption()) {
+                case IndexBufferOption::kPictureFramed: return GrPrimitiveType::kTriangles;
+                case IndexBufferOption::kIndexedRects:  return GrPrimitiveType::kTriangles;
+                case IndexBufferOption::kTriStrips:     return GrPrimitiveType::kTriangleStrip;
+            }
+
+            SkUNREACHABLE;
+        }
+
     private:
         static_assert(GrQuad::kTypeCount <= 4, "GrQuad::Type doesn't fit in 2 bits");
         static_assert(kColorTypeCount <= 4, "Color doesn't fit in 2 bits");
@@ -118,7 +131,7 @@ namespace GrQuadPerEdgeAA {
 
     sk_sp<GrGeometryProcessor> MakeTexturedProcessor(
             const VertexSpec& spec, const GrShaderCaps& caps, const GrBackendFormat&,
-            const GrSamplerState& samplerState, const GrSwizzle& swizzle, uint32_t extraSamplerKey,
+            const GrSamplerState& samplerState, const GrSwizzle& swizzle,
             sk_sp<GrColorSpaceXform> textureColorSpaceXform, Saturate saturate);
 
     // Fill vertices with the vertex data needed to represent the given quad. The device position,
@@ -134,13 +147,23 @@ namespace GrQuadPerEdgeAA {
                      const SkPMColor4f& color, const GrQuad& localQuad, const SkRect& domain,
                      GrQuadAAFlags aa);
 
-    // The mesh will have its index data configured to meet the expectations of the Tessellate()
-    // function, but it the calling code must handle filling a vertex buffer via Tessellate() and
-    // then assigning it to the returned mesh.
+    // This method will return the correct index buffer for the specified indexBufferOption.
+    // It will, correctly, return nullptr if the indexBufferOption is kTriStrips.
+    sk_sp<const GrBuffer> GetIndexBuffer(GrMeshDrawOp::Target*, IndexBufferOption);
+
+    // This method will configure the vertex and index data of the provided 'mesh' to comply
+    // with the indexing method specified in the vertexSpec. It is up to the calling code
+    // to allocate and fill in the vertex data and acquire the correct indexBuffer if it is needed.
     //
-    // Returns false if the index data could not be allocated.
-    bool ConfigureMeshIndices(GrMeshDrawOp::Target* target, GrMesh* mesh, const VertexSpec& spec,
-                              int quadCount);
+    // @param runningQuadCount  the number of quads already stored in 'vertexBuffer' and
+    //                          'indexBuffer' e.g., different GrMeshes have already been placed in
+    //                          the buffers to allow dynamic state changes.
+    // @param quadCount         the number of quads that will be drawn by the provided 'mesh'.
+    //                          A subsequent ConfigureMesh call would the use
+    //                          'runningQuadCount' + 'quadCount' for its new 'runningQuadCount'.
+    void ConfigureMesh(GrMesh* mesh, const VertexSpec&, int runningQuadCount, int quadCount,
+                       int maxVerts, sk_sp<const GrBuffer> vertexBuffer,
+                       sk_sp<const GrBuffer> indexBuffer, int absVertBufferOffset);
 
 } // namespace GrQuadPerEdgeAA
 

@@ -79,25 +79,22 @@ void GrVkResourceProvider::PipelineStateCache::release() {
 GrVkPipelineState* GrVkResourceProvider::PipelineStateCache::refPipelineState(
         GrRenderTarget* renderTarget,
         const GrProgramInfo& programInfo,
-        GrPrimitiveType primitiveType,
         VkRenderPass compatibleRenderPass) {
 #ifdef GR_PIPELINE_STATE_CACHE_STATS
     ++fTotalRequests;
 #endif
-    GrStencilSettings stencil;
+
+#ifdef SK_DEBUG
     if (programInfo.pipeline().isStencilEnabled()) {
-        // TODO: attach stencil and create settings during render target flush.
         SkASSERT(renderTarget->renderTargetPriv().getStencilAttachment());
-        stencil.reset(*programInfo.pipeline().getUserStencil(),
-                      programInfo.pipeline().hasStencilClip(),
-                      renderTarget->renderTargetPriv().numStencilBits());
+        SkASSERT(renderTarget->renderTargetPriv().numStencilBits() == 8);
     }
+#endif
 
     // TODO: can this be unified between GL, Vk and Mtl?
     // Get GrVkProgramDesc
     GrVkPipelineStateBuilder::Desc desc;
-    if (!GrVkPipelineStateBuilder::Desc::Build(&desc, renderTarget, programInfo, stencil,
-                                               primitiveType, fGpu)) {
+    if (!GrVkPipelineStateBuilder::Desc::Build(&desc, renderTarget, programInfo, *fGpu->caps())) {
         GrCapsDebugf(fGpu->caps(), "Failed to build vk program descriptor!\n");
         return nullptr;
     }
@@ -108,8 +105,7 @@ GrVkPipelineState* GrVkResourceProvider::PipelineStateCache::refPipelineState(
         ++fCacheMisses;
 #endif
         GrVkPipelineState* pipelineState(GrVkPipelineStateBuilder::CreatePipelineState(
-                fGpu, renderTarget, programInfo,
-                stencil, primitiveType, &desc, compatibleRenderPass));
+                fGpu, renderTarget, programInfo, &desc, compatibleRenderPass));
         if (!pipelineState) {
             return nullptr;
         }

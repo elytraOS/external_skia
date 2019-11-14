@@ -232,11 +232,18 @@ void ApplyArcToAngle(SkPath& p, SkRect& oval, SkScalar startAngle, SkScalar swee
     p.arcTo(oval, startAngle, sweepAngle, forceMoveTo);
 }
 
-void ApplyAddArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
-                          bool useSmallArc, bool ccw, SkScalar x, SkScalar y) {
+void ApplyArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
+                       bool useSmallArc, bool ccw, SkScalar x, SkScalar y) {
     auto arcSize = useSmallArc ? SkPath::ArcSize::kSmall_ArcSize : SkPath::ArcSize::kLarge_ArcSize;
     auto sweep = ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction;
     orig.arcTo(rx, ry, xAxisRotate, arcSize, sweep, x, y);
+}
+
+void ApplyRArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
+                        bool useSmallArc, bool ccw, SkScalar dx, SkScalar dy) {
+    auto arcSize = useSmallArc ? SkPath::ArcSize::kSmall_ArcSize : SkPath::ArcSize::kLarge_ArcSize;
+    auto sweep = ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction;
+    orig.rArcTo(rx, ry, xAxisRotate, arcSize, sweep, dx, dy);
 }
 
 void ApplyClose(SkPath& p) {
@@ -248,17 +255,35 @@ void ApplyConicTo(SkPath& p, SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
     p.conicTo(x1, y1, x2, y2, w);
 }
 
+void ApplyRConicTo(SkPath& p, SkScalar dx1, SkScalar dy1, SkScalar dx2, SkScalar dy2,
+                  SkScalar w) {
+    p.rConicTo(dx1, dy1, dx2, dy2, w);
+}
+
 void ApplyCubicTo(SkPath& p, SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                   SkScalar x3, SkScalar y3) {
     p.cubicTo(x1, y1, x2, y2, x3, y3);
+}
+
+void ApplyRCubicTo(SkPath& p, SkScalar dx1, SkScalar dy1, SkScalar dx2, SkScalar dy2,
+                  SkScalar dx3, SkScalar dy3) {
+    p.rCubicTo(dx1, dy1, dx2, dy2, dx3, dy3);
 }
 
 void ApplyLineTo(SkPath& p, SkScalar x, SkScalar y) {
     p.lineTo(x, y);
 }
 
+void ApplyRLineTo(SkPath& p, SkScalar dx, SkScalar dy) {
+    p.rLineTo(dx, dy);
+}
+
 void ApplyMoveTo(SkPath& p, SkScalar x, SkScalar y) {
     p.moveTo(x, y);
+}
+
+void ApplyRMoveTo(SkPath& p, SkScalar dx, SkScalar dy) {
+    p.rMoveTo(dx, dy);
 }
 
 void ApplyReset(SkPath& p) {
@@ -271,6 +296,10 @@ void ApplyRewind(SkPath& p) {
 
 void ApplyQuadTo(SkPath& p, SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
     p.quadTo(x1, y1, x2, y2);
+}
+
+void ApplyRQuadTo(SkPath& p, SkScalar dx1, SkScalar dy1, SkScalar dx2, SkScalar dy2) {
+    p.rQuadTo(dx1, dy1, dx2, dy2);
 }
 
 void ApplyTransform(SkPath& orig,
@@ -818,14 +847,22 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkAnimatedImage>("SkAnimatedImage")
         .smart_ptr<sk_sp<SkAnimatedImage>>("sk_sp<SkAnimatedImage>")
+        .function("decodeNextFrame", &SkAnimatedImage::decodeNextFrame)
+        .function("getFrameCount", &SkAnimatedImage::getFrameCount)
         .function("getRepetitionCount", &SkAnimatedImage::getRepetitionCount)
-        .function("decodeNextFrame", &SkAnimatedImage::decodeNextFrame);
+        .function("height",  optional_override([](SkAnimatedImage& self)->int32_t {
+            return self.dimensions().height();
+        }))
+        .function("reset", &SkAnimatedImage::reset)
+        .function("width",  optional_override([](SkAnimatedImage& self)->int32_t {
+            return self.dimensions().width();
+        }));
 
     class_<SkCanvas>("SkCanvas")
         .constructor<>()
         .function("clear", &SkCanvas::clear)
         .function("clipPath", select_overload<void (const SkPath&, SkClipOp, bool)>(&SkCanvas::clipPath))
-        .function("clipRRect",optional_override([](SkCanvas& self, const SimpleRRect& r, SkClipOp op, bool doAntiAlias) {
+        .function("clipRRect", optional_override([](SkCanvas& self, const SimpleRRect& r, SkClipOp op, bool doAntiAlias) {
             self.clipRRect(toRRect(r), op, doAntiAlias);
         }))
         .function("clipRect", select_overload<void (const SkRect&, SkClipOp, bool)>(&SkCanvas::clipRect))
@@ -1140,7 +1177,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("_addRoundRect", &ApplyAddRoundRect)
         .function("_arcTo", &ApplyArcTo)
         .function("_arcTo", &ApplyArcToAngle)
-        .function("_arcTo", &ApplyAddArcToArcSize)
+        .function("_arcTo", &ApplyArcToArcSize)
         .function("_close", &ApplyClose)
         .function("_conicTo", &ApplyConicTo)
         .function("countPoints", &SkPath::countPoints)
@@ -1151,9 +1188,15 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("isVolatile", &SkPath::isVolatile)
         .function("_lineTo", &ApplyLineTo)
         .function("_moveTo", &ApplyMoveTo)
+        .function("_quadTo", &ApplyQuadTo)
+        .function("_rArcTo", &ApplyRArcToArcSize)
+        .function("_rConicTo", &ApplyRConicTo)
+        .function("_rCubicTo", &ApplyRCubicTo)
+        .function("_rLineTo", &ApplyRLineTo)
+        .function("_rMoveTo", &ApplyRMoveTo)
+        .function("_rQuadTo", &ApplyRQuadTo)
         .function("reset", &ApplyReset)
         .function("rewind", &ApplyRewind)
-        .function("_quadTo", &ApplyQuadTo)
         .function("setIsVolatile", &SkPath::setIsVolatile)
         .function("_transform", select_overload<void(SkPath&, SkScalar, SkScalar, SkScalar, SkScalar, SkScalar, SkScalar, SkScalar, SkScalar, SkScalar)>(&ApplyTransform))
 

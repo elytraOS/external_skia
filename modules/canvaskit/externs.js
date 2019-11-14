@@ -120,8 +120,12 @@ var CanvasKit = {
 
 	SkAnimatedImage: {
 		// public API (from C++ bindings)
-		getRepetitionCount: function() {},
 		decodeNextFrame: function() {},
+		getFrameCount: function() {},
+		getRepetitionCount: function() {},
+		height: function() {},
+		reset: function() {},
+		width: function() {},
 	},
 
 	SkCanvas: {
@@ -313,6 +317,12 @@ var CanvasKit = {
 		_moveTo: function() {},
 		_op: function() {},
 		_quadTo: function() {},
+		_rArcTo: function() {},
+		_rConicTo: function() {},
+		_rCubicTo: function() {},
+		_rLineTo: function() {},
+		_rMoveTo: function() {},
+		_rQuadTo: function() {},
 		_rect: function() {},
 		_simplify: function() {},
 		_stroke: function() {},
@@ -686,6 +696,12 @@ CanvasKit.SkPath.prototype.moveTo = function() {};
 CanvasKit.SkPath.prototype.offset = function() {};
 CanvasKit.SkPath.prototype.op = function() {};
 CanvasKit.SkPath.prototype.quadTo = function() {};
+CanvasKit.SkPath.prototype.rArcTo = function() {};
+CanvasKit.SkPath.prototype.rConicTo = function() {};
+CanvasKit.SkPath.prototype.rCubicTo = function() {};
+CanvasKit.SkPath.prototype.rLineTo = function() {};
+CanvasKit.SkPath.prototype.rMoveTo = function() {};
+CanvasKit.SkPath.prototype.rQuadTo = function() {};
 CanvasKit.SkPath.prototype.rect = function() {};
 CanvasKit.SkPath.prototype.simplify = function() {};
 CanvasKit.SkPath.prototype.stroke = function() {};

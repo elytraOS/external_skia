@@ -54,17 +54,6 @@ SkGlyph* SkStrike::glyph(SkPackedGlyphID packedGlyphID) {
     return glyph;
 }
 
-SkGlyph* SkStrike::glyph(SkGlyphID glyphID) {
-    return this->glyph(SkPackedGlyphID{glyphID});
-}
-
-SkGlyph* SkStrike::glyph(SkGlyphID glyphID, SkPoint position) {
-    SkIPoint mask = fRoundingSpec.ignorePositionMask;
-    SkFixed subX = SkScalarToFixed(position.x()) & mask.x(),
-            subY = SkScalarToFixed(position.y()) & mask.y();
-    return this->glyph(SkPackedGlyphID{glyphID, subX, subY});
-}
-
 SkGlyph* SkStrike::glyphFromPrototype(const SkGlyphPrototype& p, void* image) {
     SkGlyph* glyph = fGlyphMap.findOrNull(p.id);
     if (glyph == nullptr) {
@@ -100,10 +89,6 @@ const SkDescriptor& SkStrike::getDescriptor() const {
     return *fDesc.getDesc();
 }
 
-unsigned SkStrike::getGlyphCount() const {
-    return fScalerContext->getGlyphCount();
-}
-
 int SkStrike::countCachedGlyphs() const {
     return fGlyphMap.count();
 }
@@ -112,7 +97,7 @@ SkSpan<const SkGlyph*> SkStrike::internalPrepare(
         SkSpan<const SkGlyphID> glyphIDs, PathDetail pathDetail, const SkGlyph** results) {
     const SkGlyph** cursor = results;
     for (auto glyphID : glyphIDs) {
-        SkGlyph* glyphPtr = this->glyph(glyphID);
+        SkGlyph* glyphPtr = this->glyph(SkPackedGlyphID{glyphID});
         if (pathDetail == kMetricsAndPath) {
             this->preparePath(glyphPtr);
         }
@@ -140,12 +125,7 @@ SkGlyph* SkStrike::mergeGlyphAndImage(SkPackedGlyphID toID, const SkGlyph& from)
     return glyph;
 }
 
-bool SkStrike::belongsToCache(const SkGlyph* glyph) const {
-    return glyph && fGlyphMap.findOrNull(glyph->getPackedID()) == glyph;
-}
-
-const SkGlyph* SkStrike::getCachedGlyphAnySubPix(SkGlyphID glyphID,
-                                                     SkPackedGlyphID vetoID) const {
+const SkGlyph* SkStrike::getCachedGlyphAnySubPix(SkGlyphID glyphID, SkPackedGlyphID vetoID) const {
     for (SkFixed subY = 0; subY < SK_Fixed1; subY += SK_FixedQuarter) {
         for (SkFixed subX = 0; subX < SK_Fixed1; subX += SK_FixedQuarter) {
             SkPackedGlyphID packedGlyphID{glyphID, subX, subY};

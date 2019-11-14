@@ -83,10 +83,55 @@ static SkCodecAnimation::DisposalMethod wuffs_disposal_to_skia_disposal(
     }
 }
 
+static SkAlphaType to_alpha_type(bool opaque) {
+    return opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
+}
+
 static SkCodec::Result reset_and_decode_image_config(wuffs_gif__decoder*       decoder,
                                                      wuffs_base__image_config* imgcfg,
                                                      wuffs_base__io_buffer*    b,
-                                                     SkStream*                 s);
+                                                     SkStream*                 s) {
+    // Calling decoder->initialize will memset it to zero.
+    const char* status = decoder->initialize(sizeof__wuffs_gif__decoder(), WUFFS_VERSION, 0);
+    if (status != nullptr) {
+        SkCodecPrintf("initialize: %s", status);
+        return SkCodec::kInternalError;
+    }
+    while (true) {
+        status = decoder->decode_image_config(imgcfg, b);
+        if (status == nullptr) {
+            break;
+        } else if (status != wuffs_base__suspension__short_read) {
+            SkCodecPrintf("decode_image_config: %s", status);
+            return SkCodec::kErrorInInput;
+        } else if (!fill_buffer(b, s)) {
+            return SkCodec::kIncompleteInput;
+        }
+    }
+
+    // A GIF image's natural color model is indexed color: 1 byte per pixel,
+    // indexing a 256-element palette.
+    //
+    // For Skia, we override that to decode to 4 bytes per pixel, BGRA or RGBA.
+    wuffs_base__pixel_format pixfmt = 0;
+    switch (kN32_SkColorType) {
+        case kBGRA_8888_SkColorType:
+            pixfmt = WUFFS_BASE__PIXEL_FORMAT__BGRA_NONPREMUL;
+            break;
+        case kRGBA_8888_SkColorType:
+            pixfmt = WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL;
+            break;
+        default:
+            return SkCodec::kInternalError;
+    }
+    if (imgcfg) {
+        imgcfg->pixcfg.set(pixfmt, WUFFS_BASE__PIXEL_SUBSAMPLING__NONE, imgcfg->pixcfg.width(),
+                           imgcfg->pixcfg.height());
+    }
+
+    return SkCodec::kSuccess;
+}
+
 
 // -------------------------------- Class definitions
 
@@ -187,7 +232,6 @@ private:
     bool                 onGetFrameInfo(int, FrameInfo*) const override;
     int                  onGetRepetitionCount() override;
 
-    void   readFrames();
     Result seekFrame(WhichDecoder which, int frameIndex);
 
     void   onGetFrameCountInternal();
@@ -411,10 +455,6 @@ SkCodec::Result SkWuffsCodec::onStartIncrementalDecode(const SkImageInfo&      d
     return SkCodec::kSuccess;
 }
 
-static SkAlphaType to_alpha_type(bool opaque) {
-    return opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
-}
-
 SkCodec::Result SkWuffsCodec::onIncrementalDecode(int* rowsDecoded) {
     if (!fIncrDecDst) {
         return SkCodec::kInternalError;
@@ -574,34 +614,7 @@ void SkWuffsCodec::onGetFrameCountInternal() {
     }
     reset_and_decode_image_config(fDecoders[WhichDecoder::kFrameCount].get(), nullptr, &fIOBuffer,
                                   fStream.get());
-    this->readFrames();
-}
 
-bool SkWuffsCodec::onGetFrameInfo(int i, SkCodec::FrameInfo* frameInfo) const {
-    const SkWuffsFrame* f = this->frame(i);
-    if (!f) {
-        return false;
-    }
-    if (frameInfo) {
-        *frameInfo = f->frameInfo(static_cast<uint64_t>(i) < this->fNumFullyReceivedFrames);
-    }
-    return true;
-}
-
-int SkWuffsCodec::onGetRepetitionCount() {
-    // Convert from Wuffs's loop count to Skia's repeat count. Wuffs' uint32_t
-    // number is how many times to play the loop. Skia's int number is how many
-    // times to play the loop *after the first play*. Wuffs and Skia use 0 and
-    // kRepetitionCountInfinite respectively to mean loop forever.
-    uint32_t n = fDecoders[WhichDecoder::kIncrDecode]->num_animation_loops();
-    if (n == 0) {
-        return SkCodec::kRepetitionCountInfinite;
-    }
-    n--;
-    return n < INT_MAX ? n : INT_MAX;
-}
-
-void SkWuffsCodec::readFrames() {
     size_t n = fFrames.size();
     int    i = n ? n - 1 : 0;
     if (this->seekFrame(WhichDecoder::kFrameCount, i) != SkCodec::kSuccess) {
@@ -629,6 +642,35 @@ void SkWuffsCodec::readFrames() {
     }
 
     fFramesComplete = true;
+
+    // We've seen the end of the animation. There'll be no more frames, so we
+    // no longer need the kFrameCount decoder. Releasing it earlier than the
+    // SkWuffsCodec destructor might help peak memory use.
+    fDecoders[WhichDecoder::kFrameCount].reset(nullptr);
+}
+
+bool SkWuffsCodec::onGetFrameInfo(int i, SkCodec::FrameInfo* frameInfo) const {
+    const SkWuffsFrame* f = this->frame(i);
+    if (!f) {
+        return false;
+    }
+    if (frameInfo) {
+        *frameInfo = f->frameInfo(static_cast<uint64_t>(i) < this->fNumFullyReceivedFrames);
+    }
+    return true;
+}
+
+int SkWuffsCodec::onGetRepetitionCount() {
+    // Convert from Wuffs's loop count to Skia's repeat count. Wuffs' uint32_t
+    // number is how many times to play the loop. Skia's int number is how many
+    // times to play the loop *after the first play*. Wuffs and Skia use 0 and
+    // kRepetitionCountInfinite respectively to mean loop forever.
+    uint32_t n = fDecoders[WhichDecoder::kIncrDecode]->num_animation_loops();
+    if (n == 0) {
+        return SkCodec::kRepetitionCountInfinite;
+    }
+    n--;
+    return n < INT_MAX ? n : INT_MAX;
 }
 
 SkCodec::Result SkWuffsCodec::seekFrame(WhichDecoder which, int frameIndex) {
@@ -719,51 +761,6 @@ SkCodec::Result SkWuffsCodec::seekFrame(WhichDecoder which, int frameIndex) {
 // to zero, check the Wuffs version and then, in order to be able to call
 // restart_frame, call decode_image_config. The io_buffer and its associated
 // stream will also need to be rewound.
-
-static SkCodec::Result reset_and_decode_image_config(wuffs_gif__decoder*       decoder,
-                                                     wuffs_base__image_config* imgcfg,
-                                                     wuffs_base__io_buffer*    b,
-                                                     SkStream*                 s) {
-    // Calling decoder->initialize will memset it to zero.
-    const char* status = decoder->initialize(sizeof__wuffs_gif__decoder(), WUFFS_VERSION, 0);
-    if (status != nullptr) {
-        SkCodecPrintf("initialize: %s", status);
-        return SkCodec::kInternalError;
-    }
-    while (true) {
-        status = decoder->decode_image_config(imgcfg, b);
-        if (status == nullptr) {
-            break;
-        } else if (status != wuffs_base__suspension__short_read) {
-            SkCodecPrintf("decode_image_config: %s", status);
-            return SkCodec::kErrorInInput;
-        } else if (!fill_buffer(b, s)) {
-            return SkCodec::kIncompleteInput;
-        }
-    }
-
-    // A GIF image's natural color model is indexed color: 1 byte per pixel,
-    // indexing a 256-element palette.
-    //
-    // For Skia, we override that to decode to 4 bytes per pixel, BGRA or RGBA.
-    wuffs_base__pixel_format pixfmt = 0;
-    switch (kN32_SkColorType) {
-        case kBGRA_8888_SkColorType:
-            pixfmt = WUFFS_BASE__PIXEL_FORMAT__BGRA_NONPREMUL;
-            break;
-        case kRGBA_8888_SkColorType:
-            pixfmt = WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL;
-            break;
-        default:
-            return SkCodec::kInternalError;
-    }
-    if (imgcfg) {
-        imgcfg->pixcfg.set(pixfmt, WUFFS_BASE__PIXEL_SUBSAMPLING__NONE, imgcfg->pixcfg.width(),
-                           imgcfg->pixcfg.height());
-    }
-
-    return SkCodec::kSuccess;
-}
 
 SkCodec::Result SkWuffsCodec::resetDecoder(WhichDecoder which) {
     if (!fStream->rewind()) {

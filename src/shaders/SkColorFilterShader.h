@@ -21,11 +21,17 @@ public:
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
 #endif
 
-protected:
+private:
+    bool isOpaque() const override;
     void flatten(SkWriteBuffer&) const override;
     bool onAppendStages(const SkStageRec&) const override;
 
-private:
+    bool onProgram(skvm::Builder*,
+                   SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms,
+                   skvm::F32 x, skvm::F32 y,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
+
     SK_FLATTENABLE_HOOKS(SkColorFilterShader)
 
     sk_sp<SkShader>      fShader;

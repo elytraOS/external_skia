@@ -57,26 +57,28 @@ struct GrDawnProgram : public SkRefCnt {
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
     std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
     int fFragmentProcessorCnt;
-    wgpu::BindGroupLayout fBindGroupLayout;
+    wgpu::BindGroupLayout fBindGroupLayouts[2];
     wgpu::RenderPipeline fRenderPipeline;
     GrDawnProgramDataManager fDataManager;
     RenderTargetState fRenderTargetState;
     BuiltinUniformHandles fBuiltinUniformHandles;
 
     void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin);
-    wgpu::BindGroup setData(GrDawnGpu* gpu, const GrRenderTarget*, const GrProgramInfo&);
+    wgpu::BindGroup setUniformData(GrDawnGpu*, const GrRenderTarget*, const GrProgramInfo&);
+    wgpu::BindGroup setTextures(GrDawnGpu* gpu,
+                                const GrProgramInfo& programInfo,
+                                const GrTextureProxy* const primProcTextures[]);
 };
 
 class GrDawnProgramBuilder : public GrGLSLProgramBuilder {
 public:
     static sk_sp<GrDawnProgram> Build(GrDawnGpu*,
-                                      GrRenderTarget* rt,
-                                      const GrProgramInfo& programInfo,
-                                      GrPrimitiveType primitiveType,
+                                      GrRenderTarget*,
+                                      const GrProgramInfo&,
                                       wgpu::TextureFormat colorFormat,
                                       bool hasDepthStencil,
                                       wgpu::TextureFormat depthStencilFormat,
-                                      GrProgramDesc* desc);
+                                      GrProgramDesc*);
     const GrCaps* caps() const override;
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
     const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }

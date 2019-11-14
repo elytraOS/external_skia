@@ -18,6 +18,7 @@
 #import <Metal/Metal.h>
 
 class GrProgramInfo;
+class GrMtlCaps;
 class GrMtlGpu;
 class GrMtlPipelineState;
 
@@ -36,14 +37,8 @@ public:
      */
     class Desc : public GrProgramDesc {
     public:
-        static bool Build(Desc*, GrRenderTarget*,
-                          const GrProgramInfo&, GrPrimitiveType, GrMtlGpu* gpu);
-
-        size_t shaderKeyLength() const { return fShaderKeyLength; }
-
+        static bool Build(Desc*, GrRenderTarget*, const GrProgramInfo&, const GrMtlCaps&);
     private:
-        size_t fShaderKeyLength;
-
         typedef GrProgramDesc INHERITED;
     };
 

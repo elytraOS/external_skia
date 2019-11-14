@@ -97,7 +97,7 @@ void GrMtlPipelineState::setData(const GrRenderTarget* renderTarget,
                                 dstTexture, offset);
     }
 
-    if (GrTextureProxy* dstTextureProxy = programInfo.pipeline().dstTextureProxy()) {
+    if (GrTextureProxy* dstTextureProxy = programInfo.pipeline().dstProxyView().asTextureProxy()) {
         fSamplerBindings.emplace_back(GrSamplerState::ClampNearest(),
                                       dstTextureProxy->peekTexture(),
                                       fGpu);
@@ -106,12 +106,14 @@ void GrMtlPipelineState::setData(const GrRenderTarget* renderTarget,
     SkASSERT(fNumSamplers == fSamplerBindings.count());
     fDataManager.resetDirtyBits();
 
+#ifdef SK_DEBUG
     if (programInfo.pipeline().isStencilEnabled()) {
         SkASSERT(renderTarget->renderTargetPriv().getStencilAttachment());
-        fStencil.reset(*programInfo.pipeline().getUserStencil(),
-                       programInfo.pipeline().hasStencilClip(),
-                       renderTarget->renderTargetPriv().numStencilBits());
+        SkASSERT(renderTarget->renderTargetPriv().numStencilBits() == 8);
     }
+#endif
+
+    fStencil = programInfo.nonGLStencilSettings();
 }
 
 void GrMtlPipelineState::setDrawState(id<MTLRenderCommandEncoder> renderCmdEncoder,
@@ -197,15 +199,16 @@ void GrMtlPipelineState::setDepthStencilState(id<MTLRenderCommandEncoder> render
     if (!fStencil.isDisabled()) {
         if (fStencil.isTwoSided()) {
             if (@available(macOS 10.11, iOS 9.0, *)) {
-                [renderCmdEncoder setStencilFrontReferenceValue:fStencil.front(origin).fRef
-                                             backReferenceValue:fStencil.back(origin).fRef];
+                [renderCmdEncoder
+                        setStencilFrontReferenceValue:fStencil.postOriginCCWFace(origin).fRef
+                        backReferenceValue:fStencil.postOriginCWFace(origin).fRef];
             } else {
                 // Two-sided stencil not supported on older versions of iOS
                 // TODO: Find a way to recover from this
                 SkASSERT(false);
             }
         } else {
-            [renderCmdEncoder setStencilReferenceValue:fStencil.frontAndBack().fRef];
+            [renderCmdEncoder setStencilReferenceValue:fStencil.singleSidedFace().fRef];
         }
     }
     [renderCmdEncoder setDepthStencilState:state->mtlDepthStencil()];

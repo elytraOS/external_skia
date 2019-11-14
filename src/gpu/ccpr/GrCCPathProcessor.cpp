@@ -141,12 +141,13 @@ void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& 
                              baseInstance, enablePrimitiveRestart);
     mesh.setVertexData(resources.refVertexBuffer());
 
-    GrProgramInfo programInfo(flushState->drawOpArgs().numSamples(),
+    GrProgramInfo programInfo(flushState->proxy()->numSamples(),
+                              flushState->proxy()->numStencilSamples(),
                               flushState->drawOpArgs().origin(),
                               pipeline,
                               *this,
                               fixedDynamicState,
-                              nullptr, 0);
+                              nullptr, 0, primitiveType);
 
     flushState->opsRenderPass()->draw(programInfo, &mesh, 1, bounds);
 }

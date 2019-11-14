@@ -13,23 +13,29 @@
 #include "src/gpu/GrPrimitiveProcessor.h"
 
 class GrMesh;
+class GrStencilSettings;
 
 class GrProgramInfo {
 public:
     GrProgramInfo(int numSamples,
+                  int numStencilSamples,
                   GrSurfaceOrigin origin,
                   const GrPipeline& pipeline,
                   const GrPrimitiveProcessor& primProc,
                   const GrPipeline::FixedDynamicState* fixedDynamicState,
                   const GrPipeline::DynamicStateArrays* dynamicStateArrays,
-                  int numDynamicStateArrays)
-            : fNumSamples(numSamples)
+                  int numDynamicStateArrays,
+                  GrPrimitiveType primitiveType)
+            : fNumRasterSamples(pipeline.isStencilEnabled() ? numStencilSamples : numSamples)
+            , fIsMixedSampled(fNumRasterSamples > numSamples)
             , fOrigin(origin)
             , fPipeline(pipeline)
             , fPrimProc(primProc)
             , fFixedDynamicState(fixedDynamicState)
             , fDynamicStateArrays(dynamicStateArrays)
-            , fNumDynamicStateArrays(numDynamicStateArrays) {
+            , fNumDynamicStateArrays(numDynamicStateArrays)
+            , fPrimitiveType(primitiveType) {
+        SkASSERT(fNumRasterSamples > 0);
         fRequestedFeatures = fPrimProc.requestedFeatures();
         for (int i = 0; i < fPipeline.numFragmentProcessors(); ++i) {
             fRequestedFeatures |= fPipeline.getFragmentProcessor(i).requestedFeatures();
@@ -42,7 +48,8 @@ public:
 
     GrProcessor::CustomFeatures requestedFeatures() const { return fRequestedFeatures; }
 
-    int numSamples() const { return fNumSamples;  }
+    int numRasterSamples() const { return fNumRasterSamples;  }
+    bool isMixedSampled() const { return fIsMixedSampled; }
     GrSurfaceOrigin origin() const { return fOrigin;  }
     const GrPipeline& pipeline() const { return fPipeline; }
     const GrPrimitiveProcessor& primProc() const { return fPrimProc; }
@@ -89,6 +96,12 @@ public:
         return fFixedDynamicState->fPrimitiveProcessorTextures;
     }
 
+    GrPrimitiveType primitiveType() const { return fPrimitiveType; }
+
+    // For Dawn, Metal and Vulkan the number of stencil bits is known a priori so we can
+    // create the stencil settings here.
+    GrStencilSettings nonGLStencilSettings() const;
+
 #ifdef SK_DEBUG
     void validate() const;
     void checkAllInstantiated() const;
@@ -102,7 +115,8 @@ public:
 #endif
 
 private:
-    const int                             fNumSamples;
+    const int                             fNumRasterSamples;
+    const bool                            fIsMixedSampled;
     const GrSurfaceOrigin                 fOrigin;
     const GrPipeline&                     fPipeline;
     const GrPrimitiveProcessor&           fPrimProc;
@@ -110,6 +124,7 @@ private:
     const GrPipeline::DynamicStateArrays* fDynamicStateArrays;
     const int                             fNumDynamicStateArrays;
     GrProcessor::CustomFeatures           fRequestedFeatures;
+    GrPrimitiveType                       fPrimitiveType;
 };
 
 #endif

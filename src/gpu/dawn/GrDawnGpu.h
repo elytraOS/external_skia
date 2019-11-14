@@ -38,13 +38,11 @@ public:
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
-    GrBackendTexture onCreateBackendTexture(int w, int h,
+    GrBackendTexture onCreateBackendTexture(SkISize,
                                             const GrBackendFormat&,
-                                            GrMipMapped,
                                             GrRenderable,
-                                            const SkPixmap srcData[],
+                                            const BackendTextureData* data,
                                             int numMipLevels,
-                                            const SkColor4f* color,
                                             GrProtected isProtected) override;
     void deleteBackendTexture(const GrBackendTexture&) override;
 #if GR_TEST_UTILS
@@ -88,9 +86,7 @@ public:
 
     sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
-    sk_sp<GrDawnProgram> getOrCreateRenderPipeline(GrRenderTarget*,
-                                                   const GrProgramInfo& programInfo,
-                                                   GrPrimitiveType primitiveType);
+    sk_sp<GrDawnProgram> getOrCreateRenderPipeline(GrRenderTarget*, const GrProgramInfo&);
 
     wgpu::Sampler getOrCreateSampler(const GrSamplerState& samplerState);
 
