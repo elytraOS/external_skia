@@ -3850,7 +3850,7 @@ GrGLAttribArrayState* GrGLGpu::HWVertexArrayState::bindInternalVertexArray(GrGLG
     return attribState;
 }
 
-void GrGLGpu::onFinishFlush(GrSurfaceProxy*[], int, SkSurface::BackendSurfaceAccess access,
+bool GrGLGpu::onFinishFlush(GrSurfaceProxy*[], int, SkSurface::BackendSurfaceAccess access,
                             const GrFlushInfo& info, const GrPrepareForExternalIORequests&) {
     // If we inserted semaphores during the flush, we need to call GLFlush.
     bool insertedSemaphore = info.fNumSemaphores > 0 && this->caps()->semaphoreSupport();
@@ -3884,6 +3884,7 @@ void GrGLGpu::onFinishFlush(GrSurfaceProxy*[], int, SkSurface::BackendSurfaceAcc
         // See if any previously inserted finish procs are good to go.
         this->checkFinishProcs();
     }
+    return true;
 }
 
 void GrGLGpu::submit(GrOpsRenderPass* renderPass) {
@@ -3915,28 +3916,29 @@ void GrGLGpu::deleteFence(GrFence fence) const {
     this->deleteSync((GrGLsync)fence);
 }
 
-sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT GrGLGpu::makeSemaphore(bool isOwned) {
+std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT GrGLGpu::makeSemaphore(bool isOwned) {
     SkASSERT(this->caps()->semaphoreSupport());
     return GrGLSemaphore::Make(this, isOwned);
 }
 
-sk_sp<GrSemaphore> GrGLGpu::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
-                                                 GrResourceProvider::SemaphoreWrapType wrapType,
-                                                 GrWrapOwnership ownership) {
+std::unique_ptr<GrSemaphore> GrGLGpu::wrapBackendSemaphore(
+        const GrBackendSemaphore& semaphore,
+        GrResourceProvider::SemaphoreWrapType wrapType,
+        GrWrapOwnership ownership) {
     SkASSERT(this->caps()->semaphoreSupport());
     return GrGLSemaphore::MakeWrapped(this, semaphore.glSync(), ownership);
 }
 
-void GrGLGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
-    GrGLSemaphore* glSem = static_cast<GrGLSemaphore*>(semaphore.get());
+void GrGLGpu::insertSemaphore(GrSemaphore* semaphore) {
+    GrGLSemaphore* glSem = static_cast<GrGLSemaphore*>(semaphore);
 
     GrGLsync sync;
     GL_CALL_RET(sync, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
     glSem->setSync(sync);
 }
 
-void GrGLGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
-    GrGLSemaphore* glSem = static_cast<GrGLSemaphore*>(semaphore.get());
+void GrGLGpu::waitSemaphore(GrSemaphore* semaphore) {
+    GrGLSemaphore* glSem = static_cast<GrGLSemaphore*>(semaphore);
 
     GL_CALL(WaitSync(glSem->sync(), 0, GR_GL_TIMEOUT_IGNORED));
 }
@@ -3959,10 +3961,11 @@ void GrGLGpu::insertEventMarker(const char* msg) {
     GL_CALL(InsertEventMarker(strlen(msg), msg));
 }
 
-sk_sp<GrSemaphore> GrGLGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {
+std::unique_ptr<GrSemaphore> GrGLGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {
     // Set up a semaphore to be signaled once the data is ready, and flush GL
-    sk_sp<GrSemaphore> semaphore = this->makeSemaphore(true);
-    this->insertSemaphore(semaphore);
+    std::unique_ptr<GrSemaphore> semaphore = this->makeSemaphore(true);
+    SkASSERT(semaphore);
+    this->insertSemaphore(semaphore.get());
     // We must call flush here to make sure the GrGLSync object gets created and sent to the gpu.
     GL_CALL(Flush());
 

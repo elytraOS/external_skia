@@ -75,10 +75,7 @@ public:
         kSkip_SyncQueue
     };
 
-    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {
-        SkASSERT(!this->caps()->sampleLocationsSupport());
-        SK_ABORT("Sample locations not yet implemented for Vulkan.");
-    }
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override;
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
@@ -133,12 +130,11 @@ public:
     bool waitFence(GrFence, uint64_t timeout) override;
     void deleteFence(GrFence) const override;
 
-    sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
-    sk_sp<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
-                                            GrResourceProvider::SemaphoreWrapType wrapType,
-                                            GrWrapOwnership ownership) override;
-    void insertSemaphore(sk_sp<GrSemaphore> semaphore) override;
-    void waitSemaphore(sk_sp<GrSemaphore> semaphore) override;
+    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
+    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
+            GrResourceProvider::SemaphoreWrapType wrapType, GrWrapOwnership ownership) override;
+    void insertSemaphore(GrSemaphore* semaphore) override;
+    void waitSemaphore(GrSemaphore* semaphore) override;
 
     // These match the definitions in SkDrawable, from whence they came
     typedef void* SubmitContext;
@@ -150,7 +146,7 @@ public:
 
     void checkFinishProcs() override { fResourceProvider.checkCommandBuffers(); }
 
-    sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
+    std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
     void copyBuffer(GrVkBuffer* srcBuffer, GrVkBuffer* dstBuffer, VkDeviceSize srcOffset,
                     VkDeviceSize dstOffset, VkDeviceSize size);
@@ -233,7 +229,7 @@ private:
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
-    void onFinishFlush(GrSurfaceProxy*[], int, SkSurface::BackendSurfaceAccess access,
+    bool onFinishFlush(GrSurfaceProxy*[], int, SkSurface::BackendSurfaceAccess access,
                        const GrFlushInfo&, const GrPrepareForExternalIORequests&) override;
 
     // Ends and submits the current command buffer to the queue and then creates a new command

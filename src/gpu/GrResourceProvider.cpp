@@ -414,7 +414,7 @@ int GrResourceProvider::NumVertsPerNonAAQuad() { return kVertsPerNonAAQuad; }
 int GrResourceProvider::NumIndicesPerNonAAQuad() { return kIndicesPerNonAAQuad; }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-static constexpr int kMaxNumAAQuads = 1 << 12;  // max possible: (1 << 13) - 1;
+static constexpr int kMaxNumAAQuads = 1 << 9;  // max possible: (1 << 13) - 1;
 static const int kVertsPerAAQuad = 8;
 static const int kIndicesPerAAQuad = 30;
 
@@ -529,13 +529,15 @@ sk_sp<GrRenderTarget> GrResourceProvider::wrapBackendTextureAsRenderTarget(
     return fGpu->wrapBackendTextureAsRenderTarget(tex, sampleCnt, colorType);
 }
 
-sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT GrResourceProvider::makeSemaphore(bool isOwned) {
-    return fGpu->makeSemaphore(isOwned);
+std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT GrResourceProvider::makeSemaphore(
+        bool isOwned) {
+    return this->isAbandoned() ? nullptr : fGpu->makeSemaphore(isOwned);
 }
 
-sk_sp<GrSemaphore> GrResourceProvider::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
-                                                            SemaphoreWrapType wrapType,
-                                                            GrWrapOwnership ownership) {
+std::unique_ptr<GrSemaphore> GrResourceProvider::wrapBackendSemaphore(
+        const GrBackendSemaphore& semaphore,
+        SemaphoreWrapType wrapType,
+        GrWrapOwnership ownership) {
     ASSERT_SINGLE_OWNER
     return this->isAbandoned() ? nullptr : fGpu->wrapBackendSemaphore(semaphore,
                                                                       wrapType,

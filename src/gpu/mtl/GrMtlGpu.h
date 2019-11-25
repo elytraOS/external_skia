@@ -90,14 +90,17 @@ public:
     bool waitFence(GrFence, uint64_t) override;
     void deleteFence(GrFence) const override;
 
-    sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
-    sk_sp<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
-                                            GrResourceProvider::SemaphoreWrapType wrapType,
-                                            GrWrapOwnership ownership) override;
-    void insertSemaphore(sk_sp<GrSemaphore> semaphore) override;
-    void waitSemaphore(sk_sp<GrSemaphore> semaphore) override;
+    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
+    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(
+            const GrBackendSemaphore& semaphore,
+            GrResourceProvider::SemaphoreWrapType wrapType,
+            GrWrapOwnership ownership) override;
+    void insertSemaphore(GrSemaphore* semaphore) override;
+    void waitSemaphore(GrSemaphore* semaphore) override;
     void checkFinishProcs() override;
-    sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override { return nullptr; }
+    std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override {
+        return nullptr;
+    }
 
     // When the Metal backend actually uses indirect command buffers, this function will actually do
     // what it says. For now, every command is encoded directly into the primary command buffer, so
@@ -182,7 +185,7 @@ private:
 
     void resolveTexture(id<MTLTexture> colorTexture, id<MTLTexture> resolveTexture);
 
-    void onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
+    bool onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
                        const GrFlushInfo& info, const GrPrepareForExternalIORequests&) override;
 
     // Function that uploads data onto textures with private storage mode (GPU access only).
@@ -220,11 +223,6 @@ private:
     std::unique_ptr<SkSL::Compiler> fCompiler;
 
     GrMtlResourceProvider fResourceProvider;
-
-    // For FenceSync
-    id<MTLSharedEvent>      fSharedEvent API_AVAILABLE(macos(10.14), ios(12.0));
-    MTLSharedEventListener* fSharedEventListener API_AVAILABLE(macos(10.14), ios(12.0));
-    uint64_t                fLatestEvent;
 
     bool fDisconnected;
 
