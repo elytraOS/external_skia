@@ -53,6 +53,7 @@ var CanvasKit = {
 	MakeRenderTarget: function() {},
 	MakeSWCanvasSurface: function() {},
 	MakeManagedAnimation: function() {},
+	MakeParticles: function() {},
 	MakeSkDashPathEffect: function() {},
 	MakeSkVertices: function() {},
 	MakeSurface: function() {},
@@ -65,9 +66,12 @@ var CanvasKit = {
 	computeTonalColors: function() {},
 	currentContext: function() {},
 	getColorComponents: function() {},
+	getDecodeCacheLimitBytes: function() {},
+	getDecodeCacheUsageBytes: function() {},
 	getSkDataBytes: function() {},
 	multiplyByAlpha: function() {},
 	setCurrentContext: function() {},
+	setDecodeCacheLimitBytes: function() {},
 
 	// private API (i.e. things declared in the bindings that we use
 	// in the pre-js file)
@@ -76,6 +80,7 @@ var CanvasKit = {
 	_MakePathFromCmds: function() {},
 	_MakeRadialGradientShader: function() {},
 	_MakeManagedAnimation: function() {},
+	_MakeParticles: function() {},
 	_MakeSkDashPathEffect: function() {},
 	_MakeSkVertices: function() {},
 	_MakeTwoPointConicalGradientShader: function() {},
@@ -205,6 +210,17 @@ var CanvasKit = {
 		postTranslate: function() {},
 		rotated: function() {},
 		scaled: function() {},
+	},
+
+	SkContourMeasureIter: {
+		next: function() {},
+	},
+
+	SkContourMeasure: {
+		getPosTan: function() {},
+		getSegment: function() {},
+		isClosed: function() {},
+		length: function() {},
 	},
 
 	SkFont: {
@@ -602,6 +618,9 @@ var CanvasKit = {
 	RectHeightStyle: {
 		Tight: {},
 		Max: {},
+		IncludeLineSpacingMiddle: {},
+		IncludeLineSpacingTop: {},
+		IncludeLineSpacingBottom: {},
 	},
 
 	RectWidthStyle: {

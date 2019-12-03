@@ -75,10 +75,10 @@
     "cmd": [
       "chmod",
       "0755",
-      "skia/infra/canvaskit/perf_canvaskit.sh"
+      "[START_DIR]/skia/infra/canvaskit/perf_canvaskit.sh"
     ],
     "infra_step": true,
-    "name": "Docker setup.chmod 0755 skia/infra/canvaskit/perf_canvaskit.sh",
+    "name": "Docker setup.chmod 0755 [START_DIR]/skia/infra/canvaskit/perf_canvaskit.sh",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -220,9 +220,11 @@
       "canvaskit"
     ],
     "env": {
-      "DOCKER_CONFIG": "/home/chrome-bot/.docker"
+      "CHROME_HEADLESS": "1",
+      "DOCKER_CONFIG": "/home/chrome-bot/.docker",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
-    "name": "Test CanvasKit with Docker"
+    "name": "Performance tests of CanvasKit with Docker"
   },
   {
     "name": "$result"

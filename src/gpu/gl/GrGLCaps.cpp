@@ -8,6 +8,7 @@
 #include "include/gpu/GrContextOptions.h"
 #include "src/core/SkTSearch.h"
 #include "src/core/SkTSort.h"
+#include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrRenderTargetProxyPriv.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
@@ -36,14 +37,18 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fVertexArrayObjectSupport = false;
     fDebugSupport = false;
     fES2CompatibilitySupport = false;
+    fDrawInstancedSupport = false;
     fDrawIndirectSupport = false;
+    fDrawRangeElementsSupport = false;
     fMultiDrawIndirectSupport = false;
     fBaseInstanceSupport = false;
+    fUseNonVBOVertexAndIndexDynamicData = false;
     fIsCoreProfile = false;
     fBindFragDataLocationSupport = false;
     fRectangleTextureSupport = false;
     fRGBA8888PixelsOpsAreSlow = false;
     fPartialFBOReadIsSlow = false;
+    fBindUniformLocationSupport = false;
     fMipMapLevelAndLodControlSupport = false;
     fRGBAToBGRAReadbackConversionsAreSlow = false;
     fUseBufferDataNullHint = false;
@@ -3361,6 +3366,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fPerformStencilClearsAsDraws = true;
     }
 
+    if (ctxInfo.vendor() == kQualcomm_GrGLVendor) {
+        // It appears that all the Adreno GPUs have less than optimal performance when
+        // drawing w/ large index buffers.
+        fAvoidLargeIndexBufferDraws = true;
+    }
+
     // This was reproduced on the following configurations:
     // - A Galaxy J5 (Adreno 306) running Android 6 with driver 140.0
     // - A Nexus 7 2013 (Adreno 320) running Android 5 with driver 104.0
@@ -4216,6 +4227,13 @@ GrSwizzle GrGLCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType 
         }
     }
     return GrSwizzle::RGBA();
+}
+
+GrProgramDesc GrGLCaps::makeDesc(const GrRenderTarget* rt, const GrProgramInfo& programInfo) const {
+    GrProgramDesc desc;
+    SkDEBUGCODE(bool result =) GrProgramDesc::Build(&desc, rt, programInfo, *this);
+    SkASSERT(result == desc.isValid());
+    return desc;
 }
 
 #if GR_TEST_UTILS

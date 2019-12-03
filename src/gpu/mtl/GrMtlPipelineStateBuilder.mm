@@ -26,7 +26,7 @@
 GrMtlPipelineState* GrMtlPipelineStateBuilder::CreatePipelineState(GrMtlGpu* gpu,
                                                                    GrRenderTarget* renderTarget,
                                                                    const GrProgramInfo& programInfo,
-                                                                   Desc* desc) {
+                                                                   GrProgramDesc* desc) {
     GrAutoLocaleSetter als("C");
     GrMtlPipelineStateBuilder builder(gpu, renderTarget, programInfo, desc);
 
@@ -296,12 +296,10 @@ static MTLBlendOperation blend_equation_to_mtl_blend_op(GrBlendEquation equation
 }
 
 static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
-        GrPixelConfig config, const GrPipeline& pipeline) {
+        MTLPixelFormat format, const GrPipeline& pipeline) {
     auto mtlColorAttachment = [[MTLRenderPipelineColorAttachmentDescriptor alloc] init];
 
     // pixel format
-    MTLPixelFormat format;
-    SkAssertResult(GrPixelConfigToMTLFormat(config, &format));
     mtlColorAttachment.pixelFormat = format;
 
     // blending
@@ -343,7 +341,7 @@ uint32_t buffer_size(uint32_t offset, uint32_t maxAlignment) {
 
 GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTarget,
                                                         const GrProgramInfo& programInfo,
-                                                        Desc* desc) {
+                                                        GrProgramDesc* desc) {
     auto pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
 
     fVS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
@@ -391,7 +389,13 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
     pipelineDescriptor.vertexFunction = vertexFunction;
     pipelineDescriptor.fragmentFunction = fragmentFunction;
     pipelineDescriptor.vertexDescriptor = create_vertex_descriptor(programInfo.primProc());
-    pipelineDescriptor.colorAttachments[0] = create_color_attachment(renderTarget->config(),
+
+    MTLPixelFormat pixelFormat = GrBackendFormatAsMTLPixelFormat(renderTarget->backendFormat());
+    if (pixelFormat == MTLPixelFormatInvalid) {
+        return nullptr;
+    }
+
+    pipelineDescriptor.colorAttachments[0] = create_color_attachment(pixelFormat,
                                                                      programInfo.pipeline());
     pipelineDescriptor.sampleCount = programInfo.numRasterSamples();
     bool hasStencilAttachment = SkToBool(renderTarget->renderTargetPriv().getStencilAttachment());
@@ -446,30 +450,3 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(GrRenderTarget* renderTa
 
 //////////////////////////////////////////////////////////////////////////////
 
-bool GrMtlPipelineStateBuilder::Desc::Build(Desc* desc,
-                                            GrRenderTarget* renderTarget,
-                                            const GrProgramInfo& programInfo,
-                                            const GrMtlCaps& caps) {
-    if (!GrProgramDesc::Build(desc, renderTarget, programInfo, caps)) {
-        return false;
-    }
-
-    GrProcessorKeyBuilder b(&desc->key());
-
-    b.add32(renderTarget->config());
-    b.add32(programInfo.numRasterSamples());
-
-    bool hasStencilAttachment = SkToBool(renderTarget->renderTargetPriv().getStencilAttachment());
-    SkASSERT(!programInfo.pipeline().isStencilEnabled() || hasStencilAttachment);
-
-    b.add32(hasStencilAttachment ? caps.preferredStencilFormat().fInternalFormat
-                                 : MTLPixelFormatInvalid);
-    b.add32((uint32_t)programInfo.pipeline().isStencilEnabled());
-    // Stencil samples don't seem to be tracked in the MTLRenderPipeline
-
-    programInfo.pipeline().genKey(&b, caps);
-
-    b.add32((uint32_t)programInfo.primitiveType());
-
-    return true;
-}

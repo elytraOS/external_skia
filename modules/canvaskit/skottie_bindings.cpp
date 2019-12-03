@@ -23,6 +23,7 @@
 #if SK_INCLUDE_MANAGED_SKOTTIE
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/utils/SkottieUtils.h"
+#include "modules/skresources/include/SkResources.h"
 #endif // SK_INCLUDE_MANAGED_SKOTTIE
 
 using namespace emscripten;
@@ -53,7 +54,7 @@ public:
                                               const char[] /* id */) const override {
         // For CK/Skottie we ignore paths & IDs, and identify images based solely on name.
         if (auto data = this->findAsset(name)) {
-            return skottie_utils::MultiFrameImageAsset::Make(std::move(data), true /* predecode */);
+            return skresources::MultiFrameImageAsset::Make(std::move(data));
         }
 
         return nullptr;
@@ -232,6 +233,7 @@ EMSCRIPTEN_BINDINGS(Skottie) {
                                                            uintptr_t /* uint8_t**  */ dptr,
                                                            uintptr_t /* size_t*    */ sptr)
                                                         ->sk_sp<ManagedAnimation> {
+        // See the comment in canvaskit_bindings.cpp about the use of uintptr_t
         const auto assetNames = reinterpret_cast<char**   >(nptr);
         const auto assetDatas = reinterpret_cast<uint8_t**>(dptr);
         const auto assetSizes = reinterpret_cast<size_t*  >(sptr);
@@ -246,9 +248,8 @@ EMSCRIPTEN_BINDINGS(Skottie) {
         }
 
         return ManagedAnimation::Make(json,
-                 skottie_utils::DataURIResourceProviderProxy::Make(
-                    SkottieAssetProvider::Make(std::move(assets)),
-                    /*predecode=*/true));
+                 skresources::DataURIResourceProviderProxy::Make(
+                    SkottieAssetProvider::Make(std::move(assets))));
     }));
     constant("managed_skottie", true);
 #endif // SK_INCLUDE_MANAGED_SKOTTIE

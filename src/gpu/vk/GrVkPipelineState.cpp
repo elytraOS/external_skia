@@ -14,7 +14,6 @@
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
-#include "src/gpu/vk/GrVkBufferView.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkDescriptorPool.h"
 #include "src/gpu/vk/GrVkDescriptorSet.h"
@@ -104,18 +103,14 @@ bool GrVkPipelineState::setAndBindUniforms(GrVkGpu* gpu,
                                            GrVkCommandBuffer* commandBuffer) {
     this->setRenderTargetState(renderTarget, programInfo.origin());
 
-    fGeometryProcessor->setData(fDataManager, programInfo.primProc(),
-                                GrFragmentProcessor::CoordTransformIter(programInfo.pipeline()));
-    GrFragmentProcessor::Iter iter(programInfo.pipeline());
+    GrFragmentProcessor::PipelineCoordTransformRange transformRange(programInfo.pipeline());
+    fGeometryProcessor->setData(fDataManager, programInfo.primProc(), transformRange);
+    GrFragmentProcessor::CIter fpIter(programInfo.pipeline());
     GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
-    const GrFragmentProcessor* fp = iter.next();
-    GrGLSLFragmentProcessor* glslFP = glslIter.next();
-    while (fp && glslFP) {
-        glslFP->setData(fDataManager, *fp);
-        fp = iter.next();
-        glslFP = glslIter.next();
+    for (; fpIter && glslIter; ++fpIter, ++glslIter) {
+        glslIter->setData(fDataManager, *fpIter);
     }
-    SkASSERT(!fp && !glslFP);
+    SkASSERT(!fpIter && !glslIter);
 
     {
         SkIPoint offset;
@@ -151,7 +146,7 @@ bool GrVkPipelineState::setAndBindUniforms(GrVkGpu* gpu,
 bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
                                            const GrPrimitiveProcessor& primProc,
                                            const GrPipeline& pipeline,
-                                           const GrTextureProxy* const primProcTextures[],
+                                           const GrSurfaceProxy* const primProcTextures[],
                                            GrVkCommandBuffer* commandBuffer) {
     SkASSERT(primProcTextures || !primProc.numTextureSamplers());
 
@@ -163,25 +158,22 @@ bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
     int currTextureBinding = 0;
 
     for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
+        SkASSERT(primProcTextures[i]->asTextureProxy());
         const auto& sampler = primProc.textureSampler(i);
         auto texture = static_cast<GrVkTexture*>(primProcTextures[i]->peekTexture());
         samplerBindings[currTextureBinding++] = {sampler.samplerState(), texture};
     }
 
-    GrFragmentProcessor::Iter iter(pipeline);
+    GrFragmentProcessor::CIter fpIter(pipeline);
     GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
-    const GrFragmentProcessor* fp = iter.next();
-    GrGLSLFragmentProcessor* glslFP = glslIter.next();
-    while (fp && glslFP) {
-        for (int i = 0; i < fp->numTextureSamplers(); ++i) {
-            const auto& sampler = fp->textureSampler(i);
+    for (; fpIter && glslIter; ++fpIter, ++glslIter) {
+        for (int i = 0; i < fpIter->numTextureSamplers(); ++i) {
+            const auto& sampler = fpIter->textureSampler(i);
             samplerBindings[currTextureBinding++] =
                     {sampler.samplerState(), static_cast<GrVkTexture*>(sampler.peekTexture())};
         }
-        fp = iter.next();
-        glslFP = glslIter.next();
     }
-    SkASSERT(!fp && !glslFP);
+    SkASSERT(!fpIter && !glslIter);
 
     if (GrTexture* dstTexture = pipeline.peekDstTexture()) {
         samplerBindings[currTextureBinding++] = {

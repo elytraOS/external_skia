@@ -52,6 +52,7 @@
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkMakeUnique.h"
+#include "src/core/SkResourceCache.h"
 
 #include <iostream>
 #include <string>
@@ -193,8 +194,7 @@ void ApplyAddArc(SkPath& orig, const SkRect& oval, SkScalar startAngle, SkScalar
 }
 
 void ApplyAddOval(SkPath& orig, const SkRect& oval, bool ccw, unsigned start) {
-    orig.addOval(oval, ccw ? SkPath::Direction::kCCW_Direction :
-                             SkPath::Direction::kCW_Direction, start);
+    orig.addOval(oval, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW, start);
 }
 
 void ApplyAddPath(SkPath& orig, const SkPath& newPath,
@@ -211,9 +211,7 @@ void ApplyAddPath(SkPath& orig, const SkPath& newPath,
 
 void ApplyAddRect(SkPath& path, SkScalar left, SkScalar top,
                   SkScalar right, SkScalar bottom, bool ccw) {
-    path.addRect(left, top, right, bottom,
-                 ccw ? SkPath::Direction::kCCW_Direction :
-                 SkPath::Direction::kCW_Direction);
+    path.addRect(left, top, right, bottom, ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
 }
 
 void ApplyAddRoundRect(SkPath& path, SkScalar left, SkScalar top,
@@ -222,7 +220,7 @@ void ApplyAddRoundRect(SkPath& path, SkScalar left, SkScalar top,
     // See comment below for uintptr_t explanation
     const SkScalar* radii = reinterpret_cast<const SkScalar*>(rPtr);
     path.addRoundRect(SkRect::MakeLTRB(left, top, right, bottom), radii,
-                      ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction);
+                      ccw ? SkPathDirection::kCCW : SkPathDirection::kCW);
 }
 
 
@@ -238,14 +236,14 @@ void ApplyArcToAngle(SkPath& p, SkRect& oval, SkScalar startAngle, SkScalar swee
 void ApplyArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
                        bool useSmallArc, bool ccw, SkScalar x, SkScalar y) {
     auto arcSize = useSmallArc ? SkPath::ArcSize::kSmall_ArcSize : SkPath::ArcSize::kLarge_ArcSize;
-    auto sweep = ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction;
+    auto sweep = ccw ? SkPathDirection::kCCW : SkPathDirection::kCW;
     orig.arcTo(rx, ry, xAxisRotate, arcSize, sweep, x, y);
 }
 
 void ApplyRArcToArcSize(SkPath& orig, SkScalar rx, SkScalar ry, SkScalar xAxisRotate,
                         bool useSmallArc, bool ccw, SkScalar dx, SkScalar dy) {
     auto arcSize = useSmallArc ? SkPath::ArcSize::kSmall_ArcSize : SkPath::ArcSize::kLarge_ArcSize;
-    auto sweep = ccw ? SkPath::Direction::kCCW_Direction : SkPath::Direction::kCW_Direction;
+    auto sweep = ccw ? SkPathDirection::kCCW : SkPathDirection::kCW;
     orig.rArcTo(rx, ry, xAxisRotate, arcSize, sweep, dx, dy);
 }
 
@@ -652,6 +650,10 @@ namespace emscripten {
         void raw_destructor(ClassType *);
 
         template<>
+        void raw_destructor<SkContourMeasure>(SkContourMeasure *ptr) {
+        }
+
+        template<>
         void raw_destructor<SkData>(SkData *ptr) {
         }
 
@@ -693,6 +695,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     constant("gpu", true);
 #endif
+    function("getDecodeCacheLimitBytes", &SkResourceCache::GetTotalByteLimit);
+    function("setDecodeCacheLimitBytes", &SkResourceCache::SetTotalByteLimit);
+    function("getDecodeCacheUsedBytes" , &SkResourceCache::GetTotalBytesUsed);
+
     function("computeTonalColors", &computeTonalColors);
     function("_decodeAnimatedImage", optional_override([](uintptr_t /* uint8_t*  */ iptr,
                                                   size_t length)->sk_sp<SkAnimatedImage> {
@@ -1007,6 +1013,33 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .class_function("MakeSRGBToLinearGamma", &SkColorFilters::SRGBToLinearGamma);
 
+    class_<SkContourMeasureIter>("SkContourMeasureIter")
+        .constructor<const SkPath&, bool, SkScalar>()
+        .function("next", &SkContourMeasureIter::next);
+
+    class_<SkContourMeasure>("SkContourMeasure")
+        .smart_ptr<sk_sp<SkContourMeasure>>("sk_sp<SkContourMeasure>>")
+        .function("getPosTan", optional_override([](SkContourMeasure& self,
+                                                    SkScalar distance) -> PosTan {
+            SkPoint p{0, 0};
+            SkVector v{0, 0};
+            if (!self.getPosTan(distance, &p, &v)) {
+                SkDebugf("zero-length path in getPosTan\n");
+            }
+            return PosTan{p.x(), p.y(), v.x(), v.y()};
+        }))
+        .function("getSegment", optional_override([](SkContourMeasure& self, SkScalar startD,
+                                                     SkScalar stopD, bool startWithMoveTo) -> SkPath {
+            SkPath p;
+            bool ok = self.getSegment(startD, stopD, &p, startWithMoveTo);
+            if (ok) {
+                return p;
+            }
+            return SkPath();
+        }))
+        .function("isClosed", &SkContourMeasure::isClosed)
+        .function("length", &SkContourMeasure::length);
+
     class_<SkData>("SkData")
         .smart_ptr<sk_sp<SkData>>("sk_sp<SkData>>")
         .function("size", &SkData::size);
@@ -1239,7 +1272,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("toSVGString", &ToSVGString)
         .function("toCmds", &ToCmds)
 
-        .function("setFillType", &SkPath::setFillType)
+        .function("setFillType", select_overload<void(SkPathFillType)>(&SkPath::setFillType))
         .function("getFillType", &SkPath::getFillType)
         .function("getBounds", &SkPath::getBounds)
         .function("computeTightBounds", &SkPath::computeTightBounds)
@@ -1453,11 +1486,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("R16G16_float", SkColorType::kR16G16_float_SkColorType)
         .value("R16G16B16A16_unorm", SkColorType::kR16G16B16A16_unorm_SkColorType);
 
-    enum_<SkPath::FillType>("FillType")
-        .value("Winding",           SkPath::FillType::kWinding_FillType)
-        .value("EvenOdd",           SkPath::FillType::kEvenOdd_FillType)
-        .value("InverseWinding",    SkPath::FillType::kInverseWinding_FillType)
-        .value("InverseEvenOdd",    SkPath::FillType::kInverseEvenOdd_FillType);
+    enum_<SkPathFillType>("FillType")
+        .value("Winding",           SkPathFillType::kWinding)
+        .value("EvenOdd",           SkPathFillType::kEvenOdd)
+        .value("InverseWinding",    SkPathFillType::kInverseWinding)
+        .value("InverseEvenOdd",    SkPathFillType::kInverseEvenOdd);
 
     enum_<SkFilterQuality>("FilterQuality")
         .value("None",   SkFilterQuality::kNone_SkFilterQuality)

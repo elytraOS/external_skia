@@ -31,7 +31,10 @@ public:
                 "%s = %s * sample(%s, %s).%s;\n", args.fOutputColor, args.fInputColor,
                 fragBuilder->getProgramBuilder()->samplerVariable(args.fTexSamplers[0]),
                 sk_TransformedCoords2D_0.c_str(),
-                fragBuilder->getProgramBuilder()->samplerSwizzle(args.fTexSamplers[0]).c_str());
+                fragBuilder->getProgramBuilder()
+                        ->samplerSwizzle(args.fTexSamplers[0])
+                        .asString()
+                        .c_str());
     }
 
 private:
@@ -85,7 +88,8 @@ std::unique_ptr<GrFragmentProcessor> GrSimpleTextureEffect::TestCreate(
                                              : GrSamplerState::Filter::kNearest);
 
     const SkMatrix& matrix = GrTest::TestMatrix(testData->fRandom);
-    return GrSimpleTextureEffect::Make(testData->textureProxy(texIdx),
-                                       testData->textureProxyColorType(texIdx), matrix, params);
+    auto alphaType = static_cast<SkAlphaType>(
+            testData->fRandom->nextRangeU(kUnknown_SkAlphaType + 1, kLastEnum_SkAlphaType));
+    return GrSimpleTextureEffect::Make(testData->textureProxy(texIdx), alphaType, matrix, params);
 }
 #endif

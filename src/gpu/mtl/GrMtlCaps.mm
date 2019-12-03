@@ -9,7 +9,11 @@
 
 #include "include/core/SkRect.h"
 #include "include/gpu/GrBackendSurface.h"
+#include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrProgramDesc.h"
+#include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrSurfaceProxy.h"
@@ -31,10 +35,6 @@ GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice>
     this->initStencilFormat(device);
 
     this->finishInitialization(contextOptions);
-
-    // The following are disabled due to the unfinished Metal backend, not because Metal itself
-    // doesn't support it.
-    fCrossContextTextureSupport = false; // GrMtlGpu::prepareTextureForCrossContextUsage() not impl
 }
 
 void GrMtlCaps::initFeatureSet(MTLFeatureSet featureSet) {
@@ -291,7 +291,7 @@ void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
     }
     fSemaphoreSupport = supportsMTLEvent;
 
-    fCrossContextTextureSupport = false;
+    fCrossContextTextureSupport = true;
     fHalfFloatVertexAttributeSupport = true;
 
     fDynamicStateArrayGeometryProcessorTextureSupport = true;
@@ -1098,6 +1098,52 @@ GrCaps::SupportedRead GrMtlCaps::onSupportedReadPixelsColorType(
     }
     return {GrColorType::kUnknown, 0};
 }
+
+/**
+ * For Metal we want to cache the entire pipeline for reuse of draws. The Desc here holds all
+ * the information needed to differentiate one pipeline from another.
+ *
+ * The GrProgramDesc contains all the information need to create the actual shaders for the
+ * pipeline.
+ *
+ * For Metal we need to add to the GrProgramDesc to include the rest of the state on the
+ * pipeline. This includes blending information and primitive type. The pipeline is immutable
+ * so any remaining dynamic state is set via the MtlRenderCmdEncoder.
+ */
+GrProgramDesc GrMtlCaps::makeDesc(const GrRenderTarget* rt,
+                                  const GrProgramInfo& programInfo) const {
+
+    GrProgramDesc desc;
+    if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
+        SkASSERT(!desc.isValid());
+        return desc;
+    }
+
+    GrProcessorKeyBuilder b(&desc.key());
+
+    b.add32(programInfo.backendFormat().asMtlFormat());
+
+    b.add32(programInfo.numRasterSamples());
+
+#ifdef SK_DEBUG
+    if (rt && programInfo.pipeline().isStencilEnabled()) {
+        SkASSERT(rt->renderTargetPriv().getStencilAttachment());
+    }
+#endif
+
+    b.add32(programInfo.pipeline().isStencilEnabled()
+                                 ? this->preferredStencilFormat().fInternalFormat
+                                 : MTLPixelFormatInvalid);
+    b.add32((uint32_t)programInfo.pipeline().isStencilEnabled());
+    // Stencil samples don't seem to be tracked in the MTLRenderPipeline
+
+    programInfo.pipeline().genKey(&b, *this);
+
+    b.add32((uint32_t)programInfo.primitiveType());
+
+    return desc;
+}
+
 
 #if GR_TEST_UTILS
 std::vector<GrCaps::TestFormatColorTypeCombination> GrMtlCaps::getTestingCombinations() const {

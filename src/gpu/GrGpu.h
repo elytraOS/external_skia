@@ -15,7 +15,6 @@
 #include "src/gpu/GrAllocator.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrOpsRenderPass.h"
-#include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrSamplePatternDictionary.h"
 #include "src/gpu/GrSwizzle.h"
 #include "src/gpu/GrTextureProducer.h"
@@ -342,7 +341,7 @@ public:
             GrRenderTarget* renderTarget, GrSurfaceOrigin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrTextureProxy*, true>& sampledProxies) = 0;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) = 0;
 
     // Called by GrDrawingManager when flushing.
     // Provides a hook for post-flush actions (e.g. Vulkan command buffer submits). This will also

@@ -14,7 +14,6 @@
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrNonAtomicRef.h"
 #include "src/gpu/GrProcessorSet.h"
-#include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrScissorState.h"
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrUserStencilSettings.h"
@@ -76,7 +75,7 @@ public:
         SkIRect fScissorRect = SkIRect::EmptyIRect();
         // Must have GrPrimitiveProcessor::numTextureSamplers() entries. Can be null if no samplers
         // or textures are passed using DynamicStateArrays.
-        GrTextureProxy** fPrimitiveProcessorTextures = nullptr;
+        GrSurfaceProxy** fPrimitiveProcessorTextures = nullptr;
     };
 
     /**
@@ -88,7 +87,7 @@ public:
         // Must have GrPrimitiveProcessor::numTextureSamplers() * num_meshes entries.
         // Can be null if no samplers or to use the same textures for all meshes via'
         // FixedDynamicState.
-        GrTextureProxy** fPrimitiveProcessorTextures = nullptr;
+        GrSurfaceProxy** fPrimitiveProcessorTextures = nullptr;
     };
 
     /**
@@ -192,7 +191,20 @@ public:
     bool isStencilEnabled() const {
         return SkToBool(fFlags & Flags::kStencilEnabled);
     }
-    SkDEBUGCODE(bool isBad() const { return SkToBool(fFlags & Flags::kIsBad); })
+#ifdef SK_DEBUG
+    bool allProxiesInstantiated() const {
+        for (int i = 0; i < fFragmentProcessors.count(); ++i) {
+            if (!fFragmentProcessors[i]->isInstantiated()) {
+                return false;
+            }
+        }
+        if (fDstProxyView.proxy()) {
+            return fDstProxyView.proxy()->isInstantiated();
+        }
+
+        return true;
+    }
+#endif
 
     GrXferBarrierType xferBarrierType(GrTexture*, const GrCaps&) const;
 
@@ -201,10 +213,9 @@ public:
 
     const GrSwizzle& outputSwizzle() const { return fOutputSwizzle; }
 
+    void visitProxies(const GrOp::VisitProxyFunc&) const;
+
 private:
-
-    SkDEBUGCODE(void markAsBad() { fFlags |= Flags::kIsBad; })
-
     static constexpr uint8_t kLastInputFlag = (uint8_t)InputFlags::kSnapVerticesToPixelCenters;
 
     /** This is a continuation of the public "InputFlags" enum. */
@@ -212,9 +223,6 @@ private:
         kHasStencilClip = (kLastInputFlag << 1),
         kStencilEnabled = (kLastInputFlag << 2),
         kScissorEnabled = (kLastInputFlag << 3),
-#ifdef SK_DEBUG
-        kIsBad = (kLastInputFlag << 4),
-#endif
     };
 
     GR_DECL_BITFIELD_CLASS_OPS_FRIENDS(Flags);

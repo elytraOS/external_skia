@@ -41,7 +41,7 @@ public:
     bool set(GrRenderTarget*, GrSurfaceOrigin, const SkIRect& bounds,
              const GrOpsRenderPass::LoadAndStoreInfo&,
              const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-             const SkTArray<GrTextureProxy*, true>& sampledProxies);
+             const SkTArray<GrSurfaceProxy*, true>& sampledProxies);
     void reset();
 
     void submit();
@@ -57,7 +57,7 @@ private:
 
     // Called instead of init when we are drawing to a render target that already wraps a secondary
     // command buffer.
-    void initWrapped();
+    bool initWrapped();
 
     bool wrapsSecondaryCommandBuffer() const;
 

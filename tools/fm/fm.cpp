@@ -17,6 +17,7 @@
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/utils/SkOSPath.h"
+#include "tests/Test.h"
 #include "tools/AutoreleasePool.h"
 #include "tools/CrashHandler.h"
 #include "tools/HashAndEncode.h"
@@ -33,10 +34,13 @@
 
 #if defined(SK_ENABLE_SKOTTIE)
     #include "modules/skottie/include/Skottie.h"
-    #include "modules/skottie/utils/SkottieUtils.h"
+    #include "modules/skresources/include/SkResources.h"
 #endif
 
 using sk_gpu_test::GrContextFactory;
+
+static DEFINE_bool(listGMs  , false, "Print GM names and exit.");
+static DEFINE_bool(listTests, false, "Print unit test names and exit.");
 
 static DEFINE_string2(sources, s, "", "Which GMs, .skps, or images to draw.");
 static DEFINE_string2(backend, b, "", "Backend used to create a canvas to draw into.");
@@ -201,6 +205,29 @@ static void init(Source* source, sk_sp<skottie::Animation> animation) {
 }
 #endif
 
+static void init(Source* source, const skiatest::Test& test) {
+    source->size  = {1,1};
+    source->draw  = [test](SkCanvas* canvas) {
+        struct Reporter : public skiatest::Reporter {
+            SkString msg;
+
+            void reportFailed(const skiatest::Failure& failure) override {
+                msg = failure.toString();
+            }
+        } reporter;
+
+        test.run(&reporter, GrContextOptions{});
+
+        if (reporter.msg.isEmpty()) {
+            canvas->clear(SK_ColorGREEN);
+            return ok;
+        }
+
+        canvas->clear(SK_ColorRED);
+        return fail(reporter.msg.c_str());
+    };
+}
+
 static sk_sp<SkImage> draw_with_cpu(std::function<bool(SkCanvas*)> draw,
                                     SkImageInfo info) {
     if (sk_sp<SkSurface> surface = SkSurface::MakeRaster(info)) {
@@ -364,14 +391,31 @@ int main(int argc, char** argv) {
     SkTHashMap<SkString, skiagm::GMFactory> gm_factories;
     for (skiagm::GMFactory factory : skiagm::GMRegistry::Range()) {
         std::unique_ptr<skiagm::GM> gm{factory()};
-        if (FLAGS_sources.isEmpty()) {
+        if (FLAGS_listGMs) {
             fprintf(stdout, "%s\n", gm->getName());
         } else {
             gm_factories.set(SkString{gm->getName()}, factory);
         }
     }
-    if (FLAGS_sources.isEmpty()) {
+
+    SkTHashMap<SkString, const skiatest::Test*> tests;
+    for (const skiatest::Test& test : skiatest::TestRegistry::Range()) {
+        if (test.needsGpu) {
+            continue;  // TODO
+        }
+        if (FLAGS_listTests) {
+            fprintf(stdout, "%s\n", test.name);
+        } else {
+            tests.set(SkString{test.name}, &test);
+        }
+    }
+
+    if (FLAGS_listGMs || FLAGS_listTests) {
         return 0;
+    }
+    if (FLAGS_sources.isEmpty()) {
+        fprintf(stderr, "Please give me something to run using -s/--sources!\n");
+        return 1;
     }
 
     SkTArray<Source> sources;
@@ -382,6 +426,12 @@ int main(int argc, char** argv) {
             std::shared_ptr<skiagm::GM> gm{(*factory)()};
             source->name = name;
             init(source, std::move(gm));
+            continue;
+        }
+
+        if (const skiatest::Test** test = tests.find(name)) {
+            source->name = name;
+            init(source, **test);
             continue;
         }
 
@@ -404,7 +454,7 @@ int main(int argc, char** argv) {
             else if (name.endsWith(".json")) {
                 const SkString dir  = SkOSPath::Dirname(name.c_str());
                 if (sk_sp<skottie::Animation> animation = skottie::Animation::Builder()
-                        .setResourceProvider(skottie_utils::FileResourceProvider::Make(dir))
+                        .setResourceProvider(skresources::FileResourceProvider::Make(dir))
                         .make((const char*)blob->data(), blob->size())) {
                     init(source, animation);
                     continue;

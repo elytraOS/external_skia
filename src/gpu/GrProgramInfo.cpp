@@ -25,8 +25,10 @@ GrStencilSettings GrProgramInfo::nonGLStencilSettings() const {
 #include "src/gpu/GrMesh.h"
 #include "src/gpu/GrTexturePriv.h"
 
-void GrProgramInfo::validate() const {
-    SkASSERT(!fPipeline->isBad());
+void GrProgramInfo::validate(bool flushTime) const {
+    if (flushTime) {
+        SkASSERT(fPipeline->allProxiesInstantiated());
+    }
 
     if (this->hasDynamicPrimProcTextures()) {
         SkASSERT(!this->hasFixedPrimProcTextures());
@@ -47,15 +49,16 @@ void GrProgramInfo::validate() const {
             auto dynamicPrimProcTextures = this->dynamicPrimProcTextures(0);
 
             const GrBackendFormat& format = dynamicPrimProcTextures[s]->backendFormat();
-            GrTextureType type = dynamicPrimProcTextures[s]->textureType();
+            GrTextureType type = dynamicPrimProcTextures[s]->backendFormat().textureType();
             GrPixelConfig config = dynamicPrimProcTextures[s]->config();
 
             for (int m = 1; m < fNumDynamicStateArrays; ++m) {
                 dynamicPrimProcTextures = this->dynamicPrimProcTextures(m);
 
                 auto testProxy = dynamicPrimProcTextures[s];
+                SkASSERT(testProxy->asTextureProxy());
                 SkASSERT(testProxy->backendFormat() == format);
-                SkASSERT(testProxy->textureType() == type);
+                SkASSERT(testProxy->backendFormat().textureType() == type);
                 SkASSERT(testProxy->config() == config);
             }
         }
@@ -113,12 +116,8 @@ void GrProgramInfo::checkMSAAAndMIPSAreResolved() const {
         }
     }
 
-    GrFragmentProcessor::Iter iter(this->pipeline());
-    while (const GrFragmentProcessor* fp = iter.next()) {
-        for (int s = 0; s < fp->numTextureSamplers(); ++s) {
-            const auto& textureSampler = fp->textureSampler(s);
-            assertResolved(textureSampler.peekTexture(), textureSampler.samplerState());
-        }
+    for (auto [sampler, fp] : GrFragmentProcessor::PipelineTextureSamplerRange(this->pipeline())) {
+        assertResolved(sampler.peekTexture(), sampler.samplerState());
     }
 }
 

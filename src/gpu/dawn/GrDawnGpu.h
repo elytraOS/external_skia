@@ -9,6 +9,7 @@
 #define GrDawnGpu_DEFINED
 
 #include "src/gpu/GrGpu.h"
+#include "src/gpu/GrProgramDesc.h"
 #include "dawn/dawncpp.h"
 #include "src/core/SkLRUCache.h"
 #include "src/gpu/dawn/GrDawnRingBuffer.h"
@@ -64,7 +65,7 @@ public:
             GrRenderTarget*, GrSurfaceOrigin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrTextureProxy*, true>& sampledProxies) override;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
 
     SkSL::Compiler* shaderCompiler() const {
         return fCompiler.get();

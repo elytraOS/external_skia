@@ -18,6 +18,7 @@
 #include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/ops/GrLatticeOp.h"
@@ -28,13 +29,12 @@ namespace {
 
 class LatticeGP : public GrGeometryProcessor {
 public:
-    static sk_sp<GrGeometryProcessor> Make(GrGpu* gpu,
-                                           const GrTextureProxy* proxy,
-                                           sk_sp<GrColorSpaceXform> csxf,
-                                           GrSamplerState::Filter filter,
-                                           bool wideColor) {
-        return sk_sp<GrGeometryProcessor>(
-                new LatticeGP(gpu, proxy, std::move(csxf), filter, wideColor));
+    static GrGeometryProcessor* Make(SkArenaAlloc* arena,
+                                     const GrTextureProxy* proxy,
+                                     sk_sp<GrColorSpaceXform> csxf,
+                                     GrSamplerState::Filter filter,
+                                     bool wideColor) {
+        return arena->make<LatticeGP>(proxy, std::move(csxf), filter, wideColor);
     }
 
     const char* name() const override { return "LatticeGP"; }
@@ -47,9 +47,9 @@ public:
         class GLSLProcessor : public GrGLSLGeometryProcessor {
         public:
             void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& proc,
-                         FPCoordTransformIter&& transformIter) override {
+                         const CoordTransformRange& transformRange) override {
                 const auto& latticeGP = proc.cast<LatticeGP>();
-                this->setTransformDataHelper(SkMatrix::I(), pdman, &transformIter);
+                this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
                 fColorSpaceXformHelper.setData(pdman, latticeGP.fColorSpaceXform.get());
             }
 
@@ -92,9 +92,12 @@ public:
     }
 
 private:
-    LatticeGP(GrGpu* gpu, const GrTextureProxy* proxy, sk_sp<GrColorSpaceXform> csxf,
+    friend class ::SkArenaAlloc; // for access to ctor
+
+    LatticeGP(const GrTextureProxy* proxy, sk_sp<GrColorSpaceXform> csxf,
               GrSamplerState::Filter filter, bool wideColor)
-            : INHERITED(kLatticeGP_ClassID), fColorSpaceXform(std::move(csxf)) {
+            : INHERITED(kLatticeGP_ClassID)
+            , fColorSpaceXform(std::move(csxf)) {
 
         fSampler.reset(GrSamplerState(GrSamplerState::WrapMode::kClamp, filter),
                        proxy->backendFormat(), proxy->textureSwizzle());
@@ -206,8 +209,8 @@ public:
 
 private:
     void onPrepareDraws(Target* target) override {
-        GrGpu* gpu = target->resourceProvider()->priv().gpu();
-        auto gp = LatticeGP::Make(gpu, fProxy.get(), fColorSpaceXform, fFilter, fWideColor);
+        auto gp = LatticeGP::Make(target->allocator(), fProxy.get(), fColorSpaceXform,
+                                  fFilter, fWideColor);
         if (!gp) {
             SkDebugf("Couldn't create GrGeometryProcessor\n");
             return;
@@ -283,7 +286,7 @@ private:
         }
         auto fixedDynamicState = target->makeFixedDynamicState(1);
         fixedDynamicState->fPrimitiveProcessorTextures[0] = fProxy.get();
-        helper.recordDraw(target, std::move(gp), fixedDynamicState);
+        helper.recordDraw(target, gp, fixedDynamicState);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {

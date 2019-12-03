@@ -124,6 +124,10 @@ bool GrVkOpsRenderPass::init(const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
 
     if (!fGpu->vkCaps().preferPrimaryOverSecondaryCommandBuffers()) {
         fCurrentSecondaryCommandBuffer = fGpu->cmdPool()->findOrCreateSecondaryCommandBuffer(fGpu);
+        if (!fCurrentSecondaryCommandBuffer) {
+            fCurrentRenderPass = nullptr;
+            return false;
+        }
         fCurrentSecondaryCommandBuffer->begin(fGpu, vkRT->getFramebuffer(), fCurrentRenderPass);
     }
 
@@ -132,14 +136,13 @@ bool GrVkOpsRenderPass::init(const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
         if (fCurrentSecondaryCommandBuffer) {
             fCurrentSecondaryCommandBuffer->end(fGpu);
         }
-        fGpu->endRenderPass(fRenderTarget, fOrigin, fBounds);
         fCurrentRenderPass = nullptr;
         return false;
     }
     return true;
 }
 
-void GrVkOpsRenderPass::initWrapped() {
+bool GrVkOpsRenderPass::initWrapped() {
     GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(fRenderTarget);
     SkASSERT(vkRT->wrapsSecondaryCommandBuffer());
     fCurrentRenderPass = vkRT->externalRenderPass();
@@ -148,7 +151,11 @@ void GrVkOpsRenderPass::initWrapped() {
 
     fCurrentSecondaryCommandBuffer.reset(
             GrVkSecondaryCommandBuffer::Create(vkRT->getExternalSecondaryCommandBuffer()));
+    if (!fCurrentSecondaryCommandBuffer) {
+        return false;
+    }
     fCurrentSecondaryCommandBuffer->begin(fGpu, nullptr, fCurrentRenderPass);
+    return true;
 }
 
 GrVkOpsRenderPass::~GrVkOpsRenderPass() {
@@ -181,6 +188,11 @@ void GrVkOpsRenderPass::submit() {
 
     // We don't want to actually submit the secondary command buffer if it is wrapped.
     if (this->wrapsSecondaryCommandBuffer()) {
+        // We pass the ownership of the GrVkSecondaryCommandBuffer to the special wrapped
+        // GrVkRenderTarget since it's lifetime matches the lifetime we need to keep the
+        // GrVkResources on the GrVkSecondaryCommandBuffer alive.
+        static_cast<GrVkRenderTarget*>(fRenderTarget)->addWrappedGrSecondaryCommandBuffer(
+                std::move(fCurrentSecondaryCommandBuffer));
         return;
     }
 
@@ -193,7 +205,7 @@ void GrVkOpsRenderPass::submit() {
 bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const SkIRect& bounds,
                             const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
                             const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
-                            const SkTArray<GrTextureProxy*, true>& sampledProxies) {
+                            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
     SkASSERT(!fRenderTarget);
     SkASSERT(fGpu == rt->getContext()->priv().getGpu());
 
@@ -205,6 +217,7 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const Sk
 
     for (int i = 0; i < sampledProxies.count(); ++i) {
         if (sampledProxies[i]->isInstantiated()) {
+            SkASSERT(sampledProxies[i]->asTextureProxy());
             GrVkTexture* vkTex = static_cast<GrVkTexture*>(sampledProxies[i]->peekTexture());
             SkASSERT(vkTex);
             vkTex->setImageLayout(
@@ -217,8 +230,7 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const Sk
     fBounds = bounds;
 
     if (this->wrapsSecondaryCommandBuffer()) {
-        this->initWrapped();
-        return true;
+        return this->initWrapped();
     }
 
     return this->init(colorInfo, stencilInfo, colorInfo.fClearColor);
@@ -226,7 +238,9 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt, GrSurfaceOrigin origin, const Sk
 
 void GrVkOpsRenderPass::reset() {
     if (fCurrentSecondaryCommandBuffer) {
-        fCurrentSecondaryCommandBuffer.release()->recycle(fGpu);
+        // The active GrVkCommandPool on the GrVkGpu should still be the same pool we got the
+        // secondary command buffer from since we haven't submitted any work yet.
+        fCurrentSecondaryCommandBuffer.release()->recycle(fGpu->cmdPool());
     }
     if (fCurrentRenderPass) {
         fCurrentRenderPass->unref(fGpu);
@@ -392,6 +406,10 @@ void GrVkOpsRenderPass::addAdditionalRenderPass(bool mustUseSecondaryCommandBuff
     if (!fGpu->vkCaps().preferPrimaryOverSecondaryCommandBuffers() ||
         mustUseSecondaryCommandBuffer) {
         fCurrentSecondaryCommandBuffer = fGpu->cmdPool()->findOrCreateSecondaryCommandBuffer(fGpu);
+        if (!fCurrentSecondaryCommandBuffer) {
+            fCurrentRenderPass = nullptr;
+            return;
+        }
         fCurrentSecondaryCommandBuffer->begin(fGpu, vkRT->getFramebuffer(), fCurrentRenderPass);
     }
 
@@ -402,7 +420,6 @@ void GrVkOpsRenderPass::addAdditionalRenderPass(bool mustUseSecondaryCommandBuff
         if (fCurrentSecondaryCommandBuffer) {
             fCurrentSecondaryCommandBuffer->end(fGpu);
         }
-        fGpu->endRenderPass(fRenderTarget, fOrigin, fBounds);
         fCurrentRenderPass = nullptr;
     }
 }
@@ -558,12 +575,9 @@ void GrVkOpsRenderPass::onDraw(const GrProgramInfo& programInfo,
         }
     }
 
-    GrFragmentProcessor::Iter iter(programInfo.pipeline());
-    while (const GrFragmentProcessor* fp = iter.next()) {
-        for (int i = 0; i < fp->numTextureSamplers(); ++i) {
-            const GrFragmentProcessor::TextureSampler& sampler = fp->textureSampler(i);
-            check_sampled_texture(sampler.peekTexture(), fRenderTarget, fGpu);
-        }
+    GrFragmentProcessor::PipelineTextureSamplerRange textureSamplerRange(programInfo.pipeline());
+    for (auto [sampler, fp] : textureSamplerRange) {
+        check_sampled_texture(sampler.peekTexture(), fRenderTarget, fGpu);
     }
     if (GrTexture* dstTexture = programInfo.pipeline().peekDstTexture()) {
         check_sampled_texture(dstTexture, fRenderTarget, fGpu);

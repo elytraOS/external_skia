@@ -29,9 +29,10 @@ using VertexSpec = GrQuadPerEdgeAA::VertexSpec;
 using ColorType = GrQuadPerEdgeAA::ColorType;
 
 #ifdef SK_DEBUG
-static SkString dump_quad_info(int index, const GrQuad& deviceQuad,
-                               const GrQuad& localQuad, const SkPMColor4f& color,
+static SkString dump_quad_info(int index, const GrQuad* deviceQuad,
+                               const GrQuad* localQuad, const SkPMColor4f& color,
                                GrQuadAAFlags aaFlags) {
+    GrQuad safeLocal = localQuad ? *localQuad : GrQuad();
     SkString str;
     str.appendf("%d: Color: [%.2f, %.2f, %.2f, %.2f], Edge AA: l%u_t%u_r%u_b%u, \n"
                 "  device quad: [(%.2f, %2.f, %.2f), (%.2f, %.2f, %.2f), (%.2f, %.2f, %.2f), "
@@ -43,14 +44,14 @@ static SkString dump_quad_info(int index, const GrQuad& deviceQuad,
                 (uint32_t) (aaFlags & GrQuadAAFlags::kTop),
                 (uint32_t) (aaFlags & GrQuadAAFlags::kRight),
                 (uint32_t) (aaFlags & GrQuadAAFlags::kBottom),
-                deviceQuad.x(0), deviceQuad.y(0), deviceQuad.w(0),
-                deviceQuad.x(1), deviceQuad.y(1), deviceQuad.w(1),
-                deviceQuad.x(2), deviceQuad.y(2), deviceQuad.w(2),
-                deviceQuad.x(3), deviceQuad.y(3), deviceQuad.w(3),
-                localQuad.x(0), localQuad.y(0), localQuad.w(0),
-                localQuad.x(1), localQuad.y(1), localQuad.w(1),
-                localQuad.x(2), localQuad.y(2), localQuad.w(2),
-                localQuad.x(3), localQuad.y(3), localQuad.w(3));
+                deviceQuad->x(0), deviceQuad->y(0), deviceQuad->w(0),
+                deviceQuad->x(1), deviceQuad->y(1), deviceQuad->w(1),
+                deviceQuad->x(2), deviceQuad->y(2), deviceQuad->w(2),
+                deviceQuad->x(3), deviceQuad->y(3), deviceQuad->w(3),
+                safeLocal.x(0), safeLocal.y(0), safeLocal.w(0),
+                safeLocal.x(1), safeLocal.y(1), safeLocal.w(1),
+                safeLocal.x(2), safeLocal.y(2), safeLocal.w(2),
+                safeLocal.x(3), safeLocal.y(3), safeLocal.w(3));
     return str;
 }
 #endif
@@ -200,7 +201,7 @@ private:
         // local coords.
         SkASSERT(!fHelper.isTrivial() || !fHelper.usesLocalCoords());
 
-        sk_sp<GrGeometryProcessor> gp = GrQuadPerEdgeAA::MakeProcessor(vertexSpec);
+        GrGeometryProcessor* gp = GrQuadPerEdgeAA::MakeProcessor(target->allocator(), vertexSpec);
         size_t vertexSize = gp->vertexStride();
 
         sk_sp<const GrBuffer> vertexBuffer;
@@ -216,16 +217,15 @@ private:
             return;
         }
 
-        // vertices pointer advances through vdata based on Tessellate's return value
-        void* vertices = vdata;
+        GrQuadPerEdgeAA::Tessellator tessellator(vertexSpec, (char*) vdata);
         auto iter = fQuads.iterator();
         while(iter.next()) {
             // All entries should have local coords, or no entries should have local coords,
             // matching !helper.isTrivial() (which is more conservative than helper.usesLocalCoords)
             SkASSERT(iter.isLocalValid() != fHelper.isTrivial());
             auto info = iter.metadata();
-            vertices = GrQuadPerEdgeAA::Tessellate(vertices, vertexSpec, iter.deviceQuad(),
-                    info.fColor, iter.localQuad(), kEmptyDomain, info.fAAFlags);
+            tessellator.append(iter.deviceQuad(), iter.localQuad(),
+                               info.fColor, kEmptyDomain, info.fAAFlags);
         }
 
         sk_sp<const GrBuffer> indexBuffer;
@@ -239,10 +239,10 @@ private:
 
         // Configure the mesh for the vertex data
         GrMesh* mesh = target->allocMeshes(1);
-        GrQuadPerEdgeAA::ConfigureMesh(mesh, vertexSpec, 0, fQuads.count(), totalNumVertices,
-                                       std::move(vertexBuffer), std::move(indexBuffer),
-                                       vertexOffsetInBuffer);
-        target->recordDraw(std::move(gp), mesh, 1, vertexSpec.primitiveType());
+        GrQuadPerEdgeAA::ConfigureMesh(target->caps(), mesh, vertexSpec, 0, fQuads.count(),
+                                       totalNumVertices, std::move(vertexBuffer),
+                                       std::move(indexBuffer), vertexOffsetInBuffer);
+        target->recordDraw(gp, mesh, 1, vertexSpec.primitiveType());
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {

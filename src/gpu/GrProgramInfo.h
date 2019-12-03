@@ -19,6 +19,7 @@ class GrProgramInfo {
 public:
     GrProgramInfo(int numSamples,
                   int numStencilSamples,
+                  const GrBackendFormat& backendFormat,
                   GrSurfaceOrigin origin,
                   const GrPipeline* pipeline,
                   const GrPrimitiveProcessor* primProc,
@@ -28,6 +29,7 @@ public:
                   GrPrimitiveType primitiveType)
             : fNumRasterSamples(pipeline->isStencilEnabled() ? numStencilSamples : numSamples)
             , fIsMixedSampled(fNumRasterSamples > numSamples)
+            , fBackendFormat(backendFormat)
             , fOrigin(origin)
             , fPipeline(pipeline)
             , fPrimProc(primProc)
@@ -42,7 +44,7 @@ public:
         }
         fRequestedFeatures |= fPipeline->getXferProcessor().requestedFeatures();
 
-        SkDEBUGCODE(this->validate();)
+        SkDEBUGCODE(this->validate(false);)
         (void) fNumDynamicStateArrays;  // touch this to quiet unused member warnings
     }
 
@@ -50,6 +52,8 @@ public:
 
     int numRasterSamples() const { return fNumRasterSamples;  }
     bool isMixedSampled() const { return fIsMixedSampled; }
+    // The backend format of the destination render target [proxy]
+    const GrBackendFormat& backendFormat() const { return fBackendFormat; }
     GrSurfaceOrigin origin() const { return fOrigin;  }
     const GrPipeline& pipeline() const { return *fPipeline; }
     const GrPrimitiveProcessor& primProc() const { return *fPrimProc; }
@@ -78,7 +82,7 @@ public:
         return fDynamicStateArrays && fDynamicStateArrays->fPrimitiveProcessorTextures;
     }
 
-    const GrTextureProxy* const* dynamicPrimProcTextures(int i) const {
+    const GrSurfaceProxy* const* dynamicPrimProcTextures(int i) const {
         SkASSERT(this->hasDynamicPrimProcTextures());
         SkASSERT(i < fNumDynamicStateArrays);
 
@@ -90,7 +94,7 @@ public:
         return fFixedDynamicState && fFixedDynamicState->fPrimitiveProcessorTextures;
     }
 
-    const GrTextureProxy* const* fixedPrimProcTextures() const {
+    const GrSurfaceProxy* const* fixedPrimProcTextures() const {
         SkASSERT(this->hasFixedPrimProcTextures());
 
         return fFixedDynamicState->fPrimitiveProcessorTextures;
@@ -102,8 +106,12 @@ public:
     // create the stencil settings here.
     GrStencilSettings nonGLStencilSettings() const;
 
+    void visitProxies(const GrOp::VisitProxyFunc& fn) const {
+        fPipeline->visitProxies(fn);
+    }
+
 #ifdef SK_DEBUG
-    void validate() const;
+    void validate(bool flushTime) const;
     void checkAllInstantiated() const;
     void checkMSAAAndMIPSAreResolved() const;
     void compatibleWithMeshes(const GrMesh meshes[], int meshCount) const;
@@ -117,6 +125,7 @@ public:
 private:
     const int                             fNumRasterSamples;
     const bool                            fIsMixedSampled;
+    const GrBackendFormat                 fBackendFormat;
     const GrSurfaceOrigin                 fOrigin;
     const GrPipeline*                     fPipeline;
     const GrPrimitiveProcessor*           fPrimProc;

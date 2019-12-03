@@ -39,8 +39,6 @@ GrPipeline::GrPipeline(const InitArgs& args,
     fXferProcessor = processors.refXferProcessor();
 
     if (args.fDstProxyView.proxy()) {
-        SkASSERT(args.fDstProxyView.proxy()->isInstantiated());
-
         fDstProxyView = args.fDstProxyView.proxyView();
         fDstTextureOffset = args.fDstProxyView.offset();
     }
@@ -62,15 +60,6 @@ GrPipeline::GrPipeline(const InitArgs& args,
     for (int i = 0; i < appliedClip.numClipCoverageFragmentProcessors(); ++i, ++currFPIdx) {
         fFragmentProcessors[currFPIdx] = appliedClip.detachClipCoverageFragmentProcessor(i);
     }
-
-#ifdef SK_DEBUG
-    for (int i = 0; i < numTotalProcessors; ++i) {
-        if (!fFragmentProcessors[i]->isInstantiated()) {
-            this->markAsBad();
-            break;
-        }
-    }
-#endif
 }
 
 GrXferBarrierType GrPipeline::xferBarrierType(GrTexture* texture, const GrCaps& caps) const {
@@ -121,4 +110,15 @@ void GrPipeline::genKey(GrProcessorKeyBuilder* b, const GrCaps& caps) const {
     blendKey |= (blendInfo.fEquation << (kBlendWriteShift + 2 * kBlendCoeffShift));
 
     b->add32(blendKey);
+}
+
+void GrPipeline::visitProxies(const GrOp::VisitProxyFunc& func) const {
+    // This iteration includes any clip coverage FPs
+    for (auto [sampler, fp] : GrFragmentProcessor::PipelineTextureSamplerRange(*this)) {
+        bool mipped = (GrSamplerState::Filter::kMipMap == sampler.samplerState().filter());
+        func(sampler.proxy(), GrMipMapped(mipped));
+    }
+    if (fDstProxyView.asTextureProxy()) {
+        func(fDstProxyView.asTextureProxy(), GrMipMapped::kNo);
+    }
 }

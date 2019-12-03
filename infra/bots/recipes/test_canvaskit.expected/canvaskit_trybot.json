@@ -90,10 +90,10 @@
     "cmd": [
       "chmod",
       "0755",
-      "skia/infra/canvaskit/test_canvaskit.sh"
+      "[START_DIR]/skia/infra/canvaskit/test_canvaskit.sh"
     ],
     "infra_step": true,
-    "name": "Docker setup.chmod 0755 skia/infra/canvaskit/test_canvaskit.sh",
+    "name": "Docker setup.chmod 0755 [START_DIR]/skia/infra/canvaskit/test_canvaskit.sh",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -239,7 +239,9 @@
       "7"
     ],
     "env": {
-      "DOCKER_CONFIG": "/home/chrome-bot/.docker"
+      "CHROME_HEADLESS": "1",
+      "DOCKER_CONFIG": "/home/chrome-bot/.docker",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "name": "Test CanvasKit with Docker"
   },

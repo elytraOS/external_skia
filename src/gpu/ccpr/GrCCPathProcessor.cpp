@@ -105,12 +105,12 @@ public:
 
 private:
     void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& primProc,
-                 FPCoordTransformIter&& transformIter) override {
+                 const CoordTransformRange& transformRange) override {
         const auto& proc = primProc.cast<GrCCPathProcessor>();
         pdman.set2f(fAtlasAdjustUniform,
                     1.0f / proc.fAtlasDimensions.fWidth,
                     1.0f / proc.fAtlasDimensions.fHeight);
-        this->setTransformDataHelper(proc.fLocalMatrix, pdman, &transformIter);
+        this->setTransformDataHelper(proc.fLocalMatrix, pdman, transformRange);
     }
 
     GrGLSLUniformHandler::UniformHandle fAtlasAdjustUniform;
@@ -143,7 +143,8 @@ void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& 
 
     GrProgramInfo programInfo(flushState->proxy()->numSamples(),
                               flushState->proxy()->numStencilSamples(),
-                              flushState->drawOpArgs().origin(),
+                              flushState->proxy()->backendFormat(),
+                              flushState->view()->origin(),
                               &pipeline,
                               this,
                               fixedDynamicState,

@@ -145,6 +145,7 @@ void OneLineShaper::finish(TextRange blockText, SkScalar height, SkScalar& advan
         auto unresolved = fUnresolvedBlocks.front();
         fUnresolvedBlocks.pop();
         fResolvedBlocks.emplace_back(unresolved);
+        fUnresolvedGlyphs += unresolved.fGlyphs.width();
     }
 
     // Sort all pieces by text
@@ -363,28 +364,11 @@ void OneLineShaper::iterateThroughFontStyles(SkSpan<Block> styleSpan,
 
 void OneLineShaper::matchResolvedFonts(const TextStyle& textStyle,
                                        const TypefaceVisitor& visitor) {
-    bool anyFamilyMatched = false;
-    for (auto& fontFamily : textStyle.getFontFamilies()) {
-        auto typeface = fParagraph->fFontCollection->matchTypeface(
-                fontFamily.c_str(), textStyle.getFontStyle(), textStyle.getLocale());
-        if (typeface.get() == nullptr) {
-            continue;
-        }
+    std::vector<sk_sp<SkTypeface>> typefaces = fParagraph->fFontCollection->findTypefaces(textStyle.getFontFamilies(), textStyle.getFontStyle());
 
-        anyFamilyMatched = true;
-        if (!visitor(typeface)) {
+    for (const auto& typeface : typefaces) {
+        if (!visitor(typeface))
             return;
-        }
-    }
-
-    if (!anyFamilyMatched) {
-        auto typeface = fParagraph->fFontCollection->matchDefaultTypeface(textStyle.getFontStyle(),
-                                                                          textStyle.getLocale());
-        if (typeface != nullptr) {
-            if (!visitor(typeface)) {
-                return;
-            }
-        }
     }
 
     if (fParagraph->fFontCollection->fontFallbackEnabled()) {
@@ -427,13 +411,10 @@ bool OneLineShaper::iterateThroughShapingRegions(const ShapeVisitor& shape) {
         }
 
         // Get the placeholder font
-        sk_sp<SkTypeface> typeface = nullptr;
-        for (auto& ff : placeholder.fTextStyle.getFontFamilies()) {
-            typeface = fParagraph->fFontCollection->matchTypeface(ff.c_str(), placeholder.fTextStyle.getFontStyle(), placeholder.fTextStyle.getLocale());
-            if (typeface != nullptr) {
-                break;
-            }
-        }
+        std::vector<sk_sp<SkTypeface>> typefaces = fParagraph->fFontCollection->findTypefaces(
+            placeholder.fTextStyle.getFontFamilies(),
+            placeholder.fTextStyle.getFontStyle());
+        sk_sp<SkTypeface> typeface = typefaces.size() ? typefaces.front() : nullptr;
         SkFont font(typeface, placeholder.fTextStyle.getFontSize());
 
         // "Shape" the placeholder

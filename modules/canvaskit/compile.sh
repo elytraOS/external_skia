@@ -72,19 +72,22 @@ fi
 
 MANAGED_SKOTTIE_BINDINGS="\
   -DSK_INCLUDE_MANAGED_SKOTTIE=1 \
-  modules/skottie/utils/SkottieUtils.cpp"
+  modules/skottie/utils/SkottieUtils.cpp \
+  modules/skresources/src/SkResources.cpp"
 if [[ $@ == *no_managed_skottie* ]]; then
   echo "Omitting managed Skottie"
   MANAGED_SKOTTIE_BINDINGS="-DSK_INCLUDE_MANAGED_SKOTTIE=0"
 fi
 
 GN_PARTICLES="skia_enable_sksl_interpreter=true"
+PARTICLES_JS="--pre-js $BASE_DIR/particles.js"
 PARTICLES_BINDINGS="$BASE_DIR/particles_bindings.cpp"
 PARTICLES_LIB="$BUILD_DIR/libparticles.a"
 
 if [[ $@ == *no_particles* ]]; then
   echo "Omitting Particles"
   GN_PARTICLES="skia_enable_sksl_interpreter=false"
+  PARTICLES_JS=""
   PARTICLES_BINDINGS=""
   PARTICLES_LIB=""
 fi
@@ -243,6 +246,7 @@ ${EMCXX} \
     --pre-js $BASE_DIR/interface.js \
     $PARAGRAPH_JS \
     $SKOTTIE_JS \
+    $PARTICLES_JS \
     $HTML_CANVAS_API \
     --pre-js $BASE_DIR/postamble.js \
     --post-js $BASE_DIR/ready.js \

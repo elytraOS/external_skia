@@ -17,9 +17,8 @@
 #include "src/gpu/ccpr/GrOctoBounds.h"
 
 static bool has_coord_transforms(const GrPaint& paint) {
-    GrFragmentProcessor::Iter iter(paint);
-    while (const GrFragmentProcessor* fp = iter.next()) {
-        if (!fp->coordTransforms().empty()) {
+    for (const auto& fp : GrFragmentProcessor::PaintCRange(paint)) {
+        if (!fp.coordTransforms().empty()) {
             return true;
         }
     }
@@ -448,13 +447,12 @@ void GrCCDrawPathsOp::onExecute(GrOpFlushState* flushState, const SkRect& chainB
     for (const InstanceRange& range : fInstanceRanges) {
         SkASSERT(range.fEndInstanceIdx > baseInstance);
 
-        const GrTextureProxy* atlas = range.fAtlasProxy;
+        GrSurfaceProxy* atlas = range.fAtlasProxy;
         if (atlas->isInstantiated()) {  // Instantiation can fail in exceptional circumstances.
             GrCCPathProcessor pathProc(range.fCoverageMode, atlas->peekTexture(),
                                        atlas->textureSwizzle(), atlas->origin(),
                                        fViewMatrixIfUsingLocalCoords);
-            GrTextureProxy* atlasProxy = range.fAtlasProxy;
-            fixedDynamicState.fPrimitiveProcessorTextures = &atlasProxy;
+            fixedDynamicState.fPrimitiveProcessorTextures = &atlas;
             pathProc.drawPaths(flushState, pipeline, &fixedDynamicState, *resources, baseInstance,
                                range.fEndInstanceIdx, this->bounds());
         }

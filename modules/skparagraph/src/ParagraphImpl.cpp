@@ -73,6 +73,7 @@ ParagraphImpl::ParagraphImpl(const SkString& text,
         , fPlaceholders(std::move(placeholders))
         , fText(text)
         , fState(kUnknown)
+        , fUnresolvedGlyphs(0)
         , fPicture(nullptr)
         , fStrutMetrics(false)
         , fOldWidth(0)
@@ -90,6 +91,7 @@ ParagraphImpl::ParagraphImpl(const std::u16string& utf16text,
         , fTextStyles(std::move(blocks))
         , fPlaceholders(std::move(placeholders))
         , fState(kUnknown)
+        , fUnresolvedGlyphs(0)
         , fPicture(nullptr)
         , fStrutMetrics(false)
         , fOldWidth(0)
@@ -103,6 +105,14 @@ ParagraphImpl::ParagraphImpl(const std::u16string& utf16text,
 }
 
 ParagraphImpl::~ParagraphImpl() = default;
+
+int32_t ParagraphImpl::unresolvedGlyphs() {
+    if (fState < kShaped) {
+        return -1;
+    }
+
+    return fUnresolvedGlyphs;
+}
 
 void ParagraphImpl::layout(SkScalar rawWidth) {
 
@@ -363,6 +373,7 @@ bool ParagraphImpl::shapeTextIntoEndlessLine() {
 
     OneLineShaper oneLineShaper(this);
     auto result = oneLineShaper.shape();
+    fUnresolvedGlyphs = oneLineShaper.unresolvedGlyphs();
 
     if (!result) {
         return false;
@@ -438,24 +449,13 @@ void ParagraphImpl::resolveStrut() {
         return;
     }
 
-    sk_sp<SkTypeface> typeface;
-    if (strutStyle.getFontFamilies().empty()) {
-        typeface = fFontCollection->matchTypeface("", strutStyle.getFontStyle(), SkString(""));
-    } else {
-        for (auto& fontFamily : strutStyle.getFontFamilies()) {
-            typeface = fFontCollection->matchTypeface(fontFamily.c_str(), strutStyle.getFontStyle(), SkString(""));
-            if (typeface.get() != nullptr) {
-                break;
-            }
-        }
-    }
-
-    if (typeface.get() == nullptr) {
+    std::vector<sk_sp<SkTypeface>> typefaces = fFontCollection->findTypefaces(strutStyle.getFontFamilies(), strutStyle.getFontStyle());
+    if (typefaces.empty()) {
         SkDEBUGF("Could not resolve strut font\n");
         return;
     }
 
-    SkFont font(typeface, strutStyle.getFontSize());
+    SkFont font(typefaces.front(), strutStyle.getFontSize());
     SkFontMetrics metrics;
     font.getMetrics(&metrics);
 
@@ -622,7 +622,10 @@ std::vector<TextBox> ParagraphImpl::getRectsForRange(unsigned start,
                                                      RectWidthStyle rectWidthStyle) {
     std::vector<TextBox> results;
     if (fText.isEmpty()) {
-        results.emplace_back(SkRect::MakeXYWH(0, 0, 0, fHeight), fParagraphStyle.getTextDirection());
+        if (start == 0 && end > 0) {
+            // On account of implied "\n" that is always at the end of the text
+            results.emplace_back(SkRect::MakeXYWH(0, 0, 0, fHeight), fParagraphStyle.getTextDirection());
+        }
         return results;
     }
 
@@ -822,12 +825,7 @@ std::vector<TextBox> ParagraphImpl::getRectsForRange(unsigned start,
 std::vector<TextBox> ParagraphImpl::getRectsForPlaceholders() {
   std::vector<TextBox> boxes;
   if (fText.isEmpty()) {
-      boxes.emplace_back(SkRect::MakeXYWH(0, 0, 0, fHeight), fParagraphStyle.getTextDirection());
-      return boxes;
-  }
-  if (fPlaceholders.size() <= 1) {
-      boxes.emplace_back(SkRect::MakeXYWH(0, 0, 0, fHeight), fParagraphStyle.getTextDirection());
-      return boxes;
+       return boxes;
   }
   for (auto& line : fLines) {
       line.iterateThroughVisualRuns(
@@ -1098,9 +1096,9 @@ InternalLineMetrics ParagraphImpl::computeEmptyMetrics() {
 
   auto defaultTextStyle = paragraphStyle().getTextStyle();
 
-  auto typeface = fontCollection()->matchTypeface(
-          defaultTextStyle.getFontFamilies().front().c_str(), defaultTextStyle.getFontStyle(),
-          defaultTextStyle.getLocale());
+  auto typefaces = fontCollection()->findTypefaces(
+      defaultTextStyle.getFontFamilies(), defaultTextStyle.getFontStyle());
+  auto typeface = typefaces.size() ? typefaces.front() : nullptr;
 
   SkFont font(typeface, defaultTextStyle.getFontSize());
   InternalLineMetrics metrics(font, paragraphStyle().getStrutStyle().getForceStrutHeight());

@@ -56,15 +56,16 @@ def RunSteps(api):
     ])
 
   api.docker.run(
-      name='Test CanvasKit with Docker',
+      name='Performance tests of CanvasKit with Docker',
       docker_image=DOCKER_IMAGE,
       src_dir=checkout_root,
       out_dir=out_dir,
-      script=INNER_KARMA_SCRIPT,
+      script=checkout_root.join(INNER_KARMA_SCRIPT),
       args=args,
       docker_args=None,
       copies=copies,
       recursive_read=recursive_read,
+      attempts=3,
   )
 
 
