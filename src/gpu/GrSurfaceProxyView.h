@@ -43,6 +43,13 @@ public:
         }
         return fProxy->asTextureProxy();
     }
+    sk_sp<GrTextureProxy> asTextureProxyRef() const {
+        if (!fProxy) {
+            return nullptr;
+        }
+        return sk_ref_sp<GrTextureProxy>(fProxy->asTextureProxy());
+    }
+
     GrRenderTargetProxy* asRenderTargetProxy() const {
         if (!fProxy) {
             return nullptr;
@@ -55,6 +62,12 @@ public:
 
     void reset() {
         *this = {};
+    }
+
+    // This does not reset the origin or proxy, so the View can still be used to access those
+    // properties associated with the detached proxy.
+    sk_sp<GrSurfaceProxy> detachProxy() {
+        return std::move(fProxy);
     }
 
 private:

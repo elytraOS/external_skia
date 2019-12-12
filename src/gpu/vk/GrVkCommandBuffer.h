@@ -114,7 +114,6 @@ public:
     void releaseResources(GrVkGpu* gpu);
 
     void freeGPUData(GrVkGpu* gpu, VkCommandPool pool) const;
-    void abandonGPUData() const;
 
     bool hasWork() const { return fHasWork; }
 
@@ -153,7 +152,6 @@ private:
 
     virtual void onReleaseResources(GrVkGpu* gpu) {}
     virtual void onFreeGPUData(GrVkGpu* gpu) const = 0;
-    virtual void onAbandonGPUData() const = 0;
 
     static constexpr uint32_t kMaxInputBuffers = 2;
 
@@ -283,10 +281,13 @@ public:
                       uint32_t regionCount,
                       const VkImageResolve* regions);
 
-    void submitToQueue(GrVkGpu* gpu, VkQueue queue, GrVkGpu::SyncQueue sync,
+    bool submitToQueue(GrVkGpu* gpu, VkQueue queue,
                        SkTArray<GrVkSemaphore::Resource*>& signalSemaphores,
                        SkTArray<GrVkSemaphore::Resource*>& waitSemaphores);
-    bool finished(const GrVkGpu* gpu);
+
+    void forceSync(GrVkGpu* gpu);
+
+    bool finished(GrVkGpu* gpu);
 
     void addFinishedProc(sk_sp<GrRefCntedCallback> finishedProc);
 
@@ -298,8 +299,6 @@ private:
         , fSubmitFence(VK_NULL_HANDLE) {}
 
     void onFreeGPUData(GrVkGpu* gpu) const override;
-
-    void onAbandonGPUData() const override;
 
     void onReleaseResources(GrVkGpu* gpu) override;
 
@@ -329,8 +328,6 @@ private:
         : INHERITED(cmdBuffer, isWrapped) {}
 
     void onFreeGPUData(GrVkGpu* gpu) const override {}
-
-    void onAbandonGPUData() const override {}
 
     // Used for accessing fIsActive (on GrVkCommandBuffer)
     friend class GrVkPrimaryCommandBuffer;

@@ -15,6 +15,7 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/effects/GrShadowGeoProc.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 // Circle Data
@@ -191,9 +192,9 @@ public:
     // An insetWidth > 1/2 rect width or height indicates a simple fill.
     ShadowCircularRRectOp(GrColor color, const SkRect& devRect,
                           float devRadius, bool isCircle, float blurRadius, float insetWidth,
-                          sk_sp<GrTextureProxy> falloffProxy)
+                          GrSurfaceProxyView falloffView)
             : INHERITED(ClassID())
-            , fFalloffProxy(falloffProxy) {
+            , fFalloffView(std::move(falloffView)) {
         SkRect bounds = devRect;
         SkASSERT(insetWidth > 0);
         SkScalar innerRadius = 0.0f;
@@ -540,7 +541,7 @@ private:
     void onPrepareDraws(Target* target) override {
         // Setup geometry processor
         GrGeometryProcessor* gp = GrRRectShadowGeoProc::Make(target->allocator(),
-                                                             fFalloffProxy.get());
+                                                             fFalloffView);
 
         int instanceCount = fGeoData.count();
         SkASSERT(sizeof(CircleVertex) == gp->vertexStride());
@@ -592,7 +593,7 @@ private:
         }
 
         auto fixedDynamicState = target->makeFixedDynamicState(1);
-        fixedDynamicState->fPrimitiveProcessorTextures[0] = fFalloffProxy.get();
+        fixedDynamicState->fPrimitiveProcessorTextures[0] = fFalloffView.proxy();
 
         GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
         mesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
@@ -602,8 +603,11 @@ private:
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        flushState->executeDrawsAndUploadsForMeshDrawOp(
-                this, chainBounds, GrProcessorSet::MakeEmptySet());
+        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
+                                                                 GrProcessorSet::MakeEmptySet(),
+                                                                 GrPipeline::InputFlags::kNone);
+
+        flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }
 
     CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -615,13 +619,13 @@ private:
     }
 
     void visitProxies(const VisitProxyFunc& func) const override {
-        func(fFalloffProxy.get(), GrMipMapped(false));
+        func(fFalloffView.proxy(), GrMipMapped(false));
     }
 
     SkSTArray<1, Geometry, true> fGeoData;
     int fVertCount;
     int fIndexCount;
-    sk_sp<GrTextureProxy> fFalloffProxy;
+    GrSurfaceProxyView fFalloffView;
 
     typedef GrMeshDrawOp INHERITED;
 };
@@ -687,6 +691,10 @@ std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
     if (!falloffTexture) {
         return nullptr;
     }
+    GrSwizzle swizzle = context->priv().caps()->getTextureSwizzle(falloffTexture->backendFormat(),
+                                                                  GrColorType::kAlpha_8);
+
+    GrSurfaceProxyView falloffView(std::move(falloffTexture), kTopLeft_GrSurfaceOrigin, swizzle);
 
     // Do any matrix crunching before we reset the draw state for device coords.
     const SkRect& rrectBounds = rrect.getBounds();
@@ -710,7 +718,7 @@ std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
                                                  rrect.isOval(),
                                                  blurWidth,
                                                  scaledInsetWidth,
-                                                 std::move(falloffTexture));
+                                                 std::move(falloffView));
 }
 }
 

@@ -42,6 +42,8 @@ var CanvasKit = {
 	/** @return {CanvasKit.SkAnimatedImage} */
 	MakeAnimatedImageFromEncoded: function() {},
 	/** @return {CanvasKit.SkImage} */
+	MakeImage: function() {},
+	/** @return {CanvasKit.SkImage} */
 	MakeImageFromEncoded: function() {},
 	/** @return {LinearCanvasGradient} */
 	MakeLinearGradientShader: function() {},
@@ -120,6 +122,14 @@ var CanvasKit = {
 		// private API
 		/** @return {Float32Array} */
 		_getRectsForRange: function() {},
+	},
+
+	_RTShaderFactory: {
+		// public API (from C++ bindings)
+		MakeFromProgram: function() {},
+
+		// private API
+		_make: function() {},
 	},
 
 	ParagraphStyle: function() {},
@@ -396,6 +406,16 @@ var CanvasKit = {
 		ry3: {},
 		rx4: {},
 		ry4: {},
+	},
+
+	SkShader: {
+		Blend: function() {},
+		Color: function() {},
+		Empty: function() {},
+		Lerp: function() {},
+
+		_Blend: function() {},
+		_Lerp: function() {},
 	},
 
 	SkSurface: {
@@ -781,6 +801,8 @@ CanvasKit.SkColorBuilder.prototype.build = function() {};
 CanvasKit.SkColorBuilder.prototype.delete = function() {};
 CanvasKit.SkColorBuilder.prototype.push = function() {};
 CanvasKit.SkColorBuilder.prototype.set = function() {};
+
+CanvasKit._RTShaderFactory.prototype.make = function() {};
 
 // Define StrokeOpts object
 var StrokeOpts = {};

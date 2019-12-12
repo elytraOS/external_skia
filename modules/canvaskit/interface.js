@@ -216,6 +216,16 @@ CanvasKit.onRuntimeInitialized = function() {
     return m;
   }
 
+  CanvasKit._RTShaderFactory.prototype.make = function(floats, matrix) {
+    var fptr = copy1dArray(floats, CanvasKit.HEAPF32);
+    // Our array has 4 bytes per float, so be sure to account for that before
+    // sending it over the wire.
+    if (!matrix) {
+      return this._make(fptr, floats.length * 4);
+    }
+    return this._make(fptr, floats.length * 4, matrix);
+  }
+
   CanvasKit.SkPath.prototype.addArc = function(oval, startAngle, sweepAngle) {
     // see arc() for the HTMLCanvas version
     // note input angles are degrees.
@@ -842,6 +852,20 @@ CanvasKit.onRuntimeInitialized = function() {
     data.delete();
   }
 
+  CanvasKit.SkShader.Blend = function(mode, dst, src, localMatrix) {
+    if (!localMatrix) {
+      return this._Blend(mode, dst, src);
+    }
+    return this._Blend(mode, dst, src, localMatrix);
+  }
+
+  CanvasKit.SkShader.Lerp = function(t, dst, src, localMatrix) {
+    if (!localMatrix) {
+      return this._Lerp(t, dst, src);
+    }
+    return this._Lerp(t, dst, src, localMatrix);
+  }
+
   CanvasKit.SkSurface.prototype.captureFrameAsSkPicture = function(drawFrame) {
     // Set up SkPictureRecorder
     var spr = new CanvasKit.SkPictureRecorder();
@@ -1065,20 +1089,20 @@ CanvasKit.MakeImageFromEncoded = function(data) {
   return img;
 }
 
-// pixels is a Uint8Array
+// pixels must be a Uint8Array with bytes representing the pixel values
+// (e.g. each set of 4 bytes could represent RGBA values for a single pixel).
 CanvasKit.MakeImage = function(pixels, width, height, alphaType, colorType) {
-  var bytesPerPixel = pixels.byteLength / (width * height);
+  var bytesPerPixel = pixels.length / (width * height);
   var info = {
     'width': width,
     'height': height,
     'alphaType': alphaType,
     'colorType': colorType,
   };
-  var pptr = CanvasKit._malloc(pixels.byteLength);
-  CanvasKit.HEAPU8.set(pixels, pptr);
-  // No need to _free iptr, Image takes it with SkData::MakeFromMalloc
+  var pptr = copy1dArray(pixels, CanvasKit.HEAPU8);
+  // No need to _free pptr, Image takes it with SkData::MakeFromMalloc
 
-  return CanvasKit._MakeImage(info, pptr, pixels.byteLength, width * bytesPerPixel);
+  return CanvasKit._MakeImage(info, pptr, pixels.length, width * bytesPerPixel);
 }
 
 CanvasKit.MakeLinearGradientShader = function(start, end, colors, pos, mode, localMatrix, flags) {
