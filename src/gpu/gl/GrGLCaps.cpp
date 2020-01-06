@@ -352,9 +352,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
     // Enable supported shader-related caps
     if (GR_IS_GR_GL(standard)) {
-        shaderCaps->fDualSourceBlendingSupport = (version >= GR_GL_VER(3, 3) ||
-            ctxInfo.hasExtension("GL_ARB_blend_func_extended")) &&
-            ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
+        shaderCaps->fDualSourceBlendingSupport =
+                (version >= GR_GL_VER(3, 3) ||
+                 ctxInfo.hasExtension("GL_ARB_blend_func_extended")) &&
+                ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
 
         shaderCaps->fShaderDerivativeSupport = true;
 
@@ -400,6 +401,14 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         shaderCaps->fShaderDerivativeSupport = version >= GR_GL_VER(2, 0) ||
                                                ctxInfo.hasExtension("GL_OES_standard_derivatives") ||
                                                ctxInfo.hasExtension("OES_standard_derivatives");
+    }
+
+    if (ctxInfo.hasExtension("GL_NV_conservative_raster")) {
+        fConservativeRasterSupport = true;
+    }
+
+    if (GR_IS_GR_GL(standard)) {
+        fWireframeSupport = true;
     }
 
     // Protect ourselves against tracking huge amounts of texture state.
@@ -856,6 +865,19 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
         }
     }
 
+    if (GR_IS_GR_GL(standard)) {
+        shaderCaps->fTessellationSupport =
+                version >= GR_GL_VER(4,0) ||
+                ctxInfo.hasExtension("GL_ARB_tessellation_shader");
+    } else {
+        if (version >= GR_GL_VER(3,2)) {
+            shaderCaps->fTessellationSupport = true;
+        } else if (ctxInfo.hasExtension("GL_OES_tessellation_shader")) {
+            shaderCaps->fTessellationSupport = true;
+            shaderCaps->fTessellationExtensionString = "GL_OES_tessellation_shader";
+        }
+    }
+
     shaderCaps->fVersionDeclString = get_glsl_version_decl_string(standard,
                                                                   shaderCaps->fGLSLGeneration,
                                                                   fIsCoreProfile);
@@ -1105,22 +1127,22 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
         "IMG MS To Texture",
         "EXT MS To Texture",
     };
-    GR_STATIC_ASSERT(0 == kNone_MSFBOType);
-    GR_STATIC_ASSERT(1 == kStandard_MSFBOType);
-    GR_STATIC_ASSERT(2 == kES_Apple_MSFBOType);
-    GR_STATIC_ASSERT(3 == kES_IMG_MsToTexture_MSFBOType);
-    GR_STATIC_ASSERT(4 == kES_EXT_MsToTexture_MSFBOType);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kMSFBOExtStr) == kLast_MSFBOType + 1);
+    static_assert(0 == kNone_MSFBOType);
+    static_assert(1 == kStandard_MSFBOType);
+    static_assert(2 == kES_Apple_MSFBOType);
+    static_assert(3 == kES_IMG_MsToTexture_MSFBOType);
+    static_assert(4 == kES_EXT_MsToTexture_MSFBOType);
+    static_assert(SK_ARRAY_COUNT(kMSFBOExtStr) == kLast_MSFBOType + 1);
 
     static const char* kInvalidateFBTypeStr[] = {
         "None",
         "Discard",
         "Invalidate",
     };
-    GR_STATIC_ASSERT(0 == kNone_InvalidateFBType);
-    GR_STATIC_ASSERT(1 == kDiscard_InvalidateFBType);
-    GR_STATIC_ASSERT(2 == kInvalidate_InvalidateFBType);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kInvalidateFBTypeStr) == kLast_InvalidateFBType + 1);
+    static_assert(0 == kNone_InvalidateFBType);
+    static_assert(1 == kDiscard_InvalidateFBType);
+    static_assert(2 == kInvalidate_InvalidateFBType);
+    static_assert(SK_ARRAY_COUNT(kInvalidateFBTypeStr) == kLast_InvalidateFBType + 1);
 
     static const char* kMapBufferTypeStr[] = {
         "None",
@@ -1128,11 +1150,11 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
         "MapBufferRange",
         "Chromium",
     };
-    GR_STATIC_ASSERT(0 == kNone_MapBufferType);
-    GR_STATIC_ASSERT(1 == kMapBuffer_MapBufferType);
-    GR_STATIC_ASSERT(2 == kMapBufferRange_MapBufferType);
-    GR_STATIC_ASSERT(3 == kChromium_MapBufferType);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kMapBufferTypeStr) == kLast_MapBufferType + 1);
+    static_assert(0 == kNone_MapBufferType);
+    static_assert(1 == kMapBuffer_MapBufferType);
+    static_assert(2 == kMapBufferRange_MapBufferType);
+    static_assert(3 == kChromium_MapBufferType);
+    static_assert(SK_ARRAY_COUNT(kMapBufferTypeStr) == kLast_MapBufferType + 1);
 
     writer->appendBool("Core Profile", fIsCoreProfile);
     writer->appendString("MSAA Type", kMSFBOExtStr[fMSFBOType]);
@@ -1425,7 +1447,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             auto& ctInfo = info.fColorTypeInfos[ctIdx++];
             ctInfo.fColorType = GrColorType::kRGB_888x;
             ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-            ctInfo.fTextureSwizzle = GrSwizzle::RGB1();
+            ctInfo.fReadSwizzle = GrSwizzle::RGB1();
 
             // External IO ColorTypes:
             ctInfo.fExternalIOFormatCount = 1;
@@ -1482,7 +1504,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = GrColorType::kAlpha_8;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
                 this->setColorTypeFormat(GrColorType::kAlpha_8, GrGLFormat::kR8);
 
@@ -1515,7 +1537,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = GrColorType::kGray_8;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle("rrr1");
+                ctInfo.fReadSwizzle = GrSwizzle("rrr1");
                 this->setColorTypeFormat(GrColorType::kGray_8, GrGLFormat::kR8);
 
                 // External IO ColorTypes:
@@ -1606,7 +1628,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                     ctInfo.fColorType = GrColorType::kAlpha_8;
                     ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag |
                                     ColorTypeInfo::kRenderable_Flag;
-                    ctInfo.fTextureSwizzle = GrSwizzle::AAAA();
+                    ctInfo.fReadSwizzle = GrSwizzle::AAAA();
                     int idx = static_cast<int>(GrColorType::kAlpha_8);
                     if (fColorTypeToFormatTable[idx] == GrGLFormat::kUnknown) {
                         this->setColorTypeFormat(GrColorType::kAlpha_8, GrGLFormat::kALPHA8);
@@ -2111,7 +2133,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = GrColorType::kAlpha_F16;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
                 this->setColorTypeFormat(GrColorType::kAlpha_F16, GrGLFormat::kR16F);
 
@@ -2193,7 +2215,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = GrColorType::kAlpha_F16;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
 
                 int idx = static_cast<int>(GrColorType::kAlpha_F16);
@@ -2608,6 +2630,20 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         }
     }
 
+    // Format: COMPRESSED_RGB8_BC1
+    {
+        FormatInfo& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_RGB8_BC1);
+        info.fFormatType = FormatType::kNormalizedFixedPoint;
+        info.fInternalFormatForTexImageOrStorage = GR_GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+        if (GR_IS_GR_GL(standard) || GR_IS_GR_GL_ES(standard)) {
+            if (ctxInfo.hasExtension("GL_EXT_texture_compression_s3tc")) {
+                info.fFlags = FormatInfo::kTexturable_Flag;
+            }
+        } // No WebGL support
+
+        // There are no support GrColorTypes for this format
+    }
+
     // Format: COMPRESSED_RGB8_ETC2
     {
         FormatInfo& info = this->getFormatInfo(GrGLFormat::kCOMPRESSED_RGB8_ETC2);
@@ -2678,7 +2714,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = GrColorType::kAlpha_16;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
                 this->setColorTypeFormat(GrColorType::kAlpha_16, GrGLFormat::kR16);
 
@@ -3516,6 +3552,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     }
 #endif
 
+    if (ctxInfo.renderer() == kAdreno615_GrGLRenderer ||
+        ctxInfo.renderer() == kAdreno630_GrGLRenderer ||
+        ctxInfo.renderer() == kAdreno640_GrGLRenderer) {
+        shaderCaps->fInBlendModesFailRandomlyForAllZeroVec = true;
+    }
+
     // We've seen Adreno 3xx devices produce incorrect (flipped) values for gl_FragCoord, in some
     // (rare) situations. It's sporadic, and mostly on older drivers. Additionally, old Adreno
     // compilers (see crbug.com/skia/4078) crash when accessing .zw of gl_FragCoord, so just bypass
@@ -3553,6 +3595,10 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     if (fDriverBugWorkarounds.remove_pow_with_constant_exponent) {
         shaderCaps->fRemovePowWithConstantExponent = true;
+    }
+
+    if (fDriverBugWorkarounds.disable_dual_source_blending_support) {
+        shaderCaps->fDualSourceBlendingSupport = false;
     }
 
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() ||
@@ -3645,6 +3691,28 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kATI_GrGLVendor == ctxInfo.vendor() ||  // Radeon drops stencil draws that use sample mask.
         kImagination_GrGLVendor == ctxInfo.vendor() /* PowerVR produces flaky results on Gold. */) {
         fDriverBlacklistMSAACCPR = true;
+    }
+
+    if (shaderCaps->fTessellationSupport && kNVIDIA_GrGLDriver == ctxInfo.driver()) {
+        if (GR_IS_GR_GL(ctxInfo.standard())) {
+            if (ctxInfo.version() >= GR_GL_VER(4,2)) {
+                fRequiresManualFBBarrierAfterTessellatedStencilDraw = true;
+            } else {
+                shaderCaps->fTessellationSupport = false;
+            }
+        } else {
+            if (ctxInfo.version() >= GR_GL_VER(3,1)) {
+                fRequiresManualFBBarrierAfterTessellatedStencilDraw = true;
+            } else {
+                shaderCaps->fTessellationSupport = false;
+            }
+        }
+    }
+
+    if (kQualcomm_GrGLDriver == ctxInfo.driver()) {
+        // Qualcomm fails to link programs with tessellation and does not give an error message.
+        // http://skbug.com/9740
+        shaderCaps->fTessellationSupport = false;
     }
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -3906,22 +3974,20 @@ bool GrGLCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format.asGLFormat() == GrGLFormat::kSRGB8_ALPHA8;
 }
 
-bool GrGLCaps::isFormatCompressed(const GrBackendFormat& format,
-                                  SkImage::CompressionType* compressionType) const {
+SkImage::CompressionType GrGLCaps::compressionType(const GrBackendFormat& format) const {
     auto fmt = format.asGLFormat();
 
-    SkImage::CompressionType dummyType;
-    SkImage::CompressionType* compressionTypePtr = compressionType ? compressionType : &dummyType;
-
     switch (fmt) {
-        case GrGLFormat::kCOMPRESSED_RGB8_ETC2: // fall through
-        case GrGLFormat::kCOMPRESSED_ETC1_RGB8:
-            // ETC2 uses the same compression layout as ETC1
-            *compressionTypePtr = SkImage::CompressionType::kETC1;
-            return true;
+        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: // same compression layout as RGB8_ETC2
+        case GrGLFormat::kCOMPRESSED_RGB8_ETC2:
+            return SkImage::CompressionType::kETC1;
+        case GrGLFormat::kCOMPRESSED_RGB8_BC1:
+            return SkImage::CompressionType::kBC1_RGB8_UNORM;
         default:
-            return false;
+            return SkImage::CompressionType::kNone;
     }
+
+    SkUNREACHABLE;
 }
 
 bool GrGLCaps::isFormatTexturableAndUploadable(GrColorType ct,
@@ -4061,6 +4127,8 @@ static GrPixelConfig validate_sized_format(GrGLFormat format,
             } else if (format == GrGLFormat::kCOMPRESSED_RGB8_ETC2 ||
                        format == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
                 return kRGB_ETC1_GrPixelConfig;
+            } else if (format == GrGLFormat::kCOMPRESSED_RGB8_BC1) {
+                return kRGB_BC1_GrPixelConfig;
             }
             break;
         case GrColorType::kRG_88:
@@ -4163,6 +4231,19 @@ GrPixelConfig GrGLCaps::onGetConfigFromBackendFormat(const GrBackendFormat& form
     return validate_sized_format(format.asGLFormat(), ct, fStandard);
 }
 
+GrPixelConfig GrGLCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFormat& f) const {
+    GrGLFormat glFormat = f.asGLFormat();
+
+    if (glFormat == GrGLFormat::kCOMPRESSED_RGB8_ETC2 ||
+        glFormat == GrGLFormat::kCOMPRESSED_ETC1_RGB8) {
+        return kRGB_ETC1_GrPixelConfig;
+    } else if (glFormat == GrGLFormat::kCOMPRESSED_RGB8_BC1) {
+        return kRGB_BC1_GrPixelConfig;
+    }
+
+    return kUnknown_GrPixelConfig;
+}
+
 GrColorType GrGLCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format,
                                                         bool isAlphaChannel) const {
     switch (format.asGLFormat()) {
@@ -4208,18 +4289,27 @@ GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
             if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGB8_ETC2)) {
                 return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB8_ETC2, GR_GL_TEXTURE_2D);
             }
-            return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
+            if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_ETC1_RGB8)) {
+                return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
+            }
+            return {};
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:
+            if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGB8_BC1)) {
+                return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                                               GR_GL_TEXTURE_2D);
+            }
+            return {};
     }
 
     SkUNREACHABLE;
 }
 
-GrSwizzle GrGLCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+GrSwizzle GrGLCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     const auto& info = this->getFormatInfo(format.asGLFormat());
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == colorType) {
-            return ctInfo.fTextureSwizzle;
+            return ctInfo.fReadSwizzle;
         }
     }
     return GrSwizzle::RGBA();

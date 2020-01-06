@@ -13,7 +13,12 @@
 #include "tools/SkSharingProc.h"
 #include "tools/UrlDataManager.h"
 #include "tools/debugger/DebugCanvas.h"
+#include "tools/debugger/DebugLayerManager.h"
 
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 #include <emscripten.h>
 #include <emscripten/bind.h>
 
@@ -39,18 +44,14 @@ struct SimpleImageInfo {
   int height;
   SkColorType colorType;
   SkAlphaType alphaType;
-  // Shown in the textual description of the image, and used as a common identifier between
-  // the resources tab and the command list.
-  // TODO(nifong) make the command list use the resource tab's ids instead of UrlDataManager
-  uintptr_t imageAddress;
 };
 
 SkImageInfo toSkImageInfo(const SimpleImageInfo& sii) {
   return SkImageInfo::Make(sii.width, sii.height, sii.colorType, sii.alphaType);
 }
 
-SimpleImageInfo toSimpleImageInfo(const SkImageInfo& ii, const SkImage* addr) {
-  return (SimpleImageInfo){ii.width(), ii.height(), ii.colorType(), ii.alphaType(), (uintptr_t)addr};
+SimpleImageInfo toSimpleImageInfo(const SkImageInfo& ii) {
+  return (SimpleImageInfo){ii.width(), ii.height(), ii.colorType(), ii.alphaType()};
 }
 
 class SkpDebugPlayer {
@@ -89,38 +90,87 @@ class SkpDebugPlayer {
      * to the given command and flush the canvas.
      */
     void drawTo(SkSurface* surface, int32_t index) {
-      int cmdlen = frames[fp]->getSize();
-      if (cmdlen == 0) {
-        SkDebugf("Zero commands to execute");
-        return;
+      // Set the command within the frame or layer event being drawn.
+      if (fInspectedLayer >= 0) {
+        fLayerManager->setCommand(fInspectedLayer, fp, index);
+      } else {
+        index = constrainFrameCommand(index);
       }
-      if (index >= cmdlen) {
-        SkDebugf("Constrained command index (%d) within this frame's length (%d)\n", index, cmdlen);
-        index = cmdlen-1;
+
+      auto* canvas = surface->getCanvas();
+      canvas->clear(SK_ColorTRANSPARENT);
+      if (fInspectedLayer >= 0) {
+        // when it's a layer event we're viewing, we use the layer manager to render it.
+        fLayerManager->drawLayerEventTo(canvas, fInspectedLayer, fp);
+      } else {
+        // otherwise, its a frame at the top level.
+        frames[fp]->drawTo(surface->getCanvas(), index);
       }
-      frames[fp]->drawTo(surface->getCanvas(), index);
       surface->getCanvas()->flush();
     }
 
-    const SkIRect& getBounds() { return fBounds; }
+    // Draws to the end of the current frame.
+    void draw(SkSurface* surface) {
+      auto* canvas = surface->getCanvas();
+      canvas->clear(SK_ColorTRANSPARENT);
+      frames[fp]->draw(surface->getCanvas());
+      surface->getCanvas()->flush();
+    }
 
+    const SkIRect getBounds() {
+      if (fInspectedLayer < 0) {
+        return fBounds;
+      }
+      auto summary = fLayerManager->event(fInspectedLayer, fp);
+      return SkIRect::MakeWH(summary.layerWidth, summary.layerHeight);
+    }
+
+    // returns the debugcanvas of the current frame, or the current draw event when inspecting
+    // a layer.
+    DebugCanvas* visibleCanvas() {
+      if (fInspectedLayer >=0) {
+        return fLayerManager->getEventDebugCanvas(fInspectedLayer, fp);
+      } else {
+        return frames[fp].get();
+      }
+    }
+
+    // The following three operations apply to every debugcanvas because they are overdraw features.
+    // There is only one toggle for them on the app, they are global settings.
+    // However, there's not a simple way to make the debugcanvases pull settings from a central
+    // location so we set it on all of them at once.
     void setOverdrawVis(bool on) {
-      frames[fp]->setOverdrawViz(on);
+      for (int i=0; i < frames.size(); i++) {
+        frames[i]->setOverdrawViz(on);
+      }
+      fLayerManager->setOverdrawViz(on);
     }
     void setGpuOpBounds(bool on) {
-      frames[fp]->setDrawGpuOpBounds(on);
+      for (int i=0; i < frames.size(); i++) {
+        frames[i]->setDrawGpuOpBounds(on);
+      }
+      fLayerManager->setDrawGpuOpBounds(on);
     }
     void setClipVizColor(JSColor color) {
-      frames[fp]->setClipVizColor(SkColor(color));
+      for (int i=0; i < frames.size(); i++) {
+        frames[i]->setClipVizColor(SkColor(color));
+      }
+      fLayerManager->setClipVizColor(SkColor(color));
     }
+    // The two operations below only apply to the current frame, because they concern the command
+    // list, which is unique to each frame.
     void deleteCommand(int index) {
-      frames[fp]->deleteDrawCommandAt(index);
+      visibleCanvas()->deleteDrawCommandAt(index);
     }
     void setCommandVisibility(int index, bool visible) {
-      frames[fp]->toggleCommand(index, visible);
+      visibleCanvas()->toggleCommand(index, visible);
     }
     int getSize() const {
-      return frames[fp]->getSize();
+      if (fInspectedLayer >=0) {
+        return fLayerManager->event(fInspectedLayer, fp).commandCount;
+      } else {
+        return frames[fp]->getSize();
+      }
     }
     int getFrameCount() const {
       return frames.size();
@@ -131,7 +181,7 @@ class SkpDebugPlayer {
       SkDynamicMemoryWStream stream;
       SkJSONWriter writer(&stream, SkJSONWriter::Mode::kFast);
       writer.beginObject(); // root
-      frames[fp]->toJSON(writer, udm, getSize(), surface->getCanvas());
+      visibleCanvas()->toJSON(writer, udm, surface->getCanvas());
       writer.endObject(); // root
       writer.flush();
       auto skdata = stream.detachAsData();
@@ -143,8 +193,8 @@ class SkpDebugPlayer {
 
     // Gets the clip and matrix of the last command drawn
     std::string lastCommandInfo() {
-      SkMatrix vm = frames[fp]->getCurrentMatrix();
-      SkIRect clip = frames[fp]->getCurrentClip();
+      SkMatrix vm = visibleCanvas()->getCurrentMatrix();
+      SkIRect clip = visibleCanvas()->getCurrentClip();
 
       SkDynamicMemoryWStream stream;
       SkJSONWriter writer(&stream, SkJSONWriter::Mode::kFast);
@@ -188,7 +238,20 @@ class SkpDebugPlayer {
 
     // Get the image info of one of the resource images.
     SimpleImageInfo getImageInfo(int index) {
-      return toSimpleImageInfo(fImages[index]->imageInfo(), fImages[index].get());
+      return toSimpleImageInfo(fImages[index]->imageInfo());
+    }
+
+    // return a list of layer draw events that happened at the beginning of this frame.
+    std::vector<DebugLayerManager::DrawEventSummary> getLayerDrawEvents() {
+      return fLayerManager->summarizeEvents(fp);
+    }
+
+    // When set to a valid layer index, causes this class to playback the layer draw event at nodeId
+    // on frame fp. No validation of nodeId or fp is performed, this must be valid values obtained
+    // from either fLayerManager.listNodesForFrame or fLayerManager.summarizeEvents
+    // Set to -1 to return to viewing the top level animation
+    void setInspectedLayer(int nodeId) {
+      fInspectedLayer = nodeId;
     }
 
   private:
@@ -205,54 +268,70 @@ class SkpDebugPlayer {
         SkDebugf("Parsed SKP file.\n");
         // Make debug canvas using bounds from SkPicture
         fBounds = picture->cullRect().roundOut();
-        std::unique_ptr<DebugCanvas> debugDanvas = std::make_unique<DebugCanvas>(fBounds);
-        SkDebugf("DebugCanvas created.\n");
+        std::unique_ptr<DebugCanvas> debugCanvas = std::make_unique<DebugCanvas>(fBounds);
 
         // Only draw picture to the debug canvas once.
-        debugDanvas->drawPicture(picture);
-        SkDebugf("Added picture with %d commands.\n", debugDanvas->getSize());
-        return debugDanvas;
+        debugCanvas->drawPicture(picture);
+        return debugCanvas;
       }
 
       void loadMultiFrame(SkMemoryStream* stream) {
+        // Attempt to deserialize with an image sharing serial proc.
+        auto deserialContext = std::make_unique<SkSharingDeserialContext>();
+        SkDeserialProcs procs;
+        procs.fImageProc = SkSharingDeserialContext::deserializeImage;
+        procs.fImageCtx = deserialContext.get();
 
-          // Attempt to deserialize with an image sharing serial proc.
-          auto deserialContext = std::make_unique<SkSharingDeserialContext>();
-          SkDeserialProcs procs;
-          procs.fImageProc = SkSharingDeserialContext::deserializeImage;
-          procs.fImageCtx = deserialContext.get();
+        int page_count = SkMultiPictureDocumentReadPageCount(stream);
+        if (!page_count) {
+          SkDebugf("Not a MultiPictureDocument");
+          return;
+        }
+        SkDebugf("Expecting %d frames\n", page_count);
 
-          int page_count = SkMultiPictureDocumentReadPageCount(stream);
-          if (!page_count) {
-            SkDebugf("Not a MultiPictureDocument");
-            return;
+        std::vector<SkDocumentPage> pages(page_count);
+        if (!SkMultiPictureDocumentRead(stream, pages.data(), page_count, &procs)) {
+          SkDebugf("Reading frames from MultiPictureDocument failed");
+          return;
+        }
+
+        fLayerManager = std::make_unique<DebugLayerManager>();
+
+        int i = 0;
+        for (const auto& page : pages) {
+          // Make debug canvas using bounds from SkPicture
+          fBounds = page.fPicture->cullRect().roundOut();
+          std::unique_ptr<DebugCanvas> debugCanvas = std::make_unique<DebugCanvas>(fBounds);
+          debugCanvas->setLayerManagerAndFrame(fLayerManager.get(), i);
+
+          // Only draw picture to the debug canvas once.
+          debugCanvas->drawPicture(page.fPicture);
+
+          if (debugCanvas->getSize() <=0 ){
+            SkDebugf("Skipped corrupted frame, had %d commands \n", debugCanvas->getSize());
+            continue;
           }
-          SkDebugf("Expecting %d frames\n", page_count);
+          // If you don't set these, they're undefined.
+          debugCanvas->setOverdrawViz(false);
+          debugCanvas->setDrawGpuOpBounds(false);
+          debugCanvas->setClipVizColor(SK_ColorTRANSPARENT);
+          frames.push_back(std::move(debugCanvas));
+          i++;
+        }
+        fImages = deserialContext->fImages;
 
-          std::vector<SkDocumentPage> pages(page_count);
-          if (!SkMultiPictureDocumentRead(stream, pages.data(), page_count, &procs)) {
-            SkDebugf("Reading frames from MultiPictureDocument failed");
-            return;
-          }
+        udm.indexImages(fImages);
+      }
 
-          for (const auto& page : pages) {
-            // Make debug canvas using bounds from SkPicture
-            fBounds = page.fPicture->cullRect().roundOut();
-            std::unique_ptr<DebugCanvas> debugDanvas = std::make_unique<DebugCanvas>(fBounds);
-            // Only draw picture to the debug canvas once.
-            debugDanvas->drawPicture(page.fPicture);
-            SkDebugf("Added picture with %d commands.\n", debugDanvas->getSize());
-
-            if (debugDanvas->getSize() <=0 ){
-              SkDebugf("Skipped corrupted frame, had %d commands \n", debugDanvas->getSize());
-              continue;
-            }
-            debugDanvas->setOverdrawViz(false);
-            debugDanvas->setDrawGpuOpBounds(false);
-            debugDanvas->setClipVizColor(SK_ColorTRANSPARENT);
-            frames.push_back(std::move(debugDanvas));
-          }
-          fImages = deserialContext->fImages;
+      // constrains the draw command index to the frame's command list length.
+      int constrainFrameCommand(int index) {
+        int cmdlen = frames[fp]->getSize();
+        if (index >= cmdlen) {
+          SkDebugf("Constrained command index (%d) within this frame's length (%d)\n",
+            index, cmdlen);
+          return cmdlen-1;
+        }
+        return index;
       }
 
       // A vector of DebugCanvas, each one initialized to a frame of the animation.
@@ -268,13 +347,19 @@ class SkpDebugPlayer {
 
       // The URLDataManager here is a cache that accepts encoded data (pngs) and puts
       // numbers on them. We have our own collection of images (fImages) that was populated by the
-      // SkSharingDeserialContext when mskp files are loaded. It would be nice to have the mapping
-      // indices between these two caches so the urls displayed in command info match the list
-      // in the resource tab, and to make cross linking possible. One way to do this would be to
-      // look up all of fImages in udm but the exact encoding of the PNG differs and we wouldn't
-      // find anything. TODO(nifong): Unify these two numbering schemes in CollatingCanvas.
+      // SkSharingDeserialContext when mskp files are loaded which it can use for IDing images
+      // without having to serialize them.
       UrlDataManager udm;
 
+      // A structure holding the picture information needed to draw any layers used in an mskp file
+      // individual frames hold a pointer to it, store draw events, and request images from it.
+      // it is stateful and is set to the current frame at all times.
+      std::unique_ptr<DebugLayerManager> fLayerManager;
+
+      // The node id of a layer being inspected, if any.
+      // -1 means we are viewing the top level animation, not a layer.
+      // the exact draw event being inspected depends also on the selected frame `fp`.
+      int fInspectedLayer = -1;
 };
 
 #if SK_SUPPORT_GPU
@@ -344,22 +429,25 @@ EMSCRIPTEN_BINDINGS(my_module) {
   // The main class that the JavaScript in index.html uses
   class_<SkpDebugPlayer>("SkpDebugPlayer")
     .constructor<>()
-    .function("loadSkp",              &SkpDebugPlayer::loadSkp, allow_raw_pointers())
+    .function("changeFrame",          &SkpDebugPlayer::changeFrame)
+    .function("deleteCommand",        &SkpDebugPlayer::deleteCommand)
+    .function("draw",                 &SkpDebugPlayer::draw, allow_raw_pointers())
     .function("drawTo",               &SkpDebugPlayer::drawTo, allow_raw_pointers())
     .function("getBounds",            &SkpDebugPlayer::getBounds)
-    .function("setOverdrawVis",       &SkpDebugPlayer::setOverdrawVis)
-    .function("setClipVizColor",      &SkpDebugPlayer::setClipVizColor)
-    .function("getSize",              &SkpDebugPlayer::getSize)
-    .function("deleteCommand",        &SkpDebugPlayer::deleteCommand)
-    .function("setCommandVisibility", &SkpDebugPlayer::setCommandVisibility)
-    .function("setGpuOpBounds",       &SkpDebugPlayer::setGpuOpBounds)
-    .function("jsonCommandList",      &SkpDebugPlayer::jsonCommandList, allow_raw_pointers())
-    .function("lastCommandInfo",      &SkpDebugPlayer::lastCommandInfo)
-    .function("changeFrame",          &SkpDebugPlayer::changeFrame)
     .function("getFrameCount",        &SkpDebugPlayer::getFrameCount)
     .function("getImageResource",     &SkpDebugPlayer::getImageResource)
     .function("getImageCount",        &SkpDebugPlayer::getImageCount)
-    .function("getImageInfo",         &SkpDebugPlayer::getImageInfo);
+    .function("getImageInfo",         &SkpDebugPlayer::getImageInfo)
+    .function("getLayerDrawEvents",   &SkpDebugPlayer::getLayerDrawEvents)
+    .function("getSize",              &SkpDebugPlayer::getSize)
+    .function("jsonCommandList",      &SkpDebugPlayer::jsonCommandList, allow_raw_pointers())
+    .function("lastCommandInfo",      &SkpDebugPlayer::lastCommandInfo)
+    .function("loadSkp",              &SkpDebugPlayer::loadSkp, allow_raw_pointers())
+    .function("setClipVizColor",      &SkpDebugPlayer::setClipVizColor)
+    .function("setCommandVisibility", &SkpDebugPlayer::setCommandVisibility)
+    .function("setGpuOpBounds",       &SkpDebugPlayer::setGpuOpBounds)
+    .function("setInspectedLayer",    &SkpDebugPlayer::setInspectedLayer)
+    .function("setOverdrawVis",       &SkpDebugPlayer::setOverdrawVis);
 
   // Structs used as arguments or returns to the functions above
   value_object<SkIRect>("SkIRect")
@@ -367,6 +455,15 @@ EMSCRIPTEN_BINDINGS(my_module) {
       .field("fTop",    &SkIRect::fTop)
       .field("fRight",  &SkIRect::fRight)
       .field("fBottom", &SkIRect::fBottom);
+  // emscripten provided the following convenience function for binding vector<T>
+  // https://emscripten.org/docs/api_reference/bind.h.html#_CPPv415register_vectorPKc
+  register_vector<DebugLayerManager::DrawEventSummary>("VectorDrawEventSummary");
+  value_object<DebugLayerManager::DrawEventSummary>("DebugLayerManager::DrawEventSummary")
+    .field("nodeId",       &DebugLayerManager::DrawEventSummary::nodeId)
+    .field("fullRedraw",   &DebugLayerManager::DrawEventSummary::fullRedraw)
+    .field("commandCount", &DebugLayerManager::DrawEventSummary::commandCount)
+    .field("layerWidth",   &DebugLayerManager::DrawEventSummary::layerWidth)
+    .field("layerHeight",  &DebugLayerManager::DrawEventSummary::layerHeight);
 
   // Symbols needed by cpu.js to perform surface creation and flushing.
   enum_<SkColorType>("ColorType")
@@ -379,8 +476,7 @@ EMSCRIPTEN_BINDINGS(my_module) {
     .field("width",     &SimpleImageInfo::width)
     .field("height",    &SimpleImageInfo::height)
     .field("colorType", &SimpleImageInfo::colorType)
-    .field("alphaType", &SimpleImageInfo::alphaType)
-    .field("imageAddress", &SimpleImageInfo::imageAddress);
+    .field("alphaType", &SimpleImageInfo::alphaType);
   constant("TRANSPARENT", (JSColor) SK_ColorTRANSPARENT);
   function("_getRasterDirectSurface", optional_override([](const SimpleImageInfo ii,
                                                            uintptr_t /* uint8_t*  */ pPtr,

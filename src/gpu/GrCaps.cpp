@@ -26,6 +26,8 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fMultisampleDisableSupport = false;
     fInstanceAttribSupport = false;
     fMixedSamplesSupport = false;
+    fConservativeRasterSupport = false;
+    fWireframeSupport = false;
     fMSAAResolvesAutomatically = false;
     fUsePrimitiveRestart = false;
     fPreferClientSideDynamicBuffers = false;
@@ -70,6 +72,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fBufferMapThreshold = options.fBufferMapThreshold;
     fAvoidStencilBuffers = false;
     fAvoidWritePixelsFastPath = false;
+    fRequiresManualFBBarrierAfterTessellatedStencilDraw = false;
 
     fPreferVRAMUseOverFlushes = true;
 
@@ -189,6 +192,8 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Multisample disable support", fMultisampleDisableSupport);
     writer->appendBool("Instance Attrib Support", fInstanceAttribSupport);
     writer->appendBool("Mixed Samples Support", fMixedSamplesSupport);
+    writer->appendBool("Conservative Raster Support", fConservativeRasterSupport);
+    writer->appendBool("Wireframe Support", fWireframeSupport);
     writer->appendBool("MSAA Resolves Automatically", fMSAAResolvesAutomatically);
     writer->appendBool("Use primitive restart", fUsePrimitiveRestart);
     writer->appendBool("Prefer client-side dynamic buffers", fPreferClientSideDynamicBuffers);
@@ -237,10 +242,10 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
         "Advanced",
         "Advanced Coherent",
     };
-    GR_STATIC_ASSERT(0 == kBasic_BlendEquationSupport);
-    GR_STATIC_ASSERT(1 == kAdvanced_BlendEquationSupport);
-    GR_STATIC_ASSERT(2 == kAdvancedCoherent_BlendEquationSupport);
-    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kBlendEquationSupportNames) == kLast_BlendEquationSupport + 1);
+    static_assert(0 == kBasic_BlendEquationSupport);
+    static_assert(1 == kAdvanced_BlendEquationSupport);
+    static_assert(2 == kAdvancedCoherent_BlendEquationSupport);
+    static_assert(SK_ARRAY_COUNT(kBlendEquationSupportNames) == kLast_BlendEquationSupport + 1);
 
     writer->appendString("Blend Equation Support",
                          kBlendEquationSupportNames[fBlendEquationSupport]);

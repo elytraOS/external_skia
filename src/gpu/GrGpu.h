@@ -132,15 +132,18 @@ public:
                                    SkBudgeted budgeted,
                                    GrProtected isProtected);
 
-    sk_sp<GrTexture> createCompressedTexture(int width, int height, const GrBackendFormat&,
-                                             SkImage::CompressionType, SkBudgeted, const void* data,
-                                             size_t dataSize);
+    sk_sp<GrTexture> createCompressedTexture(SkISize dimensions, const GrBackendFormat&,
+                                             SkBudgeted, const void* data, size_t dataSize);
 
     /**
      * Implements GrResourceProvider::wrapBackendTexture
      */
     sk_sp<GrTexture> wrapBackendTexture(const GrBackendTexture&, GrColorType,
                                         GrWrapOwnership, GrWrapCacheable, GrIOType);
+
+    sk_sp<GrTexture> wrapCompressedBackendTexture(const GrBackendTexture&,
+                                                  GrWrapOwnership, GrWrapCacheable);
+
 
     /**
      * Implements GrResourceProvider::wrapRenderableBackendTexture
@@ -453,14 +456,21 @@ public:
     Stats* stats() { return &fStats; }
     void dumpJSON(SkJSONWriter*) const;
 
-    /** Used to initialize a backend texture with either a constant color or from pixmaps. */
+    /** Used to initialize a backend texture with either a constant color, pixmaps or
+     *  compressed data.
+     */
     class BackendTextureData {
     public:
-        enum class Type { kColor, kPixmaps };
+        enum class Type { kColor, kPixmaps, kCompressed };
         BackendTextureData() = default;
         BackendTextureData(const SkColor4f& color) : fType(Type::kColor), fColor(color) {}
         BackendTextureData(const SkPixmap pixmaps[]) : fType(Type::kPixmaps), fPixmaps(pixmaps) {
             SkASSERT(pixmaps);
+        }
+        BackendTextureData(const void* data, size_t size) : fType(Type::kCompressed) {
+            SkASSERT(data);
+            fCompressed.fData = data;
+            fCompressed.fSize = size;
         }
 
         Type type() const { return fType; }
@@ -469,14 +479,34 @@ public:
             return fColor;
         }
 
-        const SkPixmap& pixmap(int i) const { return fPixmaps[i]; }
-        const SkPixmap* pixmaps() const { return fPixmaps; }
+        const SkPixmap& pixmap(int i) const {
+            SkASSERT(this->type() == Type::kPixmaps);
+            return fPixmaps[i];
+        }
+        const SkPixmap* pixmaps() const {
+            SkASSERT(this->type() == Type::kPixmaps);
+            return fPixmaps;
+        }
+
+        const void* compressedData() const {
+            SkASSERT(this->type() == Type::kCompressed);
+            return fCompressed.fData;
+        }
+        size_t compressedSize() const {
+            SkASSERT(this->type() == Type::kCompressed);
+            return fCompressed.fSize;
+        }
+
 
     private:
         Type fType = Type::kColor;
         union {
             SkColor4f fColor = {0, 0, 0, 0};
             const SkPixmap* fPixmaps;
+            struct {
+                const void*  fData;
+                size_t       fSize;
+            } fCompressed;
         };
     };
 
@@ -498,9 +528,15 @@ public:
     GrBackendTexture createBackendTexture(SkISize dimensions,
                                           const GrBackendFormat&,
                                           GrRenderable,
-                                          const BackendTextureData* data,
+                                          const BackendTextureData*,
                                           int numMipLevels,
-                                          GrProtected isProtected);
+                                          GrProtected);
+
+    GrBackendTexture createCompressedBackendTexture(SkISize dimensions,
+                                                    const GrBackendFormat&,
+                                                    const BackendTextureData*,
+                                                    GrMipMapped,
+                                                    GrProtected);
 
     /**
      * Frees a texture created by createBackendTexture(). If ownership of the backend
@@ -570,8 +606,16 @@ public:
 
     virtual void storeVkPipelineCacheData() {}
 
+    // http://skbug.com/9739
+    virtual void insertManualFramebufferBarrier() {
+        SkASSERT(!this->caps()->requiresManualFBBarrierAfterTessellatedStencilDraw());
+        SK_ABORT("Manual framebuffer barrier not supported.");
+    }
+
 protected:
-    static bool MipMapsAreCorrect(SkISize, const BackendTextureData*, int numMipLevels);
+    static bool MipMapsAreCorrect(SkISize dimensions, const BackendTextureData*, int numMipLevels);
+    static bool CompressedDataIsCorrect(SkISize dimensions, SkImage::CompressionType,
+                                        GrMipMapped, const BackendTextureData*);
 
     // Handles cases where a surface will be updated without a call to flushRenderTarget.
     void didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const SkIRect* bounds,
@@ -587,8 +631,14 @@ private:
                                                     const GrBackendFormat&,
                                                     GrRenderable,
                                                     const BackendTextureData*,
-                                                    int numMipLevels,
+                                                    GrMipMapped,
                                                     GrProtected isProtected) = 0;
+
+    virtual GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
+                                                              const GrBackendFormat&,
+                                                              const BackendTextureData*,
+                                                              GrMipMapped,
+                                                              GrProtected isProtected) = 0;
 
     // called when the 3D context state is unknown. Subclass should emit any
     // assumed 3D context state and dirty any state cache.
@@ -616,12 +666,17 @@ private:
                                              GrProtected,
                                              int mipLevelCoont,
                                              uint32_t levelClearMask) = 0;
-    virtual sk_sp<GrTexture> onCreateCompressedTexture(int width, int height,
+    virtual sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                        const GrBackendFormat&,
-                                                       SkImage::CompressionType, SkBudgeted,
-                                                       const void* data) = 0;
+                                                       SkBudgeted,
+                                                       const void* data, size_t dataSize) = 0;
     virtual sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType,
                                                   GrWrapOwnership, GrWrapCacheable, GrIOType) = 0;
+
+    virtual sk_sp<GrTexture> onWrapCompressedBackendTexture(const GrBackendTexture&,
+                                                            GrWrapOwnership,
+                                                            GrWrapCacheable) = 0;
+
     virtual sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&, int sampleCnt,
                                                             GrColorType, GrWrapOwnership,
                                                             GrWrapCacheable) = 0;

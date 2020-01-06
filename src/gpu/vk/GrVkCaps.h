@@ -33,8 +33,7 @@ public:
              const GrVkExtensions& extensions, GrProtected isProtected = GrProtected::kNo);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
-    bool isFormatCompressed(const GrBackendFormat&,
-                            SkImage::CompressionType* compressionType = nullptr) const override;
+    SkImage::CompressionType compressionType(const GrBackendFormat&) const override;
 
     bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat&) const override;
     bool isFormatTexturable(const GrBackendFormat&) const override;
@@ -178,7 +177,7 @@ public:
         return fColorTypeToFormatTable[idx];
     }
 
-    GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     int getFragmentUniformBinding() const;
@@ -226,6 +225,8 @@ private:
     GrBackendFormat onGetDefaultBackendFormat(GrColorType, GrRenderable) const override;
 
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
+    GrPixelConfig onGetConfigFromCompressedBackendFormat(const GrBackendFormat&) const override;
+
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
@@ -245,7 +246,7 @@ private:
         };
         uint32_t fFlags = 0;
 
-        GrSwizzle fTextureSwizzle;
+        GrSwizzle fReadSwizzle;
         GrSwizzle fOutputSwizzle;
     };
 
@@ -282,7 +283,7 @@ private:
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;
     };
-    static const size_t kNumVkFormats = 19;
+    static const size_t kNumVkFormats = 20;
     FormatInfo fFormatTable[kNumVkFormats];
 
     FormatInfo& getFormatInfo(VkFormat);

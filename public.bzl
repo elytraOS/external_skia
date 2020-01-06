@@ -401,6 +401,18 @@ def gl_srcs(os_conditions):
 def skia_srcs(os_conditions):
     return base_srcs() + ports_srcs(os_conditions) + gl_srcs(os_conditions)
 
+def metal_objc_srcs():
+    return native.glob(
+        [
+            "include/**/*.h",
+            "src/**/*.h",
+            "src/gpu/mtl/**/*.mm",
+            "third_party/**/*.h",
+        ],
+    ) + [
+        "src/image/SkSurface_GpuMtl.mm",
+    ]
+
 ################################################################################
 ## INCLUDES
 ################################################################################
@@ -701,6 +713,16 @@ def exp_xform_lib_srcs():
     return native.glob(["experimental/xform/*.cpp"])
 
 ################################################################################
+## skresources_lib
+################################################################################
+
+def skresources_lib_hdrs():
+    return ["modules/skresources/include/SkResources.h"]
+
+def skresources_lib_srcs():
+    return ["modules/skresources/src/SkResources.cpp"]
+
+################################################################################
 ## skottie_lib
 ################################################################################
 
@@ -765,4 +787,18 @@ SKSHAPER_PRIMITIVE_SRCS = [
     "modules/skshaper/include/SkShaper.h",
     "modules/skshaper/src/SkShaper.cpp",
     "modules/skshaper/src/SkShaper_primitive.cpp",
+]
+
+################################################################################
+## skottie_ios_lib
+################################################################################
+
+SKOTTIE_IOS_LIB_SRCS = [
+    "tools/skottie_ios_app/SkAnimationDraw.h",
+    "tools/skottie_ios_app/SkTimeKeeper.h",
+    "tools/skottie_ios_app/SkottieUIView.mm",
+]
+
+SKOTTIE_IOS_LIB_HDRS = [
+    "tools/skottie_ios_app/SkottieUIView.h",
 ]

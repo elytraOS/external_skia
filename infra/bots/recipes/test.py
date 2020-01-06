@@ -28,7 +28,6 @@ def upload_dm_results(buildername):
     'Coverage',
     'MSAN',
     'TSAN',
-    'UBSAN',
     'Valgrind',
   ]
   for s in skip_upload_bots:
@@ -106,13 +105,13 @@ def dm_flags(api, bot):
 
     configs.append('8888')
 
-    if 'BonusConfigs' in bot or ('SAN' in bot and 'GCE' in bot):
-      configs.extend([
+    if 'BonusConfigs' in bot:
+      configs = [
         'pdf',
         'g8', '565',
         'pic-8888', 'serialize-8888',
         'f16', 'srgb', 'esrgb', 'narrow', 'enarrow',
-        'p3', 'ep3', 'rec2020', 'erec2020'])
+        'p3', 'ep3', 'rec2020', 'erec2020']
 
   elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
     args.append('--nocpu')
@@ -282,6 +281,10 @@ def dm_flags(api, bot):
         blacklist('gltestprecompile gm _ atlastext')
         blacklist('gltestprecompile gm _ dftext')
         blacklist('gltestprecompile gm _ glyph_pos_h_b')
+        # Tessellation shaders do not yet participate in the persistent cache.
+        blacklist('gltestpersistentcache gm _ tessellation')
+        blacklist('gltestglslcache gm _ tessellation')
+        blacklist('gltestprecompile gm _ tessellation')
 
     # We also test the SkSL precompile config on Pixel2XL as a representative
     # Android device - this feature is primarily used by Flutter.

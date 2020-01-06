@@ -130,7 +130,11 @@ private:
         }
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps&) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas* arenas,
+                                      const GrCaps&) override {
+        // This op doesn't use the arenas, but make sure the GrOpsTask is sending it
+        SkASSERT(arenas);
+        (void) arenas;
         auto that = t->cast<TestOp>();
         int v0 = fValueRanges[0].fValue;
         int v1 = that->fValueRanges[0].fValue;
@@ -210,7 +214,7 @@ DEF_GPUTEST(OpChainTest, reporter, /*ctxInfo*/) {
                 GrOpFlushState flushState(context->priv().getGpu(),
                                           context->priv().resourceProvider(),
                                           &tracker);
-                GrOpsTask opsTask(context->priv().refOpMemoryPool(),
+                GrOpsTask opsTask(context->priv().arenas(),
                                   GrSurfaceProxyView(proxy, kOrigin, outSwizzle),
                                   context->priv().auditTrail());
                 // This assumes the particular values of kRanges.

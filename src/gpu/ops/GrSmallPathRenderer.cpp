@@ -319,7 +319,7 @@ private:
         int instanceCount = fShapes.count();
 
         static constexpr int kMaxTextures = GrDistanceFieldPathGeoProc::kMaxTextures;
-        GR_STATIC_ASSERT(GrBitmapTextGeoProc::kMaxTextures == kMaxTextures);
+        static_assert(GrBitmapTextGeoProc::kMaxTextures == kMaxTextures);
 
         FlushInfo flushInfo;
         flushInfo.fFixedDynamicState = target->makeFixedDynamicState(kMaxTextures);
@@ -570,13 +570,11 @@ private:
 
         SkPath path;
         shape.asPath(&path);
-#ifndef SK_USE_LEGACY_DISTANCE_FIELDS
         // Generate signed distance field directly from SkPath
         bool succeed = GrGenerateDistanceFieldFromPath((unsigned char*)dfStorage.get(),
                                         path, drawMatrix,
                                         width, height, width * sizeof(unsigned char));
         if (!succeed) {
-#endif
             // setup bitmap backing
             SkAutoPixmapStorage dst;
             if (!dst.tryAlloc(SkImageInfo::MakeA8(devPathBounds.width(),
@@ -604,9 +602,7 @@ private:
             SkGenerateDistanceFieldFromA8Image((unsigned char*)dfStorage.get(),
                                                (const unsigned char*)dst.addr(),
                                                dst.width(), dst.height(), dst.rowBytes());
-#ifndef SK_USE_LEGACY_DISTANCE_FIELDS
         }
-#endif
 
         // add to atlas
         SkIPoint16 atlasLocation;
@@ -823,7 +819,8 @@ private:
     const SkPMColor4f& color() const { return fShapes[0].fColor; }
     bool usesDistanceField() const { return fUsesDistanceField; }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         SmallPathOp* that = t->cast<SmallPathOp>();
         if (!fHelper.isCompatible(that->fHelper, caps, this->bounds(), that->bounds())) {
             return CombineResult::kCannotCombine;
@@ -843,7 +840,7 @@ private:
         // We can position on the cpu unless we're in perspective,
         // but also need to make sure local matrices are identical
         if ((thisCtm.hasPerspective() || fHelper.usesLocalCoords()) &&
-            !thisCtm.cheapEqualTo(thatCtm)) {
+            !SkMatrixPriv::CheapEqual(thisCtm, thatCtm)) {
             return CombineResult::kCannotCombine;
         }
 

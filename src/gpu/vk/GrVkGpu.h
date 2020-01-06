@@ -173,12 +173,18 @@ private:
 
     void destroyResources();
 
-    GrBackendTexture onCreateBackendTexture(SkISize,
+    GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
                                             const BackendTextureData*,
-                                            int numMipLevels,
+                                            GrMipMapped,
                                             GrProtected) override;
+    GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
+                                                      const GrBackendFormat&,
+                                                      const BackendTextureData*,
+                                                      GrMipMapped,
+                                                      GrProtected) override;
+
     sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
                                      const GrBackendFormat& format,
                                      GrRenderable,
@@ -187,12 +193,14 @@ private:
                                      GrProtected,
                                      int mipLevelCount,
                                      uint32_t levelClearMask) override;
-    sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
-                                               SkImage::CompressionType, SkBudgeted,
-                                               const void* data) override;
+    sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions, const GrBackendFormat&,
+                                               SkBudgeted, const void* data,
+                                               size_t dataSize) override;
 
     sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType, GrWrapOwnership,
                                           GrWrapCacheable, GrIOType) override;
+    sk_sp<GrTexture> onWrapCompressedBackendTexture(const GrBackendTexture&, GrWrapOwnership,
+                                                    GrWrapCacheable) override;
     sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&,
                                                     int sampleCnt,
                                                     GrColorType colorType,
@@ -257,16 +265,16 @@ private:
     bool uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int width, int height,
                               GrColorType colorType, const GrMipLevel texels[], int mipLevelCount);
     bool uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int width, int height,
-                                 SkImage::CompressionType, const void* data);
+                                 const void* data, size_t dataSize);
     void resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect& srcRect,
                       const SkIPoint& dstPoint);
 
     bool createVkImageForBackendSurface(VkFormat,
                                         SkISize,
                                         bool texturable,
-                                        bool renderable,
+                                        GrRenderable,
                                         const BackendTextureData*,
-                                        int numMipLevels,
+                                        GrMipMapped,
                                         GrVkImageInfo*,
                                         GrProtected);
 

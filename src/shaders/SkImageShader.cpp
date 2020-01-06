@@ -176,7 +176,7 @@ sk_sp<SkShader> SkImageShader::Make(sk_sp<SkImage> image,
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
-#include "src/gpu/effects/generated/GrSimpleTextureEffect.h"
+#include "src/gpu/effects/GrSimpleTextureEffect.h"
 
 static GrSamplerState::WrapMode tile_mode_to_wrap_mode(const SkTileMode tileMode) {
     switch (tileMode) {
@@ -300,9 +300,15 @@ void SkShaderBase::RegisterFlattenables() { SK_REGISTER_FLATTENABLE(SkImageShade
 
 class SkImageStageUpdater : public SkStageUpdater {
 public:
-    const SkImageShader* fShader;
+    SkImageStageUpdater(const SkImageShader* shader, bool usePersp)
+        : fShader(shader), fUsePersp(usePersp)
+    {}
 
-    float fMatrixStorage[6];
+    const SkImageShader* fShader;
+    const bool           fUsePersp; // else use affine
+
+    // large enough for perspective, though often we just use 2x3
+    float fMatrixStorage[9];
 
 #if 0   // TODO: when we support mipmaps
     SkRasterPipeline_GatherCtx* fGather;
@@ -311,21 +317,31 @@ public:
     SkRasterPipeline_DecalTileCtx* fDecal;
 #endif
 
+    void append_matrix_stage(SkRasterPipeline* p) {
+        if (fUsePersp) {
+            p->append(SkRasterPipeline::matrix_perspective, fMatrixStorage);
+        } else {
+            p->append(SkRasterPipeline::matrix_2x3, fMatrixStorage);
+        }
+    }
+
     bool update(const SkMatrix& ctm, const SkMatrix* localM) override {
         SkMatrix matrix;
-        return fShader->computeTotalInverse(ctm, localM, &matrix) &&
-               matrix.asAffine(fMatrixStorage);
+        if (fShader->computeTotalInverse(ctm, localM, &matrix)) {
+            if (fUsePersp) {
+                matrix.get9(fMatrixStorage);
+            } else {
+               SkAssertResult(matrix.asAffine(fMatrixStorage));
+            }
+            return true;
+        }
+        return false;
     }
 };
 
 bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater) const {
-    if (updater &&
-        (rec.fPaint.getFilterQuality() == kMedium_SkFilterQuality ||
-         rec.fCTM.hasPerspective()))
-    {
-        // TODO: handle these cases
-        // medium: recall RequestBitmap and update width/height accordingly
-        // perspt: store 9 floats and use persp stage
+    if (updater && rec.fPaint.getFilterQuality() == kMedium_SkFilterQuality) {
+        // TODO: medium: recall RequestBitmap and update width/height accordingly
         return false;
     }
 
@@ -352,7 +368,7 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
     p->append(SkRasterPipeline::seed_shader);
 
     if (updater) {
-        p->append(SkRasterPipeline::matrix_2x3, updater->fMatrixStorage);
+        updater->append_matrix_stage(p);
     } else {
         // When the matrix is just an integer translate, bilerp == nearest neighbor.
         if (quality == kLow_SkFilterQuality &&
@@ -463,36 +479,40 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
     };
 
     auto append_misc = [&] {
-        // TODO: if ref.fDstCS isn't null, we'll premul here then immediately unpremul
-        // to do the color space transformation.  Might be possible to streamline.
+        // This is an inessential optimization... it's logically safe to set this to false.
+        // But if...
+        //      - we know the image is definitely normalized, and
+        //      - we're doing some color space conversion, and
+        //      - sRGB curves are involved,
+        // then we can use slightly faster math that doesn't work well outside [0,1].
+        bool src_is_normalized = SkColorTypeIsNormalized(info.colorType());
+
+        SkColorSpace* cs = info.colorSpace();
+        SkAlphaType   at = info.alphaType();
+
+        // Color for A8 images comes from the paint.  TODO: all alpha images?  none?
         if (info.colorType() == kAlpha_8_SkColorType) {
-            // The color for A8 images comes from the (sRGB) paint color.
-            p->append_set_rgb(alloc, rec.fPaint.getColor4f());
-            p->append(SkRasterPipeline::premul);
-        } else if (info.alphaType() == kUnpremul_SkAlphaType) {
-            // Convert unpremul images to premul before we carry on with the rest of the pipeline.
-            p->append(SkRasterPipeline::premul);
+            SkColor4f rgb = rec.fPaint.getColor4f();
+            p->append_set_rgb(alloc, rgb);
+
+            src_is_normalized = rgb.fitsInBytes();
+            cs = sk_srgb_singleton();
+            at = kUnpremul_SkAlphaType;
         }
 
-        if (quality > kLow_SkFilterQuality) {
-            // Bicubic filtering naturally produces out of range values on both sides.
+        // Bicubic filtering naturally produces out of range values on both sides of [0,1].
+        if (quality == kHigh_SkFilterQuality) {
             p->append(SkRasterPipeline::clamp_0);
-            p->append(fClampAsIfUnpremul ? SkRasterPipeline::clamp_1
-                                         : SkRasterPipeline::clamp_a);
+            p->append(at == kUnpremul_SkAlphaType || fClampAsIfUnpremul
+                          ? SkRasterPipeline::clamp_1
+                          : SkRasterPipeline::clamp_a);
+            src_is_normalized = true;
         }
 
-        if (rec.fDstCS) {
-            // If color managed, convert from premul source all the way to premul dst color space.
-            auto srcCS = info.colorSpace();
-            if (!srcCS || info.colorType() == kAlpha_8_SkColorType) {
-                // We treat untagged images as sRGB.
-                // A8 images get their r,g,b from the paint color, so they're also sRGB.
-                srcCS = sk_srgb_singleton();
-            }
-            alloc->make<SkColorSpaceXformSteps>(srcCS     , kPremul_SkAlphaType,
-                                                rec.fDstCS, kPremul_SkAlphaType)
-                ->apply(p, info.colorType());
-        }
+        // Transform color space and alpha type to match shader convention (dst CS, premul alpha).
+        alloc->make<SkColorSpaceXformSteps>(cs, at,
+                                            rec.fDstCS, kPremul_SkAlphaType)
+            ->apply(p, src_is_normalized);
 
         return true;
     };
@@ -580,6 +600,7 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
         p->append(SkRasterPipeline::move_dst_src);
 
     } else {
+        SkASSERT(quality == kHigh_SkFilterQuality);
         p->append(SkRasterPipeline::save_xy, sampler);
 
         sample(SkRasterPipeline::bicubic_n3x, SkRasterPipeline::bicubic_n3y);
@@ -613,8 +634,30 @@ bool SkImageShader::onAppendStages(const SkStageRec& rec) const {
 }
 
 SkStageUpdater* SkImageShader::onAppendUpdatableStages(const SkStageRec& rec) const {
-    auto updater = rec.fAlloc->make<SkImageStageUpdater>();
-    updater->fShader = this;
+    bool usePersp = rec.fCTM.hasPerspective();
+    auto updater = rec.fAlloc->make<SkImageStageUpdater>(this, usePersp);
     return this->doStages(rec, updater) ? updater : nullptr;
+}
+
+bool SkImageShader::onProgram(skvm::Builder* p,
+                              const SkMatrix& ctm, const SkMatrix* localM,
+                              SkFilterQuality quality, SkColorSpace* dstCS,
+                              skvm::Uniforms* uniforms,
+                              skvm::F32 x, skvm::F32 y,
+                              skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
+    SkMatrix inv;
+    if (!this->computeTotalInverse(ctm, localM, &inv)) {
+        return false;
+    }
+
+    SkBitmapController::State state{as_IB(fImage.get()), inv, quality};
+    const SkPixmap& pm = state.pixmap();
+    if (!pm.addr()) {
+        return false;
+    }
+    inv     = state.invMatrix();
+    quality = state.quality();
+
+    return false;
 }
 

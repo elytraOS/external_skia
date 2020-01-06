@@ -39,12 +39,18 @@ public:
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
-    GrBackendTexture onCreateBackendTexture(SkISize,
+    GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            const BackendTextureData* data,
-                                            int numMipLevels,
-                                            GrProtected isProtected) override;
+                                            const BackendTextureData*,
+                                            GrMipMapped,
+                                            GrProtected) override;
+    GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
+                                                      const GrBackendFormat&,
+                                                      const BackendTextureData*,
+                                                      GrMipMapped,
+                                                      GrProtected) override;
+
     void deleteBackendTexture(const GrBackendTexture&) override;
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
@@ -113,12 +119,15 @@ private:
                                      int mipLevelCount,
                                      uint32_t levelClearMask) override;
 
-    sk_sp<GrTexture> onCreateCompressedTexture(int width, int height, const GrBackendFormat&,
-                                               SkImage::CompressionType, SkBudgeted,
-                                               const void* data) override;
+    sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
+                                               const GrBackendFormat&,
+                                               SkBudgeted,
+                                               const void* data, size_t dataSize) override;
 
     sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType, GrWrapOwnership,
                                           GrWrapCacheable, GrIOType) override;
+    sk_sp<GrTexture> onWrapCompressedBackendTexture(const GrBackendTexture&, GrWrapOwnership,
+                                                    GrWrapCacheable) override;
     sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&, int sampleCnt,
                                                     GrColorType, GrWrapOwnership,
                                                     GrWrapCacheable) override;

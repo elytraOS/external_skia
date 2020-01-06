@@ -53,6 +53,8 @@ public:
     bool multisampleDisableSupport() const { return fMultisampleDisableSupport; }
     bool instanceAttribSupport() const { return fInstanceAttribSupport; }
     bool mixedSamplesSupport() const { return fMixedSamplesSupport; }
+    bool conservativeRasterSupport() const { return fConservativeRasterSupport; }
+    bool wireframeSupport() const { return fWireframeSupport; }
     // This flag indicates that we never have to resolve MSAA. In practice, it means that we have
     // an MSAA-render-to-texture extension: Any render target we create internally will use the
     // extension, and any wrapped render target is the client's responsibility.
@@ -84,6 +86,11 @@ public:
     bool avoidStencilBuffers() const { return fAvoidStencilBuffers; }
 
     bool avoidWritePixelsFastPath() const { return fAvoidWritePixelsFastPath; }
+
+    // http://skbug.com/9739
+    bool requiresManualFBBarrierAfterTessellatedStencilDraw() const {
+        return fRequiresManualFBBarrierAfterTessellatedStencilDraw;
+    }
 
     /**
      * Indicates the capabilities of the fixed function blend unit.
@@ -165,10 +172,12 @@ public:
 
     virtual bool isFormatSRGB(const GrBackendFormat&) const = 0;
 
-    // Callers can optionally pass in an SkImage::CompressionType which will be filled in with the
-    // correct type if the GrBackendFormat is compressed.
-    virtual bool isFormatCompressed(const GrBackendFormat&,
-                                    SkImage::CompressionType* compressionType = nullptr) const = 0;
+    // This will return SkImage::CompressionType::kNone if the backend format is not compressed.
+    virtual SkImage::CompressionType compressionType(const GrBackendFormat&) const = 0;
+
+    bool isFormatCompressed(const GrBackendFormat& format) const {
+        return this->compressionType(format) != SkImage::CompressionType::kNone;
+    }
 
     // TODO: Once we use the supportWritePixels call for uploads, we can remove this function and
     // instead only have the version that takes a GrBackendFormat.
@@ -393,6 +402,9 @@ public:
 
         return this->onGetConfigFromBackendFormat(format, grCT);
     }
+    GrPixelConfig getConfigFromCompressedBackendFormat(const GrBackendFormat& format) const {
+        return this->onGetConfigFromCompressedBackendFormat(format);
+    }
 
     /**
      * Special method only for YUVA images. Returns a colortype that matches the backend format or
@@ -413,10 +425,10 @@ public:
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
     /**
-     * Returns the GrSwizzle to use when sampling from a texture with the passed in GrBackendFormat
-     * and GrColorType.
+     * Returns the GrSwizzle to use when sampling or reading back from a texture with the passed in
+     * GrBackendFormat and GrColorType.
      */
-    virtual GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const = 0;
+    virtual GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const = 0;
 
     /**
      * Returns the GrSwizzle to use when outputting to a render target with the passed in
@@ -483,6 +495,8 @@ protected:
     bool fMultisampleDisableSupport                  : 1;
     bool fInstanceAttribSupport                      : 1;
     bool fMixedSamplesSupport                        : 1;
+    bool fConservativeRasterSupport                  : 1;
+    bool fWireframeSupport                           : 1;
     bool fMSAAResolvesAutomatically                  : 1;
     bool fUsePrimitiveRestart                        : 1;
     bool fPreferClientSideDynamicBuffers             : 1;
@@ -506,6 +520,7 @@ protected:
     bool fDriverBlacklistMSAACCPR                    : 1;
     bool fAvoidStencilBuffers                        : 1;
     bool fAvoidWritePixelsFastPath                   : 1;
+    bool fRequiresManualFBBarrierAfterTessellatedStencilDraw : 1;
 
     // ANGLE performance workaround
     bool fPreferVRAMUseOverFlushes                   : 1;
@@ -524,7 +539,7 @@ protected:
 
     BlendEquationSupport fBlendEquationSupport;
     uint32_t fAdvBlendEqBlacklist;
-    GR_STATIC_ASSERT(kLast_GrBlendEquation < 32);
+    static_assert(kLast_GrBlendEquation < 32);
 
     uint32_t fMapBufferFlags;
     int fBufferMapThreshold;
@@ -557,6 +572,7 @@ private:
 
     virtual GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat& format,
                                                        GrColorType ct) const = 0;
+    virtual GrPixelConfig onGetConfigFromCompressedBackendFormat(const GrBackendFormat&) const = 0;
 
     virtual bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const = 0;
 

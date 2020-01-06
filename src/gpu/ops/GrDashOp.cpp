@@ -642,7 +642,8 @@ private:
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         DashOp* that = t->cast<DashOp>();
         if (fProcessorSet != that->fProcessorSet) {
             return CombineResult::kCannotCombine;
@@ -665,7 +666,7 @@ private:
             return CombineResult::kCannotCombine;
         }
 
-        if (fUsesLocalCoords && !this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
+        if (fUsesLocalCoords && !SkMatrixPriv::CheapEqual(this->viewMatrix(), that->viewMatrix())) {
             return CombineResult::kCannotCombine;
         }
 

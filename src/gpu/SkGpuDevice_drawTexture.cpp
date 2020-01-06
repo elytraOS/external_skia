@@ -21,8 +21,8 @@
 #include "src/gpu/GrTextureMaker.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
+#include "src/gpu/effects/GrSimpleTextureEffect.h"
 #include "src/gpu/effects/GrTextureDomain.h"
-#include "src/gpu/effects/generated/GrSimpleTextureEffect.h"
 #include "src/gpu/geometry/GrShape.h"
 #include "src/image/SkImage_Base.h"
 
@@ -195,8 +195,7 @@ static void draw_texture(GrRenderTargetContext* rtc, const GrClip& clip, const S
 
     // Must specify the strict constraint when the proxy is not functionally exact and the src
     // rect would access pixels outside the proxy's content area without the constraint.
-    if (constraint != SkCanvas::kStrict_SrcRectConstraint &&
-        !GrProxyProvider::IsFunctionallyExact(proxy.get())) {
+    if (constraint != SkCanvas::kStrict_SrcRectConstraint && !proxy->isFunctionallyExact()) {
         // Conservative estimate of how much a coord could be outset from src rect:
         // 1/2 pixel for AA and 1/2 pixel for bilerp
         float buffer = 0.5f * (aa == GrAA::kYes) +

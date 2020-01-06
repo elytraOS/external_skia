@@ -8,7 +8,6 @@
 #include "src/gpu/ccpr/GrCCPerFlushResources.h"
 
 #include "include/private/GrRecordingContext.h"
-#include "src/core/SkMakeUnique.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOnFlushResourceProvider.h"
@@ -40,7 +39,8 @@ public:
                                       bool hasMixedSampledCoverage, GrClampType) override {
         return GrProcessorSet::EmptySetAnalysis();
     }
-    CombineResult onCombineIfPossible(GrOp* other, const GrCaps&) override {
+    CombineResult onCombineIfPossible(GrOp* other, GrRecordingContext::Arenas*,
+                                      const GrCaps&) override {
         // We will only make multiple copy ops if they have different source proxies.
         // TODO: make use of texture chaining.
         return CombineResult::kCannotCombine;
@@ -581,8 +581,8 @@ bool GrCCPerFlushResources::finalize(GrOnFlushResourceProvider* onFlushRP) {
                         atlas->getStrokeBatchID(), atlas->drawBounds());
             }
             rtc->addDrawOp(GrNoClip(), std::move(op));
-            if (rtc->proxy()->requiresManualMSAAResolve()) {
-                onFlushRP->addTextureResolveTask(sk_ref_sp(rtc->proxy()->asTextureProxy()),
+            if (rtc->asSurfaceProxy()->requiresManualMSAAResolve()) {
+                onFlushRP->addTextureResolveTask(sk_ref_sp(rtc->asTextureProxy()),
                                                  GrSurfaceProxy::ResolveFlags::kMSAA);
             }
         }

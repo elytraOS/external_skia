@@ -158,7 +158,10 @@ void MetalCodeGenerator::writeExpression(const Expression& expr, Precedence pare
             this->writeIndexExpression((IndexExpression&) expr);
             break;
         default:
+#ifdef SK_DEBUG
             ABORT("unsupported expression: %s", expr.description().c_str());
+#endif
+            break;
     }
 }
 
@@ -917,37 +920,31 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
 
     if ("main" == f.fDeclaration.fName) {
         if (fNeedsGlobalStructInit) {
-            this->writeLine("    Globals globalStruct;");
-            this->writeLine("    thread Globals* _globals = &globalStruct;");
+            this->writeLine("    Globals globalStruct{");
+            const char* separator = "";
             for (const auto& intf: fInterfaceBlockNameMap) {
                 const auto& intfName = intf.second;
-                this->write("    _globals->");
+                this->write(separator);
+                separator = ", ";
+                this->write("&");
                 this->writeName(intfName);
-                this->write(" = &");
-                this->writeName(intfName);
-                this->write(";\n");
             }
             for (const auto& var: fInitNonConstGlobalVars) {
-                this->write("    _globals->");
-                this->writeName(var->fVar->fName);
-                this->write(" = ");
+                this->write(separator);
+                separator = ", ";
                 this->writeVarInitializer(*var->fVar, *var->fValue);
-                this->writeLine(";");
             }
             for (const auto& texture: fTextures) {
-                this->write("    _globals->");
+                this->write(separator);
+                separator = ", ";
                 this->writeName(texture->fName);
-                this->write(" = ");
-                this->writeName(texture->fName);
-                this->write(";\n");
-                this->write("    _globals->");
+                this->write(separator);
                 this->writeName(texture->fName);
                 this->write(SAMPLER_SUFFIX);
-                this->write(" = ");
-                this->writeName(texture->fName);
-                this->write(SAMPLER_SUFFIX);
-                this->write(";\n");
             }
+            this->writeLine("};");
+            this->writeLine("    thread Globals* _globals = &globalStruct;");
+            this->writeLine("    (void)_globals;");
         }
         this->writeLine("    Outputs _outputStruct;");
         this->writeLine("    thread Outputs* _out = &_outputStruct;");
@@ -1183,7 +1180,10 @@ void MetalCodeGenerator::writeStatement(const Statement& s) {
             this->write(";");
             break;
         default:
+#ifdef SK_DEBUG
             ABORT("unsupported statement: %s", s.description().c_str());
+#endif
+            break;
     }
 }
 
@@ -1504,8 +1504,10 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
             this->writeLine(";");
             break;
         default:
-            printf("%s\n", e.description().c_str());
-            ABORT("unsupported program element");
+#ifdef SK_DEBUG
+            ABORT("unsupported program element: %s\n", e.description().c_str());
+#endif
+            break;
     }
 }
 

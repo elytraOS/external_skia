@@ -27,7 +27,6 @@ class GrBackendSemaphore;
 class GrClip;
 class GrColorSpaceXform;
 class GrCoverageCountingPathRenderer;
-class GrDrawingManager;
 class GrDrawOp;
 class GrFixedClip;
 class GrOp;
@@ -58,6 +57,10 @@ class SkVertices;
  */
 class GrRenderTargetContext : public GrSurfaceContext {
 public:
+    GrRenderTargetContext(GrRecordingContext*, sk_sp<GrRenderTargetProxy>, GrColorType,
+                          GrSurfaceOrigin, GrSwizzle readSwizzle, GrSwizzle outSwizzle,
+                          sk_sp<SkColorSpace>, const SkSurfaceProps*, bool managedOpsTask = true);
+
     ~GrRenderTargetContext() override;
 
     virtual void drawGlyphRunList(const GrClip&, const SkMatrix& viewMatrix, const SkGlyphRunList&);
@@ -486,34 +489,18 @@ public:
      */
     bool waitOnSemaphores(int numSemaphores, const GrBackendSemaphore waitSemaphores[]);
 
-    void insertEventMarker(const SkString&);
-
-    const GrRenderTargetProxy* proxy() const { return fRenderTargetProxy.get(); }
-    int width() const { return fRenderTargetProxy->width(); }
-    int height() const { return fRenderTargetProxy->height(); }
-    int numSamples() const { return fRenderTargetProxy->numSamples(); }
+    int numSamples() const { return this->asRenderTargetProxy()->numSamples(); }
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
-    bool wrapsVkSecondaryCB() const { return fRenderTargetProxy->wrapsVkSecondaryCB(); }
+    bool wrapsVkSecondaryCB() const { return this->asRenderTargetProxy()->wrapsVkSecondaryCB(); }
     GrMipMapped mipMapped() const;
 
     GrSurfaceProxyView outputSurfaceView() {
-        return { fRenderTargetProxy, fOrigin, fOutputSwizzle };
+        return { fSurfaceProxy, fOrigin, fOutputSwizzle };
     }
 
     // This entry point should only be called if the backing GPU object is known to be
     // instantiated.
-    GrRenderTarget* accessRenderTarget() { return fRenderTargetProxy->peekRenderTarget(); }
-
-    GrSurfaceProxy* asSurfaceProxy() override { return fRenderTargetProxy.get(); }
-    const GrSurfaceProxy* asSurfaceProxy() const override { return fRenderTargetProxy.get(); }
-    sk_sp<GrSurfaceProxy> asSurfaceProxyRef() override { return fRenderTargetProxy; }
-
-    GrTextureProxy* asTextureProxy() override;
-    const GrTextureProxy* asTextureProxy() const override;
-    sk_sp<GrTextureProxy> asTextureProxyRef() override;
-
-    GrRenderTargetProxy* asRenderTargetProxy() override { return fRenderTargetProxy.get(); }
-    sk_sp<GrRenderTargetProxy> asRenderTargetProxyRef() override { return fRenderTargetProxy; }
+    GrRenderTarget* accessRenderTarget() { return fSurfaceProxy->peekRenderTarget(); }
 
     GrRenderTargetContext* asRenderTargetContext() override { return this; }
 
@@ -524,7 +511,7 @@ public:
     GrTextTarget* textTarget() { return fTextTarget.get(); }
 
 #if GR_TEST_UTILS
-    bool testingOnly_IsInstantiated() const { return fRenderTargetProxy->isInstantiated(); }
+    bool testingOnly_IsInstantiated() const { return fSurfaceProxy->isInstantiated(); }
     void testingOnly_SetPreserveOpsOnFullClear() { fPreserveOpsOnFullClear_TestingOnly = true; }
     GrOpsTask* testingOnly_PeekLastOpsTask() { return fOpsTask.get(); }
 #endif
@@ -539,7 +526,6 @@ private:
     friend class GrClipStackClip;               // for access to getOpsTask
     friend class GrOnFlushResourceProvider;     // for access to getOpsTask (http://skbug.com/9357)
 
-    friend class GrDrawingManager; // for ctor
     friend class GrRenderTargetContextPriv;
 
     // All the path renderers currently make their own ops
@@ -557,11 +543,7 @@ private:
     friend class GrFillRectOp;                       // for access to addDrawOp
     friend class GrTextureOp;                        // for access to addDrawOp
 
-    GrRenderTargetContext(GrRecordingContext*, sk_sp<GrRenderTargetProxy>, GrColorType,
-                          GrSurfaceOrigin, GrSwizzle texSwizzle, GrSwizzle outSwizzle,
-                          sk_sp<SkColorSpace>, const SkSurfaceProps*, bool managedOpsTask = true);
-
-    SkDEBUGCODE(void validate() const override;)
+    SkDEBUGCODE(void onValidate() const override;)
 
 
     GrOpsTask::CanDiscardPreviousOps canDiscardPreviousOpsOnFullClear() const;
@@ -651,7 +633,6 @@ private:
 
     std::unique_ptr<GrTextTarget> fTextTarget;
 
-    sk_sp<GrRenderTargetProxy> fRenderTargetProxy;
     GrSwizzle fOutputSwizzle;
 
     // In MDB-mode the GrOpsTask can be closed by some other renderTargetContext that has picked

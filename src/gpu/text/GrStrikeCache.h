@@ -8,12 +8,12 @@
 #ifndef GrStrikeCache_DEFINED
 #define GrStrikeCache_DEFINED
 
+#include "include/private/SkTHash.h"
 #include "src/codec/SkMasks.h"
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkTDynamicHash.h"
 #include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/GrGlyph.h"
-
 
 class GrAtlasManager;
 class GrGpu;
@@ -59,14 +59,18 @@ public:
     // If a TextStrike is abandoned by the cache, then the caller must get a new strike
     bool isAbandoned() const { return fIsAbandoned; }
 
-    static const SkDescriptor& GetKey(const GrTextStrike& strike) {
-        return *strike.fFontScalerKey.getDesc();
-    }
-
-    static uint32_t Hash(const SkDescriptor& desc) { return desc.getChecksum(); }
-
 private:
-    SkTDynamicHash<GrGlyph, SkPackedGlyphID> fCache;
+    struct HashTraits {
+        // GetKey and Hash for the the hash table.
+        static const SkPackedGlyphID& GetKey(const GrGlyph* glyph) {
+            return glyph->fPackedID;
+        }
+
+        static uint32_t Hash(SkPackedGlyphID key) {
+            return SkChecksum::Mix(key.hash());
+        }
+    };
+    SkTHashTable<GrGlyph*, SkPackedGlyphID, HashTraits> fCache;
     SkAutoDescriptor fFontScalerKey;
     SkArenaAlloc fAlloc{512};
 
@@ -92,11 +96,10 @@ public:
     // Therefore, the caller must check GrTextStrike::isAbandoned() if there are other
     // interactions with the cache since the strike was received.
     sk_sp<GrTextStrike> getStrike(const SkDescriptor& desc) {
-        sk_sp<GrTextStrike> strike = sk_ref_sp(fCache.find(desc));
-        if (!strike) {
-            strike = this->generateStrike(desc);
+        if (sk_sp<GrTextStrike>* cached = fCache.find(desc)) {
+            return *cached;
         }
-        return strike;
+        return this->generateStrike(desc);
     }
 
     const SkMasks& getMasks() const { return *f565Masks; }
@@ -107,13 +110,19 @@ public:
 
 private:
     sk_sp<GrTextStrike> generateStrike(const SkDescriptor& desc) {
-        // 'fCache' get the construction ref
-        sk_sp<GrTextStrike> strike = sk_ref_sp(new GrTextStrike(desc));
-        fCache.add(strike.get());
+        sk_sp<GrTextStrike> strike = sk_make_sp<GrTextStrike>(desc);
+        fCache.set(strike);
         return strike;
     }
 
-    using StrikeHash = SkTDynamicHash<GrTextStrike, SkDescriptor>;
+    struct DescriptorHashTraits {
+        static const SkDescriptor& GetKey(const sk_sp<GrTextStrike>& strike) {
+            return *strike->fFontScalerKey.getDesc();
+        }
+        static uint32_t Hash(const SkDescriptor& desc) { return desc.getChecksum(); }
+    };
+
+    using StrikeHash = SkTHashTable<sk_sp<GrTextStrike>, SkDescriptor, DescriptorHashTraits>;
 
     StrikeHash fCache;
     GrTextStrike* fPreserveStrike;

@@ -101,8 +101,8 @@ void GrPipeline::genKey(GrProcessorKeyBuilder* b, const GrCaps& caps) const {
 
     static const uint32_t kBlendWriteShift = 1;
     static const uint32_t kBlendCoeffShift = 5;
-    GR_STATIC_ASSERT(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
-    GR_STATIC_ASSERT(kFirstAdvancedGrBlendEquation - 1 < 4);
+    static_assert(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
+    static_assert(kFirstAdvancedGrBlendEquation - 1 < 4);
 
     uint32_t blendKey = blendInfo.fWriteColor;
     blendKey |= (blendInfo.fSrcBlend << kBlendWriteShift);
@@ -116,7 +116,7 @@ void GrPipeline::visitProxies(const GrOp::VisitProxyFunc& func) const {
     // This iteration includes any clip coverage FPs
     for (auto [sampler, fp] : GrFragmentProcessor::PipelineTextureSamplerRange(*this)) {
         bool mipped = (GrSamplerState::Filter::kMipMap == sampler.samplerState().filter());
-        func(sampler.proxy(), GrMipMapped(mipped));
+        func(sampler.view().proxy(), GrMipMapped(mipped));
     }
     if (fDstProxyView.asTextureProxy()) {
         func(fDstProxyView.asTextureProxy(), GrMipMapped::kNo);

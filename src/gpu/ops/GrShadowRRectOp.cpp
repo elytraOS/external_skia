@@ -610,7 +610,8 @@ private:
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         ShadowCircularRRectOp* that = t->cast<ShadowCircularRRectOp>();
         fGeoData.push_back_n(that->fGeoData.count(), that->fGeoData.begin());
         fVertCount += that->fVertCount;
@@ -691,7 +692,7 @@ std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
     if (!falloffTexture) {
         return nullptr;
     }
-    GrSwizzle swizzle = context->priv().caps()->getTextureSwizzle(falloffTexture->backendFormat(),
+    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(falloffTexture->backendFormat(),
                                                                   GrColorType::kAlpha_8);
 
     GrSurfaceProxyView falloffView(std::move(falloffTexture), kTopLeft_GrSurfaceOrigin, swizzle);

@@ -122,8 +122,9 @@ sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot(const SkIRect* subset) {
         // The renderTargetContext coming out of SkGpuDevice should always be exact and the
         // above copy creates a kExact surfaceContext.
         SkASSERT(srcProxy->priv().isExact());
+        GrSurfaceProxyView view(std::move(srcProxy), rtc->origin(), rtc->readSwizzle());
         image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(ctx), kNeedNewImageUniqueID, info.alphaType(),
-                                        std::move(srcProxy), info.refColorSpace());
+                                        std::move(view), info.refColorSpace());
     }
     return image;
 }
@@ -225,7 +226,7 @@ bool SkSurface_Gpu::onCharacterize(SkSurfaceCharacterization* characterization) 
                           SkSurfaceCharacterization::MipMapped(mipmapped),
                           SkSurfaceCharacterization::UsesGLFBO0(usesGLFBO0),
                           SkSurfaceCharacterization::VulkanSecondaryCBCompatible(false),
-                          GrProtected(rtc->asRenderTargetProxy()->isProtected()),
+                          rtc->asRenderTargetProxy()->isProtected(),
                           this->props());
     return true;
 }
@@ -255,9 +256,10 @@ void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPai
         // Possibly we could skip making an image here if SkGpuDevice exposed a lower level way
         // of drawing a texture proxy.
         const SkImageInfo info = fDevice->imageInfo();
+        GrSurfaceProxyView view(std::move(srcProxy), rtc->origin(), rtc->readSwizzle());
         sk_sp<SkImage> image;
         image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(context), kNeedNewImageUniqueID, info.alphaType(),
-                                        std::move(srcProxy), info.refColorSpace());
+                                        std::move(view), info.refColorSpace());
         canvas->drawImage(image, x, y, paint);
         return true;
     };
@@ -308,7 +310,7 @@ bool SkSurface_Gpu::onIsCompatible(const SkSurfaceCharacterization& characteriza
         return false;
     }
 
-    GrProtected isProtected = GrProtected(rtc->asSurfaceProxy()->isProtected());
+    GrProtected isProtected = rtc->asSurfaceProxy()->isProtected();
 
     return characterization.contextInfo() && characterization.contextInfo()->priv().matches(ctx) &&
            characterization.cacheMaxResourceBytes() <= maxResourceBytes &&

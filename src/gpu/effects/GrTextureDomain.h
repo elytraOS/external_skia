@@ -178,11 +178,11 @@ public:
          * account for the texture's origin. Filtering at the edge of the domain is inferred from
          * the GrSamplerState's filter mode.
          */
-        void setData(const GrGLSLProgramDataManager&, const GrTextureDomain&, const GrSurfaceProxy*,
-                     const GrSamplerState& state);
+        void setData(const GrGLSLProgramDataManager&, const GrTextureDomain&,
+                     const GrSurfaceProxyView&, const GrSamplerState& state);
         /** Same as above but with direct control over decal filtering. */
         void setData(const GrGLSLProgramDataManager&, const GrTextureDomain&, const GrSurfaceProxy*,
-                     bool filterIfDecal);
+                     GrSurfaceOrigin, bool filterIfDecal);
 
         enum {
             kModeBits = 3,  // See DomainKey().
@@ -194,7 +194,7 @@ public:
          * computed key. The returned will be limited to the lower kDomainKeyBits bits.
          */
         static uint32_t DomainKey(const GrTextureDomain& domain) {
-            GR_STATIC_ASSERT(kModeCount <= (1 << kModeBits));
+            static_assert(kModeCount <= (1 << kModeBits));
             return domain.modeX() | (domain.modeY() << kModeBits);
         }
 

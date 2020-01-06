@@ -75,6 +75,7 @@ enum class FormatCompatibilityClass {
     k24_3_1,
     k32_4_1,
     k64_8_1,
+    kBC1_RGB_8_16,
     kETC2_RGB_8_16,
 };
 }  // anonymous namespace
@@ -109,6 +110,9 @@ static FormatCompatibilityClass format_compatibility_class(VkFormat format) {
 
         case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
             return FormatCompatibilityClass::kETC2_RGB_8_16;
+
+        case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+            return FormatCompatibilityClass::kBC1_RGB_8_16;
 
         default:
             SK_ABORT("Unsupported VkFormat");
@@ -179,7 +183,7 @@ bool GrVkCaps::canCopyAsResolve(VkFormat dstFormat, int dstSampleCnt, bool dstHa
 
 bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
-    if (src->isProtected() && !dst->isProtected()) {
+    if (src->isProtected() == GrProtected::kYes && dst->isProtected() != GrProtected::kYes) {
         return false;
     }
 
@@ -510,6 +514,12 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
         fMixedSamplesSupport = true;
     }
 
+    if (extensions.hasExtension(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME, 1)) {
+        fConservativeRasterSupport = true;
+    }
+
+    fWireframeSupport = true;
+
     // We could actually query and get a max size for each config, however maxImageDimension2D will
     // give the minimum max size across all configs. So for simplicity we will use that for now.
     fMaxRenderTargetSize = SkTMin(properties.limits.maxImageDimension2D, (uint32_t)INT_MAX);
@@ -657,6 +667,7 @@ static constexpr VkFormat kVkFormats[] = {
     VK_FORMAT_R4G4B4A4_UNORM_PACK16,
     VK_FORMAT_R8G8B8A8_SRGB,
     VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,
+    VK_FORMAT_BC1_RGB_UNORM_BLOCK,
     VK_FORMAT_R16_UNORM,
     VK_FORMAT_R16G16_UNORM,
     VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
@@ -744,7 +755,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RGB1();
+                ctInfo.fReadSwizzle = GrSwizzle::RGB1();
             }
         }
     }
@@ -765,7 +776,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
             }
             // Format: VK_FORMAT_R8_UNORM, Surface: kGray_8
@@ -774,7 +785,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle("rrr1");
+                ctInfo.fReadSwizzle = GrSwizzle("rrr1");
             }
         }
     }
@@ -858,7 +869,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
             }
         }
@@ -936,7 +947,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::BGRA();
+                ctInfo.fReadSwizzle = GrSwizzle::BGRA();
                 ctInfo.fOutputSwizzle = GrSwizzle::BGRA();
             }
         }
@@ -995,7 +1006,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
                 ctInfo.fColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fTextureSwizzle = GrSwizzle::RRRR();
+                ctInfo.fReadSwizzle = GrSwizzle::RRRR();
                 ctInfo.fOutputSwizzle = GrSwizzle::AAAA();
             }
         }
@@ -1108,6 +1119,15 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
     // Format: VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK
     {
         constexpr VkFormat format = VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+        auto& info = this->getFormatInfo(format);
+        info.init(interface, physDev, properties, format);
+        info.fBytesPerPixel = 0;
+        // No supported GrColorTypes.
+    }
+
+    // Format: VK_FORMAT_BC1_RGB_UNORM_BLOCK
+    {
+        constexpr VkFormat format = VK_FORMAT_BC1_RGB_UNORM_BLOCK;
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
         info.fBytesPerPixel = 0;
@@ -1249,23 +1269,19 @@ bool GrVkCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format_is_srgb(vkFormat);
 }
 
-bool GrVkCaps::isFormatCompressed(const GrBackendFormat& format,
-                                  SkImage::CompressionType* compressionType) const {
+SkImage::CompressionType GrVkCaps::compressionType(const GrBackendFormat& format) const {
     VkFormat vkFormat;
     if (!format.asVkFormat(&vkFormat)) {
-        return false;
+        return SkImage::CompressionType::kNone;
     }
-    SkImage::CompressionType dummyType;
-    SkImage::CompressionType* compressionTypePtr = compressionType ? compressionType : &dummyType;
 
     switch (vkFormat) {
-        case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
-            // ETC2 uses the same compression layout as ETC1
-            *compressionTypePtr = SkImage::CompressionType::kETC1;
-            return true;
-        default:
-            return false;
+        case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK: return SkImage::CompressionType::kETC1;
+        case VK_FORMAT_BC1_RGB_UNORM_BLOCK:     return SkImage::CompressionType::kBC1_RGB8_UNORM;
+        default:                                return SkImage::CompressionType::kNone;
     }
+
+    SkUNREACHABLE;
 }
 
 bool GrVkCaps::isFormatTexturableAndUploadable(GrColorType ct,
@@ -1439,8 +1455,7 @@ GrCaps::SurfaceReadPixelsSupport GrVkCaps::surfaceSupportsReadPixels(
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         // We can't directly read from a compressed format
-        SkImage::CompressionType compressionType;
-        if (GrVkFormatToCompressionType(tex->imageFormat(), &compressionType)) {
+        if (GrVkFormatIsCompressed(tex->imageFormat())) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
     }
@@ -1544,6 +1559,8 @@ static GrPixelConfig validate_image_info(VkFormat format, GrColorType ct, bool h
                 return kRGB_888X_GrPixelConfig;
             } else if (VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK == format) {
                 return kRGB_ETC1_GrPixelConfig;
+            } else if (VK_FORMAT_BC1_RGB_UNORM_BLOCK == format) {
+                return kRGB_BC1_GrPixelConfig;
             }
             break;
         case GrColorType::kRG_88:
@@ -1628,6 +1645,20 @@ GrPixelConfig GrVkCaps::onGetConfigFromBackendFormat(const GrBackendFormat& form
     return validate_image_info(vkFormat, ct, ycbcrInfo->isValid());
 }
 
+GrPixelConfig GrVkCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFormat& f) const {
+    VkFormat vkFormat;
+    if (!f.asVkFormat(&vkFormat)) {
+        return kUnknown_GrPixelConfig;
+    }
+
+    if (vkFormat == VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK) {
+         return kRGB_ETC1_GrPixelConfig;
+    } else if (vkFormat == VK_FORMAT_BC1_RGB_UNORM_BLOCK) {
+        return kRGB_BC1_GrPixelConfig;
+    }
+    return kUnknown_GrPixelConfig;
+}
+
 GrColorType GrVkCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& format,
                                                         bool isAlphaChannel) const {
     VkFormat vkFormat;
@@ -1669,20 +1700,28 @@ GrBackendFormat GrVkCaps::getBackendFormatFromCompressionType(
         case SkImage::CompressionType::kNone:
             return {};
         case SkImage::CompressionType::kETC1:
-            return GrBackendFormat::MakeVk(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK);
+            if (this->isVkFormatTexturable(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK)) {
+                return GrBackendFormat::MakeVk(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK);
+            }
+            return {};
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:
+            if (this->isVkFormatTexturable(VK_FORMAT_BC1_RGB_UNORM_BLOCK)) {
+                return GrBackendFormat::MakeVk(VK_FORMAT_BC1_RGB_UNORM_BLOCK);
+            }
+            return {};
     }
 
     SkUNREACHABLE;
 }
 
-GrSwizzle GrVkCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+GrSwizzle GrVkCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     VkFormat vkFormat;
     SkAssertResult(format.asVkFormat(&vkFormat));
     const auto& info = this->getFormatInfo(vkFormat);
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == colorType) {
-            return ctInfo.fTextureSwizzle;
+            return ctInfo.fReadSwizzle;
         }
     }
     return GrSwizzle::RGBA();
@@ -1793,7 +1832,7 @@ GrProgramDesc GrVkCaps::makeDesc(const GrRenderTarget* rt, const GrProgramInfo& 
     b.add32(programInfo.numRasterSamples());
 
     // Vulkan requires the full primitive type as part of its key
-    b.add32((uint32_t)programInfo.primitiveType());
+    b.add32(programInfo.primitiveTypeKey());
 
     if (this->mixedSamplesSupport()) {
         // Add "0" to indicate that coverage modulation will not be enabled, or the (non-zero)
@@ -1815,7 +1854,6 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrVkCaps::getTestingCombinat
         { GrColorType::kRGBA_8888_SRGB,   GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8A8_SRGB)        },
         { GrColorType::kRGB_888x,         GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8A8_UNORM)       },
         { GrColorType::kRGB_888x,         GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8_UNORM)         },
-        { GrColorType::kRGB_888x,         GrBackendFormat::MakeVk(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK)},
         { GrColorType::kRG_88,            GrBackendFormat::MakeVk(VK_FORMAT_R8G8_UNORM)           },
         { GrColorType::kBGRA_8888,        GrBackendFormat::MakeVk(VK_FORMAT_B8G8R8A8_UNORM)       },
         { GrColorType::kRGBA_1010102,     GrBackendFormat::MakeVk(VK_FORMAT_A2B10G10R10_UNORM_PACK32)},
@@ -1827,6 +1865,9 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrVkCaps::getTestingCombinat
         { GrColorType::kRG_1616,          GrBackendFormat::MakeVk(VK_FORMAT_R16G16_UNORM)         },
         { GrColorType::kRGBA_16161616,    GrBackendFormat::MakeVk(VK_FORMAT_R16G16B16A16_UNORM)   },
         { GrColorType::kRG_F16,           GrBackendFormat::MakeVk(VK_FORMAT_R16G16_SFLOAT)        },
+        // These two compressed formats both have an effective colorType of kRGB_888x
+        { GrColorType::kRGB_888x,       GrBackendFormat::MakeVk(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK)},
+        { GrColorType::kRGB_888x,         GrBackendFormat::MakeVk(VK_FORMAT_BC1_RGB_UNORM_BLOCK)  },
     };
 
     return combos;

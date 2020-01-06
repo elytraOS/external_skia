@@ -124,6 +124,9 @@ public:
      */
     SkRect getBoundsRect() const { return SkRect::Make(this->dimensions()); }
 
+    /* A perhaps faster check for this->dimensions() == this->backingStoreDimensions(). */
+    bool isFunctionallyExact() const;
+
     /**
      * Helper that gets the dimensions the backing GrSurface will have as a bounding rectangle.
      */
@@ -303,8 +306,7 @@ public:
     inline GrSurfaceProxyPriv priv();
     inline const GrSurfaceProxyPriv priv() const;
 
-    // Returns true if we are working with protected content.
-    bool isProtected() const { return fIsProtected == GrProtected::kYes; }
+    GrProtected isProtected() const { return fIsProtected; }
 
 protected:
     // Deferred version - takes a new UniqueID from the shared resource/proxy pool.

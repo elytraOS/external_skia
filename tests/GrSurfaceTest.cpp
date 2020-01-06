@@ -82,36 +82,26 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
 
     // TODO: Should only need format here but need to determine compression type from format
     // without config.
-    auto createTexture = [](int width, int height, GrColorType colorType,
+    auto createTexture = [](SkISize dimensions, GrColorType colorType,
                             const GrBackendFormat& format, GrRenderable renderable,
                             GrResourceProvider* rp) -> sk_sp<GrTexture> {
-        GrPixelConfig config = rp->caps()->getConfigFromBackendFormat(format, colorType);
-        bool compressed = rp->caps()->isFormatCompressed(format);
-        if (compressed) {
+        SkImage::CompressionType compression = rp->caps()->compressionType(format);
+        if (compression != SkImage::CompressionType::kNone) {
             if (renderable == GrRenderable::kYes) {
                 return nullptr;
             }
-            SkImage::CompressionType type;
-            switch (config) {
-                case kRGB_ETC1_GrPixelConfig:
-                    type = SkImage::CompressionType::kETC1;
-                    break;
-                default:
-                    SK_ABORT("Unexpected config");
-            }
-            // Only supported compression type right now.
-            SkASSERT(config == kRGB_ETC1_GrPixelConfig);
-            auto size = GrCompressedDataSize(type, width, height);
+            auto size = GrCompressedDataSize(compression, dimensions, nullptr, GrMipMapped::kNo);
             auto data = SkData::MakeUninitialized(size);
             SkColor4f color = {0, 0, 0, 0};
-            GrFillInCompressedData(type, width, height, (char*)data->writable_data(), color);
-            return rp->createCompressedTexture(width, height, format,
-                                               SkImage::CompressionType::kETC1,
-                                               SkBudgeted::kNo, data.get());
+            GrFillInCompressedData(compression, dimensions, GrMipMapped::kNo,
+                                   (char*)data->writable_data(), color);
+            return rp->createCompressedTexture(dimensions, format, SkBudgeted::kNo, data.get());
         } else {
+            GrPixelConfig config = rp->caps()->getConfigFromBackendFormat(format, colorType);
+
             GrSurfaceDesc desc;
-            desc.fWidth = width;
-            desc.fHeight = height;
+            desc.fWidth = dimensions.width();
+            desc.fHeight = dimensions.height();
             desc.fConfig = config;
             return rp->createTexture(desc, format, renderable, 1, GrMipMapped::kNo, SkBudgeted::kNo,
                                      GrProtected::kNo);
@@ -140,23 +130,28 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
             GrSurfaceDesc desc;
             desc.fWidth = kW;
             desc.fHeight = kH;
-            desc.fConfig = caps->getConfigFromBackendFormat(combo.fFormat, combo.fColorType);
+
+            if (caps->isFormatCompressed(combo.fFormat)) {
+                desc.fConfig = caps->getConfigFromCompressedBackendFormat(combo.fFormat);
+            } else {
+                desc.fConfig = caps->getConfigFromBackendFormat(combo.fFormat, combo.fColorType);
+            }
             SkASSERT(desc.fConfig != kUnknown_GrPixelConfig);
 
             // Check if 'isFormatTexturable' agrees with 'createTexture' and that the mipmap
             // support check is working
             {
 
-                bool compressed = caps->isFormatCompressed(combo.fFormat);
+                bool isCompressed = caps->isFormatCompressed(combo.fFormat);
                 bool isTexturable;
-                if (compressed) {
+                if (isCompressed) {
                     isTexturable = caps->isFormatTexturable(combo.fFormat);
                 } else {
                     isTexturable = caps->isFormatTexturableAndUploadable(combo.fColorType,
                                                                          combo.fFormat);
                 }
 
-                sk_sp<GrSurface> tex = createTexture(kW, kH, combo.fColorType, combo.fFormat,
+                sk_sp<GrSurface> tex = createTexture({kW, kH}, combo.fColorType, combo.fFormat,
                                                      GrRenderable::kNo, resourceProvider);
                 REPORTER_ASSERT(reporter, SkToBool(tex) == isTexturable,
                                 "ct:%s format:%s, tex:%d, isTexturable:%d",
@@ -167,7 +162,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
                 // Check that the lack of mipmap support blocks the creation of mipmapped
                 // proxies
                 bool expectedMipMapability = isTexturable && caps->mipMapSupport() &&
-                                              !caps->isFormatCompressed(combo.fFormat);
+                                                !isCompressed;
 
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
                         combo.fFormat, desc, GrRenderable::kNo, 1, origin, GrMipMapped::kYes,
@@ -212,7 +207,6 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
 
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/GrTextureContext.h"
 
 // For each context, set it to always clear the textures and then run through all the
 // supported formats checking that the textures are actually cleared
@@ -307,8 +301,9 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                 {kSize, kSize}, combo.fColorType, combo.fFormat, renderable, 1,
                                 kTopLeft_GrSurfaceOrigin, fit, SkBudgeted::kYes, GrProtected::kNo);
                         if (proxy) {
-                            auto texCtx = context->priv().makeWrappedSurfaceContext(
-                                    std::move(proxy), combo.fColorType, kPremul_SkAlphaType);
+                            auto texCtx = GrSurfaceContext::Make(context, std::move(proxy),
+                                                                 combo.fColorType,
+                                                                 kPremul_SkAlphaType, nullptr);
 
                             readback.erase(kClearColor);
                             if (texCtx->readPixels(readback.info(), readback.writable_addr(),
@@ -332,10 +327,11 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                     fit, desc.fWidth, desc.fHeight, combo.fColorType, nullptr,
                                     1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin, nullptr);
                         } else {
-                            surfCtx = context->priv().makeDeferredTextureContext(
-                                    fit, desc.fWidth, desc.fHeight, combo.fColorType,
-                                    kUnknown_SkAlphaType, nullptr, GrMipMapped::kNo,
-                                    kTopLeft_GrSurfaceOrigin);
+                            surfCtx = GrSurfaceContext::Make(
+                                    context, {desc.fWidth, desc.fHeight}, combo.fFormat,
+                                    GrRenderable::kNo, 1, GrMipMapped::kNo, GrProtected::kNo,
+                                    kTopLeft_GrSurfaceOrigin, combo.fColorType,
+                                    kUnknown_SkAlphaType, nullptr, fit, SkBudgeted::kYes);
                         }
                         if (!surfCtx) {
                             continue;
@@ -402,8 +398,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture, reporter, context_info) {
                                                        kTopLeft_GrSurfaceOrigin,
                                                        kBorrow_GrWrapOwnership,
                                                        GrWrapCacheable::kNo, ioType);
-        auto surfContext = context->priv().makeWrappedSurfaceContext(proxy, GrColorType::kRGBA_8888,
-                                                                     kPremul_SkAlphaType);
+        auto surfContext = GrSurfaceContext::Make(context, proxy, GrColorType::kRGBA_8888,
+                                                  kPremul_SkAlphaType, nullptr);
 
         // Read pixels should work with a read-only texture.
         {

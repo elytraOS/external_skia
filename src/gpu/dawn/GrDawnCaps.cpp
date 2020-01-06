@@ -38,9 +38,8 @@ bool GrDawnCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return false;
 }
 
-bool GrDawnCaps::isFormatCompressed(const GrBackendFormat& format,
-                                    SkImage::CompressionType* compressionType) const {
-    return false;
+SkImage::CompressionType GrDawnCaps::compressionType(const GrBackendFormat& format) const {
+    return SkImage::CompressionType::kNone;
 }
 
 bool GrDawnCaps::isFormatTexturable(const GrBackendFormat& format) const {
@@ -84,6 +83,10 @@ GrPixelConfig GrDawnCaps::onGetConfigFromBackendFormat(const GrBackendFormat& fo
         default:
             break;
     }
+    return kUnknown_GrPixelConfig;
+}
+
+GrPixelConfig GrDawnCaps::onGetConfigFromCompressedBackendFormat(const GrBackendFormat&) const {
     return kUnknown_GrPixelConfig;
 }
 
@@ -185,7 +188,7 @@ GrBackendFormat GrDawnCaps::getBackendFormatFromCompressionType(SkImage::Compres
     return GrBackendFormat();
 }
 
-GrSwizzle GrDawnCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorType colorType) const
+GrSwizzle GrDawnCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
 {
     return get_swizzle(format, colorType, false);
 }
@@ -221,8 +224,8 @@ static uint32_t get_blend_info_key(const GrPipeline& pipeline) {
 
     static const uint32_t kBlendWriteShift = 1;
     static const uint32_t kBlendCoeffShift = 5;
-    GR_STATIC_ASSERT(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
-    GR_STATIC_ASSERT(kFirstAdvancedGrBlendEquation - 1 < 4);
+    static_assert(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
+    static_assert(kFirstAdvancedGrBlendEquation - 1 < 4);
 
     uint32_t key = blendInfo.fWriteColor;
     key |= (blendInfo.fSrcBlend << kBlendWriteShift);
@@ -258,7 +261,7 @@ GrProgramDesc GrDawnCaps::makeDesc(const GrRenderTarget* rt,
     b.add32(static_cast<uint32_t>(format));
     b.add32(static_cast<int32_t>(hasDepthStencil));
     b.add32(get_blend_info_key(programInfo.pipeline()));
-    b.add32(static_cast<uint32_t>(programInfo.primitiveType()));
+    b.add32(programInfo.primitiveTypeKey());
     return desc;
 }
 

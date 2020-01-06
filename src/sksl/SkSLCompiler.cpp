@@ -45,6 +45,10 @@ static const char* SKSL_GPU_INCLUDE =
 #include "sksl_gpu.inc"
 ;
 
+static const char* SKSL_BLEND_INCLUDE =
+#include "sksl_blend.inc"
+;
+
 static const char* SKSL_INTERP_INCLUDE =
 #include "sksl_interp.inc"
 ;
@@ -258,6 +262,9 @@ Compiler::Compiler(Flags flags)
     std::vector<std::unique_ptr<ProgramElement>> gpuIntrinsics;
     this->processIncludeFile(Program::kFragment_Kind, SKSL_GPU_INCLUDE, strlen(SKSL_GPU_INCLUDE),
                              symbols, &gpuIntrinsics, &fGpuSymbolTable);
+    this->processIncludeFile(Program::kFragment_Kind, SKSL_BLEND_INCLUDE,
+                             strlen(SKSL_BLEND_INCLUDE), std::move(fGpuSymbolTable), &gpuIntrinsics,
+                             &fGpuSymbolTable);
     grab_intrinsics(&gpuIntrinsics, &fGPUIntrinsics);
     // need to hang on to the source so that FunctionDefinition.fSource pointers in this file
     // remain valid
@@ -519,7 +526,8 @@ static bool is_dead(const Expression& lvalue) {
             return is_dead(*((FieldAccess&) lvalue).fBase);
         case Expression::kIndex_Kind: {
             const IndexExpression& idx = (IndexExpression&) lvalue;
-            return is_dead(*idx.fBase) && !idx.fIndex->hasSideEffects();
+            return is_dead(*idx.fBase) &&
+                   !idx.fIndex->hasProperty(Expression::Property::kSideEffects);
         }
         case Expression::kTernary_Kind: {
             const TernaryExpression& t = (TernaryExpression&) lvalue;
@@ -528,7 +536,10 @@ static bool is_dead(const Expression& lvalue) {
         case Expression::kExternalValue_Kind:
             return false;
         default:
+#ifdef SK_DEBUG
             ABORT("invalid lvalue: %s\n", lvalue.description().c_str());
+#endif
+            return false;
     }
 }
 
@@ -1590,18 +1601,16 @@ bool Compiler::toH(Program& program, String name, OutputStream& out) {
 #endif
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-bool Compiler::toPipelineStage(const Program& program, String* out,
-                               std::vector<FormatArg>* outFormatArgs,
-                               std::vector<GLSLFunction>* outFunctions) {
+bool Compiler::toPipelineStage(const Program& program, PipelineStageArgs* outArgs) {
     SkASSERT(program.fIsOptimized);
     fSource = program.fSource.get();
     StringStream buffer;
-    PipelineStageCodeGenerator cg(fContext.get(), &program, this, &buffer, outFormatArgs,
-                                  outFunctions);
+    PipelineStageCodeGenerator cg(fContext.get(), &program, this, &buffer, &outArgs->fFormatArgs,
+                                  &outArgs->fFunctions);
     bool result = cg.generateCode();
     fSource = nullptr;
     if (result) {
-        *out = buffer.str();
+        outArgs->fCode = buffer.str();
     }
     return result;
 }

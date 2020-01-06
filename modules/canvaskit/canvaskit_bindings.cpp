@@ -45,15 +45,15 @@
 #include "include/effects/SkDiscretePathEffect.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
+#include "include/effects/SkRuntimeEffect.h"
 #include "include/effects/SkTrimPathEffect.h"
 #include "include/pathops/SkPathOps.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/core/SkFontMgrPriv.h"
-#include "src/core/SkMakeUnique.h"
 #include "src/core/SkResourceCache.h"
-#include "src/shaders/SkRTShader.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #include <iostream>
 #include <string>
@@ -1343,7 +1343,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return SkShaders::Blend(mode, dst, src, &m);
         }))
         .class_function("Color", select_overload<sk_sp<SkShader>(SkColor)>(&SkShaders::Color))
-        .class_function("Empty", &SkShaders::Empty)
         .class_function("_Lerp", optional_override([](float t, sk_sp<SkShader> dst, sk_sp<SkShader> src)->sk_sp<SkShader> {
             return SkShaders::Lerp(t, dst, src, nullptr);
         }))
@@ -1353,22 +1352,28 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return SkShaders::Lerp(t, dst, src, &m);
         }));
 
-    class_<SkRuntimeShaderFactory>("_RTShaderFactory")
-        .class_function("MakeFromProgram", optional_override([](std::string sksl, bool isOpaque)->SkRuntimeShaderFactory {
+    class_<SkRuntimeEffect>("_SkRuntimeEffect")
+        .smart_ptr<sk_sp<SkRuntimeEffect>>("sk_sp<_SkRuntimeEffect>")
+        .class_function("Make", optional_override([](std::string sksl)->sk_sp<SkRuntimeEffect> {
             SkString s(sksl.c_str(), sksl.length());
-            return SkRuntimeShaderFactory(s, isOpaque);
+            auto [effect, errorText] = SkRuntimeEffect::Make(s);
+            if (!effect) {
+                SkDebugf("Runtime effect failed to compile:\n%s\n", errorText.c_str());
+            }
+            return effect;
         }))
-        .function("_make", optional_override([](SkRuntimeShaderFactory& self, uintptr_t fptr, size_t len)->sk_sp<SkShader> {
-            uint8_t* floatData = reinterpret_cast<uint8_t*>(fptr);
-            sk_sp<SkData> bytes = SkData::MakeFromMalloc(floatData, len);
-            return self.make(bytes, nullptr);
+        .function("_makeShader", optional_override([](SkRuntimeEffect& self, uintptr_t fptr, size_t len, bool isOpaque)->sk_sp<SkShader> {
+            // See comment above for uintptr_t explanation
+            void* inputData = reinterpret_cast<void*>(fptr);
+            sk_sp<SkData> inputs = SkData::MakeFromMalloc(inputData, len);
+            return self.makeShader(inputs, nullptr, 0, nullptr, isOpaque);
         }))
-        .function("_make", optional_override([](SkRuntimeShaderFactory& self, uintptr_t fptr, size_t len,
-                                                SimpleMatrix sm)->sk_sp<SkShader> {
-            uint8_t* floatData = reinterpret_cast<uint8_t*>(fptr);
-            sk_sp<SkData> bytes = SkData::MakeFromMalloc(floatData, len);
+        .function("_makeShader", optional_override([](SkRuntimeEffect& self, uintptr_t fptr, size_t len, bool isOpaque, SimpleMatrix sm)->sk_sp<SkShader> {
+            // See comment above for uintptr_t explanation
+            void* inputData = reinterpret_cast<void*>(fptr);
+            sk_sp<SkData> inputs = SkData::MakeFromMalloc(inputData, len);
             auto m = toSkMatrix(sm);
-            return self.make(bytes, &m);
+            return self.makeShader(inputs, nullptr, 0, &m, isOpaque);
         }));
 
     class_<SkSurface>("SkSurface")
@@ -1694,7 +1699,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("CUBIC_VERB", CUBIC);
     constant("CLOSE_VERB", CLOSE);
 
-    constant("SaveLayerInitWithPrevious", SkCanvas::SaveLayerFlagsSet::kInitWithPrevious_SaveLayerFlag);
-    constant("SaveLayerF16ColorType",     SkCanvas::SaveLayerFlagsSet::kF16ColorType);
+    constant("SaveLayerInitWithPrevious", (int)SkCanvas::SaveLayerFlagsSet::kInitWithPrevious_SaveLayerFlag);
+    constant("SaveLayerF16ColorType",     (int)SkCanvas::SaveLayerFlagsSet::kF16ColorType);
 
 }

@@ -450,7 +450,8 @@ private:
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         DefaultPathOp* that = t->cast<DefaultPathOp>();
         if (!fHelper.isCompatible(that->fHelper, caps, this->bounds(), that->bounds())) {
             return CombineResult::kCannotCombine;
@@ -464,7 +465,7 @@ private:
             return CombineResult::kCannotCombine;
         }
 
-        if (!this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
+        if (!SkMatrixPriv::CheapEqual(this->viewMatrix(), that->viewMatrix())) {
             return CombineResult::kCannotCombine;
         }
 
@@ -545,7 +546,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
             }
             lastPassIsBounds = false;
         } else {
-            switch (path.getNewFillType()) {
+            switch (path.getFillType()) {
                 case SkPathFillType::kInverseEvenOdd:
                     reverse = true;
                     // fallthrough

@@ -11,6 +11,7 @@
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
 #include "include/core/SkPixelRef.h"
+#include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/GrRecordingContext.h"
@@ -34,7 +35,6 @@
 #include "src/gpu/GrPaint.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrSkSLFPFactoryCache.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
@@ -126,7 +126,7 @@ void GrInstallBitmapUniqueKeyInvalidator(const GrUniqueKey& key, uint32_t contex
 }
 
 sk_sp<GrTextureProxy> GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
-                                                     GrTextureProxy* baseProxy,
+                                                     GrSurfaceProxy* baseProxy,
                                                      GrColorType srcColorType) {
     SkASSERT(baseProxy);
 
@@ -469,8 +469,8 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
         grPaint->numColorFragmentProcessors() > 0) {
         int32_t ditherRange = dither_range_type_for_config(ct);
         if (ditherRange >= 0) {
-            static int ditherIndex = GrSkSLFP::NewIndex();
-            auto ditherFP = GrSkSLFP::Make(context, ditherIndex, "Dither", SKSL_DITHER_SRC,
+            static auto effect = std::get<0>(SkRuntimeEffect::Make(SkString(SKSL_DITHER_SRC)));
+            auto ditherFP = GrSkSLFP::Make(context, effect, "Dither",
                                            &ditherRange, sizeof(ditherRange));
             if (ditherFP) {
                 grPaint->addColorFragmentProcessor(std::move(ditherFP));

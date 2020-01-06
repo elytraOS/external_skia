@@ -340,7 +340,7 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffectImpl::onFilterImage(const Context& 
         if (!colorProxy || !displProxy) {
             return nullptr;
         }
-        const auto isProtected = colorProxy->isProtected() ? GrProtected::kYes : GrProtected::kNo;
+        const auto isProtected = colorProxy->isProtected();
 
         SkMatrix offsetMatrix = SkMatrix::MakeTrans(SkIntToScalar(colorOffset.fX - displOffset.fX),
                                                     SkIntToScalar(colorOffset.fY - displOffset.fY));
@@ -545,12 +545,8 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrDisplacementMapEffect);
 
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrDisplacementMapEffect::TestCreate(GrProcessorTestData* d) {
-    int texIdxDispl = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
-                                               GrProcessorUnitTest::kAlphaTextureIdx;
-    int texIdxColor = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
-                                               GrProcessorUnitTest::kAlphaTextureIdx;
-    sk_sp<GrTextureProxy> dispProxy = d->textureProxy(texIdxDispl);
-    sk_sp<GrTextureProxy> colorProxy = d->textureProxy(texIdxColor);
+    auto [dispProxy,  ct1, at1] = d->randomProxy();
+    auto [colorProxy, ct2, at2] = d->randomProxy();
     static const int kMaxComponent = static_cast<int>(SkColorChannel::kLastEnum);
     SkColorChannel xChannelSelector =
         static_cast<SkColorChannel>(d->fRandom->nextRangeU(1, kMaxComponent));
@@ -648,15 +644,15 @@ void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
 void GrGLDisplacementMapEffect::onSetData(const GrGLSLProgramDataManager& pdman,
                                           const GrFragmentProcessor& proc) {
     const GrDisplacementMapEffect& displacementMap = proc.cast<GrDisplacementMapEffect>();
-    GrSurfaceProxy* proxy = displacementMap.textureSampler(1).proxy();
-    SkISize texDimensions = proxy->backingStoreDimensions();
+    const auto& view = displacementMap.textureSampler(1).view();
+    SkISize texDimensions = view.proxy()->backingStoreDimensions();
 
     SkScalar scaleX = displacementMap.scale().fX / texDimensions.width();
     SkScalar scaleY = displacementMap.scale().fY / texDimensions.height();
     pdman.set2f(fScaleUni, SkScalarToFloat(scaleX),
-                proxy->origin() == kTopLeft_GrSurfaceOrigin ?
+                view.origin() == kTopLeft_GrSurfaceOrigin ?
                 SkScalarToFloat(scaleY) : SkScalarToFloat(-scaleY));
-    fGLDomain.setData(pdman, displacementMap.domain(), proxy,
+    fGLDomain.setData(pdman, displacementMap.domain(), view,
                       displacementMap.textureSampler(1).samplerState());
 }
 

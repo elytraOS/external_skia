@@ -17,8 +17,8 @@
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
+#include "src/gpu/effects/GrSimpleTextureEffect.h"
 #include "src/gpu/effects/GrTextureDomain.h"
-#include "src/gpu/effects/generated/GrSimpleTextureEffect.h"
 
 sk_sp<GrTextureProxy> GrTextureProducer::CopyOnGpu(GrRecordingContext* context,
                                                    sk_sp<GrTextureProxy> inputProxy,
@@ -37,7 +37,7 @@ sk_sp<GrTextureProxy> GrTextureProducer::CopyOnGpu(GrRecordingContext* context,
     if (copyParams.fFilter != GrSamplerState::Filter::kNearest) {
         bool resizing = localRect.width()  != dstRect.width() ||
                         localRect.height() != dstRect.height();
-        needsDomain = resizing && !GrProxyProvider::IsFunctionallyExact(inputProxy.get());
+        needsDomain = resizing && inputProxy->isFunctionallyExact();
     }
 
     if (copyParams.fFilter == GrSamplerState::Filter::kNearest && !needsDomain && !resizing &&
@@ -99,7 +99,7 @@ GrTextureProducer::DomainMode GrTextureProducer::DetermineDomainMode(
 
     SkASSERT(proxyBounds.contains(constraintRect));
 
-    const bool proxyIsExact = GrProxyProvider::IsFunctionallyExact(proxy);
+    const bool proxyIsExact = proxy->isFunctionallyExact();
 
     // If the constraint rectangle contains the whole proxy then no need for a domain.
     if (constraintRect.contains(proxyBounds) && proxyIsExact) {

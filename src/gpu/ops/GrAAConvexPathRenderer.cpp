@@ -48,15 +48,15 @@ struct Segment {
     SkVector fMid;
 
     int countPoints() {
-        GR_STATIC_ASSERT(0 == kLine && 1 == kQuad);
+        static_assert(0 == kLine && 1 == kQuad);
         return fType + 1;
     }
     const SkPoint& endPt() const {
-        GR_STATIC_ASSERT(0 == kLine && 1 == kQuad);
+        static_assert(0 == kLine && 1 == kQuad);
         return fPts[fType];
     }
     const SkPoint& endNorm() const {
-        GR_STATIC_ASSERT(0 == kLine && 1 == kQuad);
+        static_assert(0 == kLine && 1 == kQuad);
         return fNorms[fType];
     }
 };
@@ -829,13 +829,14 @@ private:
         flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override {
         AAConvexPathOp* that = t->cast<AAConvexPathOp>();
         if (!fHelper.isCompatible(that->fHelper, caps, this->bounds(), that->bounds())) {
             return CombineResult::kCannotCombine;
         }
         if (fHelper.usesLocalCoords() &&
-            !fPaths[0].fViewMatrix.cheapEqualTo(that->fPaths[0].fViewMatrix)) {
+            !SkMatrixPriv::CheapEqual(fPaths[0].fViewMatrix, that->fPaths[0].fViewMatrix)) {
             return CombineResult::kCannotCombine;
         }
 

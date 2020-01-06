@@ -95,8 +95,8 @@ public:
     /*
      * Create a texture proxy from compressed texture data.
      */
-    sk_sp<GrTextureProxy> createCompressedTextureProxy(int width, int height, SkBudgeted budgeted,
-                                                       SkImage::CompressionType compressionType,
+    sk_sp<GrTextureProxy> createCompressedTextureProxy(SkISize dimensions, SkBudgeted,
+                                                       SkImage::CompressionType,
                                                        sk_sp<SkData> data);
 
     // These match the definitions in SkImage & GrTexture.h, for whence they came
@@ -110,6 +110,11 @@ public:
     sk_sp<GrTextureProxy> wrapBackendTexture(const GrBackendTexture&, GrColorType, GrSurfaceOrigin,
                                              GrWrapOwnership, GrWrapCacheable, GrIOType,
                                              ReleaseProc = nullptr, ReleaseContext = nullptr);
+
+    sk_sp<GrTextureProxy> wrapCompressedBackendTexture(const GrBackendTexture&, GrSurfaceOrigin,
+                                                       GrWrapOwnership, GrWrapCacheable,
+                                                       ReleaseProc = nullptr,
+                                                       ReleaseContext = nullptr);
 
     /*
      * Create a texture proxy that wraps a backend texture and is both texture-able and renderable
@@ -199,10 +204,6 @@ public:
                                                     GrPixelConfig,
                                                     const GrCaps&,
                                                     UseAllocator);
-
-    // 'proxy' is about to be used as a texture src or drawn to. This query can be used to
-    // determine if it is going to need a texture domain or a full clear.
-    static bool IsFunctionallyExact(GrSurfaceProxy* proxy);
 
     enum class InvalidateGPUResource : bool { kNo = false, kYes = true };
 

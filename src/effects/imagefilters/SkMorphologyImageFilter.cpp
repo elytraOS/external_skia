@@ -363,7 +363,8 @@ void GrGLMorphologyEffect::GenKey(const GrProcessor& proc,
 void GrGLMorphologyEffect::onSetData(const GrGLSLProgramDataManager& pdman,
                                      const GrFragmentProcessor& proc) {
     const GrMorphologyEffect& m = proc.cast<GrMorphologyEffect>();
-    GrSurfaceProxy* proxy = m.textureSampler(0).proxy();
+    const auto& view = m.textureSampler(0).view();
+    GrSurfaceProxy* proxy = view.proxy();
     GrTexture& texture = *proxy->peekTexture();
 
     float pixelSize = 0.0f;
@@ -382,7 +383,7 @@ void GrGLMorphologyEffect::onSetData(const GrGLSLProgramDataManager& pdman,
     if (m.useRange()) {
         const float* range = m.range();
         if (MorphDirection::kY == m.direction() &&
-            proxy->origin() == kBottomLeft_GrSurfaceOrigin) {
+            view.origin() == kBottomLeft_GrSurfaceOrigin) {
             pdman.set2f(fRangeUni, 1.0f - (range[1]*pixelSize), 1.0f - (range[0]*pixelSize));
         } else {
             pdman.set2f(fRangeUni, range[0] * pixelSize, range[1] * pixelSize);
@@ -454,17 +455,13 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMorphologyEffect);
 
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrMorphologyEffect::TestCreate(GrProcessorTestData* d) {
-    int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
-                                        : GrProcessorUnitTest::kAlphaTextureIdx;
-    sk_sp<GrTextureProxy> proxy = d->textureProxy(texIdx);
+    auto [proxy, ct, at] = d->randomProxy();
 
     MorphDirection dir = d->fRandom->nextBool() ? MorphDirection::kX : MorphDirection::kY;
     static const int kMaxRadius = 10;
     int radius = d->fRandom->nextRangeU(1, kMaxRadius);
     MorphType type = d->fRandom->nextBool() ? MorphType::kErode : MorphType::kDilate;
-    auto alphaType = static_cast<SkAlphaType>(
-            d->fRandom->nextRangeU(kUnknown_SkAlphaType + 1, kLastEnum_SkAlphaType));
-    return GrMorphologyEffect::Make(std::move(proxy), alphaType, dir, radius, type);
+    return GrMorphologyEffect::Make(std::move(proxy), at, dir, radius, type);
 }
 #endif
 
@@ -581,7 +578,7 @@ static sk_sp<SkSpecialImage> apply_morphology(
                 kBottomLeft_GrSurfaceOrigin,
                 nullptr,
                 SkBudgeted::kYes,
-                srcTexture->isProtected() ? GrProtected::kYes : GrProtected::kNo);
+                srcTexture->isProtected());
         if (!dstRTContext) {
             return nullptr;
         }
@@ -610,7 +607,7 @@ static sk_sp<SkSpecialImage> apply_morphology(
                 kBottomLeft_GrSurfaceOrigin,
                 nullptr,
                 SkBudgeted::kYes,
-                srcTexture->isProtected() ? GrProtected::kYes : GrProtected::kNo);
+                srcTexture->isProtected());
         if (!dstRTContext) {
             return nullptr;
         }

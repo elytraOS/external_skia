@@ -510,6 +510,10 @@ static const char* glsltype_string(const Context& context, const Type& type) {
         return "kFloat2_GrSLType";
     } else if (type == *context.fHalf2_Type) {
         return "kHalf2_GrSLType";
+    } else if (type == *context.fFloat3_Type) {
+        return "kFloat3_GrSLType";
+    } else if (type == *context.fHalf3_Type) {
+        return "kHalf3_GrSLType";
     } else if (type == *context.fFloat4_Type) {
         return "kFloat4_GrSLType";
     } else if (type == *context.fHalf4_Type) {
@@ -520,6 +524,8 @@ static const char* glsltype_string(const Context& context, const Type& type) {
         return "kHalf4x4_GrSLType";
     } else if (type == *context.fVoid_Type) {
         return "kVoid_GrSLType";
+    } else if (type.kind() == Type::kEnum_Kind) {
+        return "int";
     }
     SkASSERT(false);
     return nullptr;
@@ -1018,10 +1024,10 @@ void CPPCodeGenerator::writeSetData(std::vector<const Variable*>& uniforms) {
                     String nameString(decl.fVar->fName);
                     const char* name = nameString.c_str();
                     if (decl.fVar->fType.kind() == Type::kSampler_Kind) {
-                        this->writef("        GrSurfaceProxy& %sProxy = "
-                                     "*_outer.textureSampler(%d).proxy();\n",
+                        this->writef("        const GrSurfaceProxyView& %sView = "
+                                     "_outer.textureSampler(%d).view();\n",
                                      name, samplerIndex);
-                        this->writef("        GrTexture& %s = *%sProxy.peekTexture();\n",
+                        this->writef("        GrTexture& %s = *%sView.proxy()->peekTexture();\n",
                                      name, name);
                         this->writef("        (void) %s;\n", name);
                         ++samplerIndex;

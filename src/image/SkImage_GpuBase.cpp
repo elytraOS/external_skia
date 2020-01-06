@@ -57,6 +57,34 @@ bool SkImage_GpuBase::ValidateBackendTexture(const GrCaps* caps, const GrBackend
     return caps->areColorTypeAndFormatCompatible(grCT, backendFormat);
 }
 
+bool SkImage_GpuBase::ValidateCompressedBackendTexture(const GrCaps* caps,
+                                                       const GrBackendTexture& tex,
+                                                       SkAlphaType at) {
+
+    if (!tex.isValid() || tex.width() <= 0 || tex.height() <= 0) {
+        return false;
+    }
+
+    if (tex.width() > caps->maxTextureSize() || tex.height() > caps->maxTextureSize()) {
+        return false;
+    }
+
+    if (at == kUnknown_SkAlphaType) {
+        return false;
+    }
+
+    GrBackendFormat backendFormat = tex.getBackendFormat();
+    if (!backendFormat.isValid()) {
+        return false;
+    }
+
+    if (!caps->isFormatCompressed(backendFormat)) {
+        return false;
+    }
+
+    return true;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool SkImage_GpuBase::getROPixels(SkBitmap* dst, CachingHint chint) const {
@@ -91,8 +119,8 @@ bool SkImage_GpuBase::getROPixels(SkBitmap* dst, CachingHint chint) const {
                                                                 this->colorType(),
                                                                 texProxy->backendFormat());
 
-    auto sContext = direct->priv().makeWrappedSurfaceContext(
-            std::move(texProxy), grColorType, this->alphaType(), this->refColorSpace());
+    auto sContext = GrSurfaceContext::Make(direct, std::move(texProxy), grColorType,
+                                           this->alphaType(), this->refColorSpace());
     if (!sContext) {
         return false;
     }
@@ -124,9 +152,15 @@ sk_sp<SkImage> SkImage_GpuBase::onMakeSubset(GrRecordingContext* context,
         return nullptr;
     }
 
+    const GrSurfaceProxyView& currView = this->getSurfaceProxyView(context);
+    if (!currView.proxy()) {
+        return nullptr;
+    }
+
+    GrSurfaceProxyView view(std::move(copyProxy), currView.origin(), currView.swizzle());
     // MDB: this call is okay bc we know 'sContext' was kExact
     return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID, this->alphaType(),
-                                   std::move(copyProxy), this->refColorSpace());
+                                   std::move(view), this->refColorSpace());
 }
 
 bool SkImage_GpuBase::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
@@ -146,8 +180,8 @@ bool SkImage_GpuBase::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, 
                                                                 this->colorType(),
                                                                 texProxy->backendFormat());
 
-    auto sContext = direct->priv().makeWrappedSurfaceContext(
-            std::move(texProxy), grColorType, this->alphaType(), this->refColorSpace());
+    auto sContext = GrSurfaceContext::Make(direct, std::move(texProxy), grColorType,
+                                           this->alphaType(), this->refColorSpace());
     if (!sContext) {
         return false;
     }

@@ -11,7 +11,6 @@
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/private/SkDeferredDisplayList.h"
 #include "include/private/SkImageInfoPriv.h"
-#include "src/core/SkMakeUnique.h"
 #include "src/core/SkMipMap.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/GrClientMappedBufferManager.h"
@@ -26,7 +25,6 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrShaderUtils.h"
-#include "src/gpu/GrSkSLFPFactoryCache.h"
 #include "src/gpu/GrSoftwarePathRenderer.h"
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/SkGr.h"
@@ -66,12 +64,12 @@ GrContext::~GrContext() {
     delete fResourceCache;
 }
 
-bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFactoryCache) {
+bool GrContext::init(sk_sp<const GrCaps> caps) {
     ASSERT_SINGLE_OWNER
     SkASSERT(fThreadSafeProxy); // needs to have been initialized by derived classes
     SkASSERT(this->proxyProvider());
 
-    if (!INHERITED::init(std::move(caps), std::move(FPFactoryCache))) {
+    if (!INHERITED::init(std::move(caps))) {
         return false;
     }
 
@@ -82,7 +80,7 @@ bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFac
     if (fGpu) {
         fResourceCache = new GrResourceCache(this->caps(), this->singleOwner(), this->contextID());
         fResourceProvider = new GrResourceProvider(fGpu.get(), fResourceCache, this->singleOwner());
-        fMappedBufferManager = skstd::make_unique<GrClientMappedBufferManager>(this->contextID());
+        fMappedBufferManager = std::make_unique<GrClientMappedBufferManager>(this->contextID());
     }
 
     if (fResourceCache) {
@@ -94,7 +92,7 @@ bool GrContext::init(sk_sp<const GrCaps> caps, sk_sp<GrSkSLFPFactoryCache> FPFac
     // DDL TODO: we need to think through how the task group & persistent cache
     // get passed on to/shared between all the DDLRecorders created with this context.
     if (this->options().fExecutor) {
-        fTaskGroup = skstd::make_unique<SkTaskGroup>(*this->options().fExecutor);
+        fTaskGroup = std::make_unique<SkTaskGroup>(*this->options().fExecutor);
     }
 
     fPersistentCache = this->options().fPersistentCache;
@@ -547,6 +545,85 @@ GrBackendTexture GrContext::createBackendTexture(const SkPixmap srcData[], int n
     GrGpu::BackendTextureData data(srcData);
     return fGpu->createBackendTexture({baseWidth, baseHeight}, backendFormat, renderable, &data,
                                       numLevels, isProtected);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+GrBackendTexture GrContext::createCompressedBackendTexture(int width, int height,
+                                                           const GrBackendFormat& backendFormat,
+                                                           const SkColor4f& color,
+                                                           GrMipMapped mipMapped,
+                                                           GrProtected isProtected) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    if (!this->asDirectContext()) {
+        return GrBackendTexture();
+    }
+
+    if (this->abandoned()) {
+        return GrBackendTexture();
+    }
+
+    GrGpu::BackendTextureData data(color);
+    return fGpu->createCompressedBackendTexture({width, height}, backendFormat, &data,
+                                                mipMapped, isProtected);
+}
+
+GrBackendTexture GrContext::createCompressedBackendTexture(int width, int height,
+                                                           SkImage::CompressionType compression,
+                                                           const SkColor4f& color,
+                                                           GrMipMapped mipMapped,
+                                                           GrProtected isProtected) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    if (!this->asDirectContext()) {
+        return GrBackendTexture();
+    }
+
+    if (this->abandoned()) {
+        return GrBackendTexture();
+    }
+
+    GrBackendFormat format = this->compressedBackendFormat(compression);
+    return this->createCompressedBackendTexture(width, height, format, color,
+                                                mipMapped, isProtected);
+}
+
+GrBackendTexture GrContext::createCompressedBackendTexture(int width, int height,
+                                                           const GrBackendFormat& backendFormat,
+                                                           const void* compressedData,
+                                                           size_t dataSize,
+                                                           GrMipMapped mipMapped,
+                                                           GrProtected isProtected) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    if (!this->asDirectContext()) {
+        return GrBackendTexture();
+    }
+
+    if (this->abandoned()) {
+        return GrBackendTexture();
+    }
+
+    GrGpu::BackendTextureData data(compressedData, dataSize);
+    return fGpu->createCompressedBackendTexture({width, height}, backendFormat, &data,
+                                                mipMapped, isProtected);
+}
+
+GrBackendTexture GrContext::createCompressedBackendTexture(int width, int height,
+                                                           SkImage::CompressionType compression,
+                                                           const void* data, size_t dataSize,
+                                                           GrMipMapped mipMapped,
+                                                           GrProtected isProtected) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    if (!this->asDirectContext()) {
+        return GrBackendTexture();
+    }
+
+    if (this->abandoned()) {
+        return GrBackendTexture();
+    }
+
+    GrBackendFormat format = this->compressedBackendFormat(compression);
+    return this->createCompressedBackendTexture(width, height, format, data, dataSize,
+                                                mipMapped, isProtected);
 }
 
 void GrContext::deleteBackendTexture(GrBackendTexture backendTex) {

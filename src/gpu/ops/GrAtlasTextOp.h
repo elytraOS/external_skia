@@ -28,13 +28,11 @@ public:
     static const int kVerticesPerGlyph = GrTextBlob::kVerticesPerGlyph;
     static const int kIndicesPerGlyph = 6;
 
-    typedef GrTextBlob Blob;
     struct Geometry {
-        SkMatrix    fViewMatrix;
+        SkMatrix    fDrawMatrix;
         SkIRect     fClipRect;
-        Blob*       fBlob;
-        SkScalar    fX;
-        SkScalar    fY;
+        GrTextBlob* fBlob;
+        SkPoint     fDrawOrigin;
         GrTextBlob::SubRun* fSubRunPtr;
         SkPMColor4f fColor;
     };
@@ -150,7 +148,8 @@ private:
     bool usesLocalCoords() const { return fUsesLocalCoords; }
     int numGlyphs() const { return fNumGlyphs; }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps& caps) override;
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                      const GrCaps& caps) override;
 
     GrGeometryProcessor* setupDfProcessor(SkArenaAlloc* arena,
                                           const GrShaderCaps& caps,

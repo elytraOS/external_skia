@@ -125,11 +125,11 @@ void GrGLMatrixConvolutionEffect::GenKey(const GrProcessor& processor,
 void GrGLMatrixConvolutionEffect::onSetData(const GrGLSLProgramDataManager& pdman,
                                             const GrFragmentProcessor& processor) {
     const GrMatrixConvolutionEffect& conv = processor.cast<GrMatrixConvolutionEffect>();
-    GrSurfaceProxy* proxy = conv.textureSampler(0).proxy();
-    SkISize textureDims = proxy->backingStoreDimensions();
+    const auto& view = conv.textureSampler(0).view();
+    SkISize textureDims = view.proxy()->backingStoreDimensions();
 
     float imageIncrement[2];
-    float ySign = proxy->origin() == kTopLeft_GrSurfaceOrigin ? 1.0f : -1.0f;
+    float ySign = view.origin() == kTopLeft_GrSurfaceOrigin ? 1.0f : -1.0f;
     imageIncrement[0] = 1.0f / textureDims.width();
     imageIncrement[1] = ySign / textureDims.height();
     pdman.set2fv(fImageIncrementUni, 1, imageIncrement);
@@ -140,7 +140,7 @@ void GrGLMatrixConvolutionEffect::onSetData(const GrGLSLProgramDataManager& pdma
     pdman.set4fv(fKernelUni, arrayCount, conv.kernel());
     pdman.set1f(fGainUni, conv.gain());
     pdman.set1f(fBiasUni, conv.bias());
-    fDomain.setData(pdman, conv.domain(), proxy, conv.textureSampler(0).samplerState());
+    fDomain.setData(pdman, conv.domain(), view, conv.textureSampler(0).samplerState());
 }
 
 GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(sk_sp<GrSurfaceProxy> srcProxy,
@@ -317,9 +317,7 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMatrixConvolutionEffect);
 
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrMatrixConvolutionEffect::TestCreate(GrProcessorTestData* d) {
-    int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
-                                        : GrProcessorUnitTest::kAlphaTextureIdx;
-    sk_sp<GrTextureProxy> proxy = d->textureProxy(texIdx);
+    auto [proxy, ct, at] = d->randomProxy();
 
     int width = d->fRandom->nextRangeU(1, MAX_KERNEL_SIZE);
     int height = d->fRandom->nextRangeU(1, MAX_KERNEL_SIZE / width);

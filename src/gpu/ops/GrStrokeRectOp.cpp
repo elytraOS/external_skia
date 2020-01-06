@@ -444,7 +444,7 @@ private:
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
     bool miterStroke() const { return fMiterStroke; }
 
-    CombineResult onCombineIfPossible(GrOp* t, const GrCaps&) override;
+    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*, const GrCaps&) override;
 
     void generateAAStrokeRectGeometry(GrVertexWriter& vertices,
                                       const SkPMColor4f& color,
@@ -552,7 +552,7 @@ sk_sp<const GrGpuBuffer> AAStrokeRectOp::GetIndexBuffer(GrResourceProvider* reso
             3 + 8, 0 + 8, 4 + 8, 4 + 8, 7 + 8, 3 + 8,
         };
         // clang-format on
-        GR_STATIC_ASSERT(SK_ARRAY_COUNT(gMiterIndices) == kMiterIndexCnt);
+        static_assert(SK_ARRAY_COUNT(gMiterIndices) == kMiterIndexCnt);
         GR_DEFINE_STATIC_UNIQUE_KEY(gMiterIndexBufferKey);
         return resourceProvider->findOrCreatePatternedIndexBuffer(
                 gMiterIndices, kMiterIndexCnt, kNumMiterRectsInIndexBuffer, kMiterVertexCnt,
@@ -616,7 +616,7 @@ sk_sp<const GrGpuBuffer> AAStrokeRectOp::GetIndexBuffer(GrResourceProvider* reso
             3 + 16, 0 + 16, 4 + 16, 4 + 16, 7 + 16, 3 + 16,
         };
         // clang-format on
-        GR_STATIC_ASSERT(SK_ARRAY_COUNT(gBevelIndices) == kBevelIndexCnt);
+        static_assert(SK_ARRAY_COUNT(gBevelIndices) == kBevelIndexCnt);
 
         GR_DEFINE_STATIC_UNIQUE_KEY(gBevelIndexBufferKey);
         return resourceProvider->findOrCreatePatternedIndexBuffer(
@@ -625,7 +625,8 @@ sk_sp<const GrGpuBuffer> AAStrokeRectOp::GetIndexBuffer(GrResourceProvider* reso
     }
 }
 
-GrOp::CombineResult AAStrokeRectOp::onCombineIfPossible(GrOp* t, const GrCaps& caps) {
+GrOp::CombineResult AAStrokeRectOp::onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
+                                                        const GrCaps& caps) {
     AAStrokeRectOp* that = t->cast<AAStrokeRectOp>();
 
     if (!fHelper.isCompatible(that->fHelper, caps, this->bounds(), that->bounds())) {
@@ -639,7 +640,9 @@ GrOp::CombineResult AAStrokeRectOp::onCombineIfPossible(GrOp* t, const GrCaps& c
 
     // We apply the viewmatrix to the rect points on the cpu.  However, if the pipeline uses
     // local coords then we won't be able to combine. TODO: Upload local coords as an attribute.
-    if (fHelper.usesLocalCoords() && !this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
+    if (fHelper.usesLocalCoords() &&
+        !SkMatrixPriv::CheapEqual(this->viewMatrix(), that->viewMatrix()))
+    {
         return CombineResult::kCannotCombine;
     }
 

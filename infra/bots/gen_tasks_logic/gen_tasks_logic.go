@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -40,7 +41,7 @@ const (
 	DEFAULT_OS_DEBIAN    = "Debian-9.4"
 	DEFAULT_OS_LINUX_GCE = "Debian-9.8"
 	DEFAULT_OS_MAC       = "Mac-10.14.6"
-	DEFAULT_OS_WIN       = "Windows-Server-14393"
+	DEFAULT_OS_WIN       = "Windows-Server-17763"
 
 	// Small is a 2-core machine.
 	// TODO(dogben): Would n1-standard-1 or n1-standard-2 be sufficient?
@@ -169,7 +170,10 @@ var (
 
 	// BUILD_STATS_NO_UPLOAD indicates which BuildStats tasks should not
 	// have their results uploaded.
-	BUILD_STATS_NO_UPLOAD = []string{"BuildStats-Debian9-Clang-x86_64-Release"}
+	BUILD_STATS_NO_UPLOAD = []string{
+		"BuildStats-Debian9-Clang-x86_64-Release",
+		"BuildStats-Debian9-Clang-x86_64-Release-Vulkan",
+	}
 )
 
 // Config contains general configuration information.
@@ -401,7 +405,7 @@ func (b *builder) kitchenTask(name, recipe, isolate, serviceAccount string, dime
 			},
 		},
 		CipdPackages: cipd,
-		Command:      []string{python, "skia/infra/bots/run_recipe.py", "${ISOLATED_OUTDIR}", recipe, props(properties), b.cfg.Project},
+		Command:      []string{python, "-u", "skia/infra/bots/run_recipe.py", "${ISOLATED_OUTDIR}", recipe, props(properties), b.cfg.Project},
 		Dependencies: []string{BUNDLE_RECIPES_NAME},
 		Dimensions:   dimensions,
 		EnvPrefixes: map[string][]string{
@@ -561,7 +565,8 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18363",
-			"Win2016":    DEFAULT_OS_WIN,
+			"Win2016":    "Windows-Server-14393",
+			"Win2019":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
 			"iOS":        "iOS-11.4.1",
@@ -576,10 +581,6 @@ func (b *builder) defaultSwarmDimensions(parts map[string]string) []string {
 		if os == "Mac10.14" && parts["model"] == "VMware7.1" {
 			// ChOps VMs are at a newer version of MacOS.
 			d["os"] = "Mac-10.14.6"
-		}
-		if d["os"] == DEFAULT_OS_WIN {
-			// Upgrades result in a new image but not a new OS version.
-			d["image"] = "windows-server-2016-dc-v20190108"
 		}
 		if parts["model"] == "LenovoYogaC630" {
 			// This is currently a unique snowflake.
@@ -819,6 +820,13 @@ func (b *builder) buildTaskDrivers() string {
 		CipdPackages: append(specs.CIPD_PKGS_GIT, b.MustGetCipdPackageFromAsset("go")),
 		Command: []string{
 			"/bin/bash", "skia/infra/bots/build_task_drivers.sh", specs.PLACEHOLDER_ISOLATED_OUTDIR,
+			// The following arguments are not used by the script but are specified
+			// because they prevent de-duplication.
+			specs.PLACEHOLDER_REPO,
+			specs.PLACEHOLDER_REVISION,
+			specs.PLACEHOLDER_ISSUE,
+			specs.PLACEHOLDER_PATCHSET,
+			specs.PLACEHOLDER_CODEREVIEW_SERVER,
 		},
 		Dimensions: b.linuxGceDimensions(MACHINE_TYPE_SMALL),
 		EnvPrefixes: map[string][]string{
@@ -863,6 +871,167 @@ func (b *builder) updateGoDeps(name string) string {
 		},
 		Isolate:        "empty.isolate",
 		ServiceAccount: b.cfg.ServiceAccountRecreateSKPs,
+	}
+	b.MustAddTask(name, t)
+	return name
+}
+
+// createDockerImage creates the specified docker image.
+func (b *builder) createDockerImage(name, imageName, imageDir string) string {
+	cipd := append([]*specs.CipdPackage{}, specs.CIPD_PKGS_GIT...)
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("go"))
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("protoc"))
+
+	t := &specs.TaskSpec{
+		Caches:       append(CACHES_GO, CACHES_DOCKER...),
+		CipdPackages: cipd,
+		Command: []string{
+			"./build_push_docker_image",
+			"--image_name", fmt.Sprintf("gcr.io/skia-public/%s", imageName),
+			"--dockerfile_dir", imageDir,
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", name,
+			"--workdir", ".",
+			"--gerrit_project", "skia",
+			"--gerrit_url", "https://skia-review.googlesource.com",
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--swarm_out_dir", specs.PLACEHOLDER_ISOLATED_OUTDIR,
+			"--alsologtostderr",
+		},
+		Dependencies: []string{BUILD_TASK_DRIVERS_NAME},
+		Dimensions:   b.dockerGceDimensions(),
+		EnvPrefixes: map[string][]string{
+			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
+		},
+		Isolate:        "empty.isolate",
+		ServiceAccount: b.cfg.ServiceAccountCompile,
+	}
+	b.MustAddTask(name, t)
+	return name
+}
+
+// createPushAppsFromSkiaDockerImage creates and pushes docker images of some apps
+// (eg: fiddler, debugger, api) using the skia-release docker image.
+func (b *builder) createPushAppsFromSkiaDockerImage(name string) string {
+	cipd := append([]*specs.CipdPackage{}, specs.CIPD_PKGS_GIT...)
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("go"))
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("protoc"))
+
+	t := &specs.TaskSpec{
+		Caches:       append(CACHES_GO, CACHES_DOCKER...),
+		CipdPackages: cipd,
+		Command: []string{
+			"./push_apps_from_skia_image",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", name,
+			"--workdir", ".",
+			"--gerrit_project", "buildbot",
+			"--gerrit_url", "https://skia-review.googlesource.com",
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr",
+		},
+		Dependencies: []string{
+			BUILD_TASK_DRIVERS_NAME,
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_Release", "skia-release", path.Join("docker", "skia-release")),
+		},
+		Dimensions: b.dockerGceDimensions(),
+		EnvPrefixes: map[string][]string{
+			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
+		},
+		Isolate:        "empty.isolate",
+		ServiceAccount: b.cfg.ServiceAccountCompile,
+	}
+	b.MustAddTask(name, t)
+	return name
+}
+
+// createPushAppsFromWASMDockerImage creates and pushes docker images of some apps
+// (eg: jsfiddle, skottie, particles) using the skia-wasm-release docker image.
+func (b *builder) createPushAppsFromWASMDockerImage(name string) string {
+	cipd := append([]*specs.CipdPackage{}, specs.CIPD_PKGS_GIT...)
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("go"))
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("protoc"))
+
+	t := &specs.TaskSpec{
+		Caches:       append(CACHES_GO, CACHES_DOCKER...),
+		CipdPackages: cipd,
+		Command: []string{
+			"./push_apps_from_wasm_image",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", name,
+			"--workdir", ".",
+			"--gerrit_project", "buildbot",
+			"--gerrit_url", "https://skia-review.googlesource.com",
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr",
+		},
+		Dependencies: []string{
+			BUILD_TASK_DRIVERS_NAME,
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_WASM_Release", "skia-wasm-release", path.Join("docker", "skia-wasm-release")),
+		},
+		Dimensions: b.dockerGceDimensions(),
+		EnvPrefixes: map[string][]string{
+			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
+		},
+		Isolate:        "empty.isolate",
+		ServiceAccount: b.cfg.ServiceAccountCompile,
+	}
+	b.MustAddTask(name, t)
+	return name
+}
+
+// createPushAppsFromSkiaWASMDockerImages creates and pushes docker images of some apps
+// (eg: debugger-assets) using the skia-release and skia-wasm-release
+// docker images.
+func (b *builder) createPushAppsFromSkiaWASMDockerImages(name string) string {
+	cipd := append([]*specs.CipdPackage{}, specs.CIPD_PKGS_GIT...)
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("go"))
+	cipd = append(cipd, b.MustGetCipdPackageFromAsset("protoc"))
+
+	t := &specs.TaskSpec{
+		Caches:       append(CACHES_GO, CACHES_DOCKER...),
+		CipdPackages: cipd,
+		Command: []string{
+			"./push_apps_from_skia_wasm_images",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", name,
+			"--workdir", ".",
+			"--gerrit_project", "buildbot",
+			"--gerrit_url", "https://skia-review.googlesource.com",
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr",
+		},
+		Dependencies: []string{
+			BUILD_TASK_DRIVERS_NAME,
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_Release", "skia-release", path.Join("docker", "skia-release")),
+			b.createDockerImage("Housekeeper-PerCommit-CreateDockerImage_Skia_WASM_Release", "skia-wasm-release", path.Join("docker", "skia-wasm-release")),
+		},
+		Dimensions: b.dockerGceDimensions(),
+		EnvPrefixes: map[string][]string{
+			"PATH": {"cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin"},
+		},
+		Isolate:        "empty.isolate",
+		ServiceAccount: b.cfg.ServiceAccountCompile,
 	}
 	b.MustAddTask(name, t)
 	return name
@@ -956,7 +1125,7 @@ func attempts(name string) int {
 		return 1
 	}
 	if !(strings.HasPrefix(name, "Build-") || strings.HasPrefix(name, "Upload-")) {
-		for _, extraConfig := range []string{"ASAN", "MSAN", "TSAN", "UBSAN", "Valgrind"} {
+		for _, extraConfig := range []string{"ASAN", "MSAN", "TSAN", "Valgrind"} {
 			if strings.Contains(name, extraConfig) {
 				// Sanitizers often find non-deterministic issues that retries would hide.
 				return 1
@@ -1433,6 +1602,24 @@ func (b *builder) process(name string) {
 		deps = append(deps, b.updateGoDeps(name))
 	}
 
+	// Create docker image.
+	if strings.Contains(name, "CreateDockerImage") {
+		if strings.Contains(parts["extra_config"], "Skia_Release") {
+			deps = append(deps, b.createDockerImage(name, "skia-release", path.Join("docker", "skia-release")))
+		} else if strings.Contains(parts["extra_config"], "Skia_WASM_Release") {
+			deps = append(deps, b.createDockerImage(name, "skia-wasm-release", path.Join("docker", "skia-wasm-release")))
+		}
+	}
+
+	// Push apps from docker image.
+	if strings.Contains(name, "PushAppsFromSkiaDockerImage") {
+		deps = append(deps, b.createPushAppsFromSkiaDockerImage(name))
+	} else if strings.Contains(name, "PushAppsFromWASMDockerImage") {
+		deps = append(deps, b.createPushAppsFromWASMDockerImage(name))
+	} else if strings.Contains(name, "PushAppsFromSkiaWASMDockerImages") {
+		deps = append(deps, b.createPushAppsFromSkiaWASMDockerImages(name))
+	}
+
 	// Infra tests.
 	if strings.Contains(name, "Housekeeper-PerCommit-InfraTests") {
 		deps = append(deps, b.infra(name))
@@ -1467,6 +1654,8 @@ func (b *builder) process(name string) {
 		name != "Housekeeper-OnDemand-Presubmit" &&
 		name != "Housekeeper-PerCommit" &&
 		name != BUILD_TASK_DRIVERS_NAME &&
+		!strings.Contains(name, "CreateDockerImage") &&
+		!strings.Contains(name, "PushAppsFrom") &&
 		!strings.Contains(name, "Android_Framework") &&
 		!strings.Contains(name, "G3_Framework") &&
 		!strings.Contains(name, "RecreateSKPs") &&

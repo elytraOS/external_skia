@@ -109,8 +109,7 @@ public:
              const GrGLInterface* glInterface);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
-    bool isFormatCompressed(const GrBackendFormat&,
-                            SkImage::CompressionType* compressionType = nullptr) const override;
+    SkImage::CompressionType compressionType(const GrBackendFormat&) const override;
 
     bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat&) const override;
     bool isFormatTexturable(const GrBackendFormat&) const override;
@@ -422,7 +421,7 @@ public:
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
-    GrSwizzle getTextureSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override;
     GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const override;
@@ -475,6 +474,7 @@ private:
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
     GrBackendFormat onGetDefaultBackendFormat(GrColorType, GrRenderable) const override;
     GrPixelConfig onGetConfigFromBackendFormat(const GrBackendFormat&, GrColorType) const override;
+    GrPixelConfig onGetConfigFromCompressedBackendFormat(const GrBackendFormat&) const override;
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
@@ -558,7 +558,7 @@ private:
         };
         uint32_t fFlags = 0;
 
-        GrSwizzle fTextureSwizzle;
+        GrSwizzle fReadSwizzle;
         GrSwizzle fOutputSwizzle;
 
         struct ExternalIOFormats {

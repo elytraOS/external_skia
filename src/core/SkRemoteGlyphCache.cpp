@@ -37,7 +37,6 @@ static SkDescriptor* auto_descriptor_from_desc(const SkDescriptor* source_desc,
                                                SkAutoDescriptor* ad) {
     ad->reset(source_desc->getLength());
     auto* desc = ad->getDesc();
-    desc->init();
 
     // Rec.
     {
@@ -639,7 +638,7 @@ SkStrikeServer::RemoteStrike* SkStrikeServer::getOrCreateCache(
 
     auto context = typeface.createScalerContext(effects, &desc);
     auto newHandle = fDiscardableHandleManager->createHandle();  // Locked on creation
-    auto remoteStrike = skstd::make_unique<RemoteStrike>(desc, std::move(context), newHandle);
+    auto remoteStrike = std::make_unique<RemoteStrike>(desc, std::move(context), newHandle);
     remoteStrike->setTypefaceAndEffects(&typeface, effects);
     auto remoteStrikePtr = remoteStrike.get();
     fRemoteStrikesToSend.add(remoteStrikePtr);
@@ -956,7 +955,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             auto scaler = SkStrikeCache::CreateScalerContext(*client_desc, effects, *tf);
             strike = fStrikeCache->createStrikeExclusive(
                     *client_desc, std::move(scaler), &fontMetrics,
-                    skstd::make_unique<DiscardableStrikePinner>(spec.discardableHandleId,
+                    std::make_unique<DiscardableStrikePinner>(spec.discardableHandleId,
                                                                 fDiscardableHandleManager));
             auto proxyContext = static_cast<SkScalerContextProxy*>(strike->getScalerContext());
             proxyContext->initCache(strike.get(), fStrikeCache);

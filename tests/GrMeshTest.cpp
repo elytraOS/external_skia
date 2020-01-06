@@ -12,7 +12,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/gpu/GrContext.h"
 #include "include/private/GrResourceKey.h"
-#include "src/core/SkMakeUnique.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
@@ -180,7 +179,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
                 // Start at various repetitions within the patterned index buffer to exercise base
                 // index.
                 while (i < kBoxCount) {
-                    GR_STATIC_ASSERT(kIndexPatternRepeatCount >= 3);
+                    static_assert(kIndexPatternRepeatCount >= 3);
                     int repetitionCount = SkTMin(3 - baseRepetition, kBoxCount - i);
 
                     GrMesh mesh(GrPrimitiveType::kTriangles);
@@ -435,8 +434,8 @@ void DrawMeshHelper::drawMesh(const GrMesh& mesh, GrPrimitiveType primitiveType)
                                                              std::move(processorSet),
                                                              GrPipeline::InputFlags::kNone);
 
-    GrGeometryProcessor* mtp = GrMeshTestProcessor::Make(fState->allocator(),
-                                                         mesh.isInstanced(), mesh.hasVertexData());
+    GrGeometryProcessor* mtp = GrMeshTestProcessor::Make(
+            fState->allocator(), mesh.isInstanced(), SkToBool(mesh.vertexBuffer()));
 
     GrProgramInfo programInfo(fState->proxy()->numSamples(),
                               fState->proxy()->numStencilSamples(),
