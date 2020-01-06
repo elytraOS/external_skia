@@ -6,14 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2019-12-09
+
 ### Added
  - `SkContourMeasureIter` and `SkContourMeasure` as an alternative to `SkPathMeasure`.
  - CanvasKit image decode cache helpers: getDecodeCacheLimitBytes(), setDecodeCacheLimitBytes(),
    and getDecodeCacheUsedBytes().
+ - `SkShader.Blend`, `SkShader.Color`, `SkShader.Empty`, `SkShader.Lerp`.
 
 ### Changed
  - The returned values from `SkParagraph.getRectsForRange` now have direction with value
    `CanvasKit.TextDirection`.
+
+### Fixed
+ - `MakeImage` properly in the externs file and can work with `CanvasKit.Malloc`.
 
 ## [0.9.0] - 2019-11-18
 ### Added

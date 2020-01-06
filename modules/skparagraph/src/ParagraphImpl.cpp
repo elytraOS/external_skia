@@ -132,6 +132,7 @@ void ParagraphImpl::layout(SkScalar rawWidth) {
         fClusters.reset();
         fGraphemes.reset();
         this->markGraphemes();
+        this->computeEmptyMetrics();
 
         if (!this->shapeTextIntoEndlessLine()) {
 
@@ -140,15 +141,14 @@ void ParagraphImpl::layout(SkScalar rawWidth) {
             this->fLines.reset();
 
             // Set the important values that are not zero
-            auto emptyMetrics = computeEmptyMetrics();
             fWidth = floorWidth;
-            fHeight = emptyMetrics.height();
+            fHeight = fEmptyMetrics.height();
             if (fParagraphStyle.getStrutStyle().getStrutEnabled() &&
                 fParagraphStyle.getStrutStyle().getForceStrutHeight()) {
                 fHeight = fStrutMetrics.height();
             }
-            fAlphabeticBaseline = emptyMetrics.alphabeticBaseline();
-            fIdeographicBaseline = emptyMetrics.ideographicBaseline();
+            fAlphabeticBaseline = fEmptyMetrics.alphabeticBaseline();
+            fIdeographicBaseline = fEmptyMetrics.ideographicBaseline();
             fMinIntrinsicWidth = 0;
             fMaxIntrinsicWidth = 0;
             this->fOldWidth = floorWidth;
@@ -384,7 +384,6 @@ bool ParagraphImpl::shapeTextIntoEndlessLine() {
 }
 
 void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
-
     TextWrapper textWrapper;
     textWrapper.breakTextIntoLines(
             this,
@@ -413,8 +412,8 @@ void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
     fWidth = maxWidth;
     fMaxIntrinsicWidth = textWrapper.maxIntrinsicWidth();
     fMinIntrinsicWidth = textWrapper.minIntrinsicWidth();
-    fAlphabeticBaseline = fLines.empty() ? 0 : fLines.front().alphabeticBaseline();
-    fIdeographicBaseline = fLines.empty() ? 0 : fLines.front().ideographicBaseline();
+    fAlphabeticBaseline = fLines.empty() ? fEmptyMetrics.alphabeticBaseline() : fLines.front().alphabeticBaseline();
+    fIdeographicBaseline = fLines.empty() ? fEmptyMetrics.ideographicBaseline() : fLines.front().ideographicBaseline();
     fExceededMaxLines = textWrapper.exceededMaxLines();
 }
 
@@ -888,7 +887,7 @@ PositionWithAffinity ParagraphImpl::getGlyphPositionAtCoordinate(SkScalar dx, Sk
                     return false;
                 }
 
-                if (dx >= context.clip.fRight) {
+                if (dx >= context.clip.fRight + offsetX) {
                     // We have to keep looking but just in case keep the last one as the closes
                     // so far
                     auto index = context.pos + context.size;
@@ -913,7 +912,7 @@ PositionWithAffinity ParagraphImpl::getGlyphPositionAtCoordinate(SkScalar dx, Sk
                     }
                     found = i;
                 }
-                auto glyphStart = context.run->positionX(found);
+                auto glyphStart = context.run->positionX(found) + context.fTextShift + offsetX;
                 auto glyphWidth = context.run->positionX(found + 1) - context.run->positionX(found);
                 auto clusterIndex8 = context.run->fClusterIndexes[found];
 
@@ -933,14 +932,11 @@ PositionWithAffinity ParagraphImpl::getGlyphPositionAtCoordinate(SkScalar dx, Sk
                     auto averageCodepoint = glyphWidth / graphemeSize;
                     auto codepointStart = glyphStart + averageCodepoint * (codepointIndex - codepoints.start);
                     auto codepointEnd = codepointStart + averageCodepoint;
-                    center = (codepointStart + codepointEnd) / 2 + context.fTextShift;
+                    center = (codepointStart + codepointEnd) / 2;
                 } else {
                     SkASSERT(graphemeSize == 1);
-                    auto codepointStart = glyphStart;
-                    auto codepointEnd = codepointStart + glyphWidth;
-                    center = (codepointStart + codepointEnd) / 2 + context.fTextShift;
+                    center = glyphStart + glyphWidth / 2;
                 }
-
                 if ((dx < center) == context.run->leftToRight()) {
                     result = { SkToS32(codepointIndex), kDownstream };
                 } else {
@@ -1092,19 +1088,26 @@ void ParagraphImpl::setState(InternalState state) {
 
 }
 
-InternalLineMetrics ParagraphImpl::computeEmptyMetrics() {
+void ParagraphImpl::computeEmptyMetrics() {
+    auto defaultTextStyle = paragraphStyle().getTextStyle();
 
-  auto defaultTextStyle = paragraphStyle().getTextStyle();
-
-  auto typefaces = fontCollection()->findTypefaces(
+    auto typefaces = fontCollection()->findTypefaces(
       defaultTextStyle.getFontFamilies(), defaultTextStyle.getFontStyle());
-  auto typeface = typefaces.size() ? typefaces.front() : nullptr;
+    auto typeface = typefaces.size() ? typefaces.front() : nullptr;
 
-  SkFont font(typeface, defaultTextStyle.getFontSize());
-  InternalLineMetrics metrics(font, paragraphStyle().getStrutStyle().getForceStrutHeight());
-  fStrutMetrics.updateLineMetrics(metrics);
+    SkFont font(typeface, defaultTextStyle.getFontSize());
 
-  return metrics;
+    fEmptyMetrics = InternalLineMetrics(font, paragraphStyle().getStrutStyle().getForceStrutHeight());
+    if (!paragraphStyle().getStrutStyle().getForceStrutHeight() &&
+        defaultTextStyle.getHeightOverride()) {
+        auto multiplier =
+                defaultTextStyle.getHeight() * defaultTextStyle.getFontSize() / fEmptyMetrics.height();
+        fEmptyMetrics = InternalLineMetrics(fEmptyMetrics.ascent() * multiplier,
+                                      fEmptyMetrics.descent() * multiplier,
+                                      fEmptyMetrics.leading() * multiplier);
+    }
+
+    fStrutMetrics.updateLineMetrics(fEmptyMetrics);
 }
 
 void ParagraphImpl::updateText(size_t from, SkString text) {

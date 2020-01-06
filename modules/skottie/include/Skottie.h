@@ -64,7 +64,13 @@ public:
 
     class Builder final {
     public:
-        Builder();
+        enum Flags : uint32_t {
+            kDeferImageLoading = 0x01, // Normally, all static image frames are resolved at
+                                       // load time via ImageAsset::getFrame(0).  With this flag,
+                                       // frames are only resolved when needed, at seek() time.
+        };
+
+        explicit Builder(uint32_t flags = 0);
         ~Builder();
 
         struct Stats {
@@ -118,6 +124,8 @@ public:
         sk_sp<Animation> makeFromFile(const char path[]);
 
     private:
+        const uint32_t          fFlags;
+
         sk_sp<ResourceProvider> fResourceProvider;
         sk_sp<SkFontMgr>        fFontMgr;
         sk_sp<PropertyObserver> fPropertyObserver;
@@ -147,6 +155,9 @@ public:
 
     /**
      * Draws the current animation frame.
+     *
+     * It is undefined behavior to call render() on a newly created Animation
+     * before specifying an initial frame via one of the seek() variants.
      *
      * @param canvas   destination canvas
      * @param dst      optional destination rect

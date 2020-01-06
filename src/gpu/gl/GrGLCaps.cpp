@@ -631,14 +631,17 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     // TODO: support CHROMIUM_sync_point and maybe KHR_fence_sync
-    if (GR_IS_GR_GL(standard)) {
-        fFenceSyncSupport = (version >= GR_GL_VER(3, 2) || ctxInfo.hasExtension("GL_ARB_sync"));
+    if (ctxInfo.hasExtension("GL_ARB_sync") || ctxInfo.hasExtension("GL_APPLE_sync")) {
+        fFenceSyncSupport = true;
+    } else if (GR_IS_GR_GL(standard)) {
+        fFenceSyncSupport = (version >= GR_GL_VER(3, 2));
     } else if (GR_IS_GR_GL_ES(standard)) {
-        fFenceSyncSupport = (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_APPLE_sync"));
+        fFenceSyncSupport = (version >= GR_GL_VER(3, 0));
     } else if (GR_IS_GR_WEBGL(standard)) {
         // Only in WebGL 2.0
         fFenceSyncSupport = version >= GR_GL_VER(2, 0);
     }
+
     // The same objects (GL sync objects) are used to implement GPU/CPU fence syncs and GPU/GPU
     // semaphores.
     fSemaphoreSupport = fFenceSyncSupport;
@@ -3914,7 +3917,7 @@ bool GrGLCaps::isFormatCompressed(const GrBackendFormat& format,
         case GrGLFormat::kCOMPRESSED_RGB8_ETC2: // fall through
         case GrGLFormat::kCOMPRESSED_ETC1_RGB8:
             // ETC2 uses the same compression layout as ETC1
-            *compressionTypePtr = SkImage::kETC1_CompressionType;
+            *compressionTypePtr = SkImage::CompressionType::kETC1;
             return true;
         default:
             return false;
@@ -4198,14 +4201,17 @@ GrBackendFormat GrGLCaps::onGetDefaultBackendFormat(GrColorType ct,
 GrBackendFormat GrGLCaps::getBackendFormatFromCompressionType(
         SkImage::CompressionType compressionType) const {
     switch (compressionType) {
-        case SkImage::kETC1_CompressionType:
+        case SkImage::CompressionType::kNone:
+            return {};
+        case SkImage::CompressionType::kETC1:
             // if ETC2 is available default to that format
             if (this->isFormatTexturable(GrGLFormat::kCOMPRESSED_RGB8_ETC2)) {
                 return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_RGB8_ETC2, GR_GL_TEXTURE_2D);
             }
             return GrBackendFormat::MakeGL(GR_GL_COMPRESSED_ETC1_RGB8, GR_GL_TEXTURE_2D);
     }
-    SK_ABORT("Invalid compression type");
+
+    SkUNREACHABLE;
 }
 
 GrSwizzle GrGLCaps::getTextureSwizzle(const GrBackendFormat& format, GrColorType colorType) const {

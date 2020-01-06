@@ -53,6 +53,7 @@
 #include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkMakeUnique.h"
 #include "src/core/SkResourceCache.h"
+#include "src/shaders/SkRTShader.h"
 
 #include <iostream>
 #include <string>
@@ -1332,7 +1333,43 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }), allow_raw_pointers());
 
     class_<SkShader>("SkShader")
-        .smart_ptr<sk_sp<SkShader>>("sk_sp<SkShader>");
+        .smart_ptr<sk_sp<SkShader>>("sk_sp<SkShader>")
+        .class_function("_Blend", optional_override([](SkBlendMode mode, sk_sp<SkShader> dst, sk_sp<SkShader> src)->sk_sp<SkShader> {
+            return SkShaders::Blend(mode, dst, src, nullptr);
+        }))
+        .class_function("_Blend", optional_override([](SkBlendMode mode, sk_sp<SkShader> dst, sk_sp<SkShader> src,
+                                                       SimpleMatrix sm)->sk_sp<SkShader> {
+            auto m = toSkMatrix(sm);
+            return SkShaders::Blend(mode, dst, src, &m);
+        }))
+        .class_function("Color", select_overload<sk_sp<SkShader>(SkColor)>(&SkShaders::Color))
+        .class_function("Empty", &SkShaders::Empty)
+        .class_function("_Lerp", optional_override([](float t, sk_sp<SkShader> dst, sk_sp<SkShader> src)->sk_sp<SkShader> {
+            return SkShaders::Lerp(t, dst, src, nullptr);
+        }))
+        .class_function("_Lerp", optional_override([](float t, sk_sp<SkShader> dst, sk_sp<SkShader> src,
+                                                      SimpleMatrix sm)->sk_sp<SkShader> {
+            auto m = toSkMatrix(sm);
+            return SkShaders::Lerp(t, dst, src, &m);
+        }));
+
+    class_<SkRuntimeShaderFactory>("_RTShaderFactory")
+        .class_function("MakeFromProgram", optional_override([](std::string sksl, bool isOpaque)->SkRuntimeShaderFactory {
+            SkString s(sksl.c_str(), sksl.length());
+            return SkRuntimeShaderFactory(s, isOpaque);
+        }))
+        .function("_make", optional_override([](SkRuntimeShaderFactory& self, uintptr_t fptr, size_t len)->sk_sp<SkShader> {
+            uint8_t* floatData = reinterpret_cast<uint8_t*>(fptr);
+            sk_sp<SkData> bytes = SkData::MakeFromMalloc(floatData, len);
+            return self.make(bytes, nullptr);
+        }))
+        .function("_make", optional_override([](SkRuntimeShaderFactory& self, uintptr_t fptr, size_t len,
+                                                SimpleMatrix sm)->sk_sp<SkShader> {
+            uint8_t* floatData = reinterpret_cast<uint8_t*>(fptr);
+            sk_sp<SkData> bytes = SkData::MakeFromMalloc(floatData, len);
+            auto m = toSkMatrix(sm);
+            return self.make(bytes, &m);
+        }));
 
     class_<SkSurface>("SkSurface")
         .smart_ptr<sk_sp<SkSurface>>("sk_sp<SkSurface>")

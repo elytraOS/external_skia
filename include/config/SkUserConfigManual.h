@@ -19,7 +19,6 @@
   #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
   // Legacy flags
-  #define SK_SUPPORT_LEGACY_PATH_FILLTYPE_ENUM
   #define SK_IGNORE_GPU_DITHER
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
  
@@ -30,5 +29,8 @@
   #define SK_SUPPORT_LEGACY_AAA_CHOICE
 
   #define SK_DISABLE_DAA  // skbug.com/6886
+
+  // b/145995037
+  #define SK_LEGACY_WEBP_LOOP_COUNT
 
 #endif // SkUserConfigManual_DEFINED
