@@ -156,14 +156,15 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     const GrBackendFormat format =
         context->priv().caps()->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                         GrRenderable::kNo);
+    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, GrColorType::kRGBA_8888);
 
     for (bool makeClone : {false, true}) {
         for (int parentCnt = 0; parentCnt < 2; parentCnt++) {
-            auto renderTargetContext = context->priv().makeDeferredRenderTargetContext(
-                    SkBackingFit::kApprox, 1, 1, GrColorType::kRGBA_8888, nullptr);
+            auto renderTargetContext = GrRenderTargetContext::Make(
+                    context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1});
             {
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                        format, desc, GrRenderable::kNo, 1, kTopLeft_GrSurfaceOrigin,
+                        format, desc, swizzle, GrRenderable::kNo, 1, kTopLeft_GrSurfaceOrigin,
                         GrMipMapped::kNo, SkBackingFit::kExact, SkBudgeted::kYes, GrProtected::kNo);
 
                 {
@@ -236,7 +237,8 @@ void test_draw_op(GrContext* context,
                   sk_sp<GrTextureProxy> inputDataProxy,
                   SkAlphaType inputAlphaType) {
     GrPaint paint;
-    paint.addColorTextureProcessor(std::move(inputDataProxy), inputAlphaType, SkMatrix::I());
+    paint.addColorFragmentProcessor(
+            GrTextureEffect::Make(std::move(inputDataProxy), inputAlphaType));
     paint.addColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
@@ -341,9 +343,14 @@ bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
 }
 
 bool log_texture_proxy(GrContext* context, sk_sp<GrTextureProxy> src, SkString* dst) {
-    auto sContext = GrSurfaceContext::Make(context, src, GrColorType::kRGBA_8888, kLogAlphaType,
-                                           nullptr);
     SkImageInfo ii = SkImageInfo::Make(src->dimensions(), kRGBA_8888_SkColorType, kLogAlphaType);
+
+    GrSurfaceOrigin origin = src->origin();
+    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(src->backendFormat(),
+                                                               GrColorType::kRGBA_8888);
+    GrSurfaceProxyView view(std::move(src), origin, swizzle);
+    auto sContext = GrSurfaceContext::Make(context, std::move(view), GrColorType::kRGBA_8888,
+                                           kLogAlphaType, nullptr);
     SkBitmap bm;
     SkAssertResult(bm.tryAllocPixels(ii));
     SkAssertResult(sContext->readPixels(ii, bm.getPixels(), bm.rowBytes(), {0, 0}));
@@ -482,8 +489,9 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
 
     // Make the destination context for the test.
     static constexpr int kRenderSize = 256;
-    auto rtc = context->priv().makeDeferredRenderTargetContext(
-            SkBackingFit::kExact, kRenderSize, kRenderSize, GrColorType::kRGBA_8888, nullptr);
+    auto rtc = GrRenderTargetContext::Make(
+            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
+            {kRenderSize, kRenderSize});
 
     GrProcessorTestData::ProxyInfo proxies[2];
     if (!init_test_textures(resourceProvider, proxyProvider, &random, proxies)) {
@@ -716,8 +724,9 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
 
     // Make the destination context for the test.
     static constexpr int kRenderSize = 1024;
-    auto rtc = context->priv().makeDeferredRenderTargetContext(
-            SkBackingFit::kExact, kRenderSize, kRenderSize, GrColorType::kRGBA_8888, nullptr);
+    auto rtc = GrRenderTargetContext::Make(
+            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
+            {kRenderSize, kRenderSize});
 
     GrProcessorTestData::ProxyInfo proxies[2];
     if (!init_test_textures(resourceProvider, proxyProvider, &random, proxies)) {

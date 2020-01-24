@@ -39,8 +39,8 @@ public:
         GrGLSLVarying uv(kFloat2_GrSLType);
         GrSLType texIdxType = args.fShaderCaps->integerSupport() ? kInt_GrSLType : kFloat_GrSLType;
         GrGLSLVarying texIdx(texIdxType);
-        append_index_uv_varyings(args, btgp.inTextureCoords().name(), atlasDimensionsInvName, &uv,
-                                 &texIdx, nullptr);
+        append_index_uv_varyings(args, btgp.numTextureSamplers(), btgp.inTextureCoords().name(),
+                                 atlasDimensionsInvName, &uv, &texIdx, nullptr);
 
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         // Setup pass through color
@@ -123,8 +123,10 @@ GrBitmapTextGeoProc::GrBitmapTextGeoProc(const GrShaderCaps& caps,
                                          bool wideColor,
                                          const GrSurfaceProxyView* views,
                                          int numActiveViews,
-                                         const GrSamplerState& params, GrMaskFormat format,
-                                         const SkMatrix& localMatrix, bool usesW)
+                                         GrSamplerState params,
+                                         GrMaskFormat format,
+                                         const SkMatrix& localMatrix,
+                                         bool usesW)
         : INHERITED(kGrBitmapTextGeoProc_ClassID)
         , fColor(color)
         , fLocalMatrix(localMatrix)
@@ -144,8 +146,8 @@ GrBitmapTextGeoProc::GrBitmapTextGeoProc(const GrShaderCaps& caps,
         fInColor = MakeColorAttribute("inColor", wideColor);
     }
 
-    fInTextureCoords = {"inTextureCoords", kUShort2_GrVertexAttribType,
-                        caps.integerSupport() ? kUShort2_GrSLType : kFloat2_GrSLType};
+    fInTextureCoords = {"inTextureCoords", kShort2_GrVertexAttribType,
+                        caps.integerSupport() ? kShort2_GrSLType : kFloat2_GrSLType};
     this->setVertexAttributes(&fInPosition, 3);
 
     if (numActiveViews) {
@@ -162,7 +164,7 @@ GrBitmapTextGeoProc::GrBitmapTextGeoProc(const GrShaderCaps& caps,
 
 void GrBitmapTextGeoProc::addNewViews(const GrSurfaceProxyView* views,
                                       int numActiveViews,
-                                      const GrSamplerState& params) {
+                                      GrSamplerState params) {
     SkASSERT(numActiveViews <= kMaxTextures);
     // Just to make sure we don't try to add too many proxies
     numActiveViews = SkTMin(numActiveViews, kMaxTextures);

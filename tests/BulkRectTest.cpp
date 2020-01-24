@@ -13,8 +13,8 @@
 #include "tests/Test.h"
 
 static std::unique_ptr<GrRenderTargetContext> new_RTC(GrContext* context) {
-    return context->priv().makeDeferredRenderTargetContext(SkBackingFit::kExact, 128, 128,
-                                                           GrColorType::kRGBA_8888, nullptr);
+    return GrRenderTargetContext::Make(
+            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact, {128, 128});
 }
 
 sk_sp<GrSurfaceProxy> create_proxy(GrContext* context) {
@@ -26,9 +26,10 @@ sk_sp<GrSurfaceProxy> create_proxy(GrContext* context) {
     const GrBackendFormat format = context->priv().caps()->getDefaultBackendFormat(
                                                                            GrColorType::kRGBA_8888,
                                                                            GrRenderable::kYes);
+    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, GrColorType::kRGBA_8888);
 
     return context->priv().proxyProvider()->createProxy(
-        format, desc, GrRenderable::kYes, 1, kTopLeft_GrSurfaceOrigin, GrMipMapped::kNo,
+        format, desc, swizzle, GrRenderable::kYes, 1, kTopLeft_GrSurfaceOrigin, GrMipMapped::kNo,
         SkBackingFit::kExact, SkBudgeted::kNo, GrProtected::kNo, GrInternalSurfaceFlags::kNone);
 }
 

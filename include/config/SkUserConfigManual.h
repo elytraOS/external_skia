@@ -21,6 +21,8 @@
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
+  #define SK_SUPPORT_LEGACY_CANVAS_MATRIX_VIRTUALS
+  #define SK_SUPPORT_LEGACY_COLORSPACE_INCLUDES_MATRIX44
  
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
@@ -29,8 +31,5 @@
   #define SK_SUPPORT_LEGACY_AAA_CHOICE
 
   #define SK_DISABLE_DAA  // skbug.com/6886
-
-  // b/145995037
-  #define SK_LEGACY_WEBP_LOOP_COUNT
 
 #endif // SkUserConfigManual_DEFINED

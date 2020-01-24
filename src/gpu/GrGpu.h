@@ -133,7 +133,8 @@ public:
                                    GrProtected isProtected);
 
     sk_sp<GrTexture> createCompressedTexture(SkISize dimensions, const GrBackendFormat&,
-                                             SkBudgeted, const void* data, size_t dataSize);
+                                             SkBudgeted, GrMipMapped,
+                                             const void* data, size_t dataSize);
 
     /**
      * Implements GrResourceProvider::wrapBackendTexture
@@ -528,15 +529,15 @@ public:
     GrBackendTexture createBackendTexture(SkISize dimensions,
                                           const GrBackendFormat&,
                                           GrRenderable,
-                                          const BackendTextureData*,
                                           int numMipLevels,
-                                          GrProtected);
+                                          GrProtected,
+                                          const BackendTextureData*);
 
     GrBackendTexture createCompressedBackendTexture(SkISize dimensions,
                                                     const GrBackendFormat&,
-                                                    const BackendTextureData*,
                                                     GrMipMapped,
-                                                    GrProtected);
+                                                    GrProtected,
+                                                    const BackendTextureData*);
 
     /**
      * Frees a texture created by createBackendTexture(). If ownership of the backend
@@ -630,15 +631,15 @@ private:
     virtual GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                                     const GrBackendFormat&,
                                                     GrRenderable,
-                                                    const BackendTextureData*,
                                                     GrMipMapped,
-                                                    GrProtected isProtected) = 0;
+                                                    GrProtected,
+                                                    const BackendTextureData*) = 0;
 
     virtual GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                               const GrBackendFormat&,
-                                                              const BackendTextureData*,
                                                               GrMipMapped,
-                                                              GrProtected isProtected) = 0;
+                                                              GrProtected,
+                                                              const BackendTextureData*) = 0;
 
     // called when the 3D context state is unknown. Subclass should emit any
     // assumed 3D context state and dirty any state cache.
@@ -668,7 +669,7 @@ private:
                                              uint32_t levelClearMask) = 0;
     virtual sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                        const GrBackendFormat&,
-                                                       SkBudgeted,
+                                                       SkBudgeted, GrMipMapped,
                                                        const void* data, size_t dataSize) = 0;
     virtual sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType,
                                                   GrWrapOwnership, GrWrapCacheable, GrIOType) = 0;

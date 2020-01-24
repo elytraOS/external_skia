@@ -353,9 +353,10 @@ private:
             } else {
                 matrix = &SkMatrix::I();
             }
-            flushInfo.fGeometryProcessor = GrDistanceFieldPathGeoProc::Make(target->allocator(),
-                    *target->caps().shaderCaps(), *matrix, fWideColor, fAtlas->getViews(),
-                    fAtlas->numActivePages(), GrSamplerState::ClampBilerp(), flags);
+            flushInfo.fGeometryProcessor = GrDistanceFieldPathGeoProc::Make(
+                    target->allocator(), *target->caps().shaderCaps(), *matrix, fWideColor,
+                    fAtlas->getViews(), fAtlas->numActivePages(), GrSamplerState::Filter::kBilerp,
+                    flags);
         } else {
             SkMatrix invert;
             if (fHelper.usesLocalCoords()) {
@@ -364,10 +365,10 @@ private:
                 }
             }
 
-            flushInfo.fGeometryProcessor = GrBitmapTextGeoProc::Make(target->allocator(),
-                    *target->caps().shaderCaps(), this->color(), fWideColor, fAtlas->getViews(),
-                    fAtlas->numActivePages(), GrSamplerState::ClampNearest(), kA8_GrMaskFormat,
-                    invert, false);
+            flushInfo.fGeometryProcessor = GrBitmapTextGeoProc::Make(
+                    target->allocator(), *target->caps().shaderCaps(), this->color(), fWideColor,
+                    fAtlas->getViews(), fAtlas->numActivePages(), GrSamplerState::Filter::kNearest,
+                    kA8_GrMaskFormat, invert, false);
         }
 
         // allocate vertices
@@ -624,17 +625,20 @@ private:
         shapeData->fBounds.fRight /= scale;
         shapeData->fBounds.fBottom /= scale;
 
-        // We pack the 2bit page index in the low bit of the u and v texture coords
+        // Pack the page index into the u and v texture coords
         uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
         SkASSERT(pageIndex < 4);
-        uint16_t uBit = (pageIndex >> 1) & 0x1;
-        uint16_t vBit = pageIndex & 0x1;
-        shapeData->fTextureCoords.set((atlasLocation.fX+SK_DistanceFieldPad) << 1 | uBit,
-                                      (atlasLocation.fY+SK_DistanceFieldPad) << 1 | vBit,
-                                      (atlasLocation.fX+SK_DistanceFieldPad+
-                                       devPathBounds.width()) << 1 | uBit,
-                                      (atlasLocation.fY+SK_DistanceFieldPad+
-                                       devPathBounds.height()) << 1 | vBit);
+        int16_t left, top, right, bottom;
+        std::tie(left, top, right, bottom) =
+                std::make_tuple(atlasLocation.fX + SK_DistanceFieldPad,
+                                atlasLocation.fY + SK_DistanceFieldPad,
+                                atlasLocation.fX + SK_DistanceFieldPad + devPathBounds.width(),
+                                atlasLocation.fY + SK_DistanceFieldPad + devPathBounds.height());
+        std::tie(left, top) =
+                GrDrawOpAtlas::PackIndexInTexCoords(left, top, pageIndex);
+        std::tie(right, bottom) =
+                GrDrawOpAtlas::PackIndexInTexCoords(right, bottom, pageIndex);
+        shapeData->fTextureCoords.set(left, top, right, bottom);
 
         fShapeCache->add(shapeData);
         fShapeList->addToTail(shapeData);
@@ -722,14 +726,18 @@ private:
         shapeData->fBounds = SkRect::Make(devPathBounds);
         shapeData->fBounds.offset(-translateX, -translateY);
 
-        // We pack the 2bit page index in the low bit of the u and v texture coords
+        // Pack the page index into the u and v texture coords
         uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
         SkASSERT(pageIndex < 4);
-        uint16_t uBit = (pageIndex >> 1) & 0x1;
-        uint16_t vBit = pageIndex & 0x1;
-        shapeData->fTextureCoords.set(atlasLocation.fX << 1 | uBit, atlasLocation.fY << 1 | vBit,
-                                      (atlasLocation.fX+width) << 1 | uBit,
-                                      (atlasLocation.fY+height) << 1 | vBit);
+        int16_t left, top, right, bottom;
+        std::tie(left, top, right, bottom) = std::make_tuple(atlasLocation.fX, atlasLocation.fY,
+                                                             atlasLocation.fX+width,
+                                                             atlasLocation.fY+height);
+        std::tie(left, top) =
+                GrDrawOpAtlas::PackIndexInTexCoords(left, top, pageIndex);
+        std::tie(right, bottom) =
+                GrDrawOpAtlas::PackIndexInTexCoords(right, bottom, pageIndex);
+        shapeData->fTextureCoords.set(left, top, right, bottom);
 
         fShapeCache->add(shapeData);
         fShapeList->addToTail(shapeData);
@@ -784,10 +792,12 @@ private:
             // Update the proxies used in the GP to match.
             if (fUsesDistanceField) {
                 reinterpret_cast<GrDistanceFieldPathGeoProc*>(gp)->addNewViews(
-                    fAtlas->getViews(), fAtlas->numActivePages(), GrSamplerState::ClampBilerp());
+                        fAtlas->getViews(), fAtlas->numActivePages(),
+                        GrSamplerState::Filter::kBilerp);
             } else {
                 reinterpret_cast<GrBitmapTextGeoProc*>(gp)->addNewViews(
-                    fAtlas->getViews(), fAtlas->numActivePages(), GrSamplerState::ClampNearest());
+                        fAtlas->getViews(), fAtlas->numActivePages(),
+                        GrSamplerState::Filter::kNearest);
             }
         }
 

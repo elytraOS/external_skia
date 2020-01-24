@@ -95,7 +95,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
             SkColor4f color = {0, 0, 0, 0};
             GrFillInCompressedData(compression, dimensions, GrMipMapped::kNo,
                                    (char*)data->writable_data(), color);
-            return rp->createCompressedTexture(dimensions, format, SkBudgeted::kNo, data.get());
+            return rp->createCompressedTexture(dimensions, format, SkBudgeted::kNo,
+                                               GrMipMapped::kNo, data.get());
         } else {
             GrPixelConfig config = rp->caps()->getConfigFromBackendFormat(format, colorType);
 
@@ -164,9 +165,11 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
                 bool expectedMipMapability = isTexturable && caps->mipMapSupport() &&
                                                 !isCompressed;
 
+                GrSwizzle swizzle = caps->getReadSwizzle(combo.fFormat, combo.fColorType);
+
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                        combo.fFormat, desc, GrRenderable::kNo, 1, origin, GrMipMapped::kYes,
-                        SkBackingFit::kExact, SkBudgeted::kNo, GrProtected::kNo);
+                        combo.fFormat, desc, swizzle, GrRenderable::kNo, 1, origin,
+                        GrMipMapped::kYes, SkBackingFit::kExact, SkBudgeted::kNo, GrProtected::kNo);
                 REPORTER_ASSERT(reporter, SkToBool(proxy.get()) == expectedMipMapability,
                                 "ct:%s format:%s, tex:%d, expectedMipMapability:%d",
                                 GrColorTypeToStr(combo.fColorType),
@@ -301,7 +304,11 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                 {kSize, kSize}, combo.fColorType, combo.fFormat, renderable, 1,
                                 kTopLeft_GrSurfaceOrigin, fit, SkBudgeted::kYes, GrProtected::kNo);
                         if (proxy) {
-                            auto texCtx = GrSurfaceContext::Make(context, std::move(proxy),
+                            GrSwizzle swizzle = caps->getReadSwizzle(combo.fFormat,
+                                                                     combo.fColorType);
+                            GrSurfaceProxyView view(std::move(proxy), kTopLeft_GrSurfaceOrigin,
+                                                    swizzle);
+                            auto texCtx = GrSurfaceContext::Make(context, std::move(view),
                                                                  combo.fColorType,
                                                                  kPremul_SkAlphaType, nullptr);
 
@@ -323,9 +330,10 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                     {
                         std::unique_ptr<GrSurfaceContext> surfCtx;
                         if (renderable == GrRenderable::kYes) {
-                            surfCtx = context->priv().makeDeferredRenderTargetContext(
-                                    fit, desc.fWidth, desc.fHeight, combo.fColorType, nullptr,
-                                    1, GrMipMapped::kNo, kTopLeft_GrSurfaceOrigin, nullptr);
+                            surfCtx = GrRenderTargetContext::Make(
+                                    context, combo.fColorType, nullptr, fit,
+                                    {desc.fWidth, desc.fHeight}, 1, GrMipMapped::kNo,
+                                    GrProtected::kNo, kTopLeft_GrSurfaceOrigin);
                         } else {
                             surfCtx = GrSurfaceContext::Make(
                                     context, {desc.fWidth, desc.fHeight}, combo.fFormat,
@@ -398,7 +406,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadOnlyTexture, reporter, context_info) {
                                                        kTopLeft_GrSurfaceOrigin,
                                                        kBorrow_GrWrapOwnership,
                                                        GrWrapCacheable::kNo, ioType);
-        auto surfContext = GrSurfaceContext::Make(context, proxy, GrColorType::kRGBA_8888,
+        GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(proxy->backendFormat(),
+                                                                   GrColorType::kRGBA_8888);
+        GrSurfaceProxyView view(proxy, kTopLeft_GrSurfaceOrigin, swizzle);
+        auto surfContext = GrSurfaceContext::Make(context, std::move(view), GrColorType::kRGBA_8888,
                                                   kPremul_SkAlphaType, nullptr);
 
         // Read pixels should work with a read-only texture.

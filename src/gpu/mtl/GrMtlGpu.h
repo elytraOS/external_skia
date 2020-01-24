@@ -129,15 +129,15 @@ private:
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            const BackendTextureData*,
                                             GrMipMapped,
-                                            GrProtected) override;
+                                            GrProtected,
+                                            const BackendTextureData*) override;
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      const BackendTextureData*,
                                                       GrMipMapped,
-                                                      GrProtected) override;
+                                                      GrProtected,
+                                                      const BackendTextureData*) override;
 
     sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc& desc,
                                      const GrBackendFormat& format,
@@ -148,7 +148,7 @@ private:
                                      int mipLevelCount,
                                      uint32_t levelClearMask) override;
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions, const GrBackendFormat&,
-                                               SkBudgeted, const void* data,
+                                               SkBudgeted, GrMipMapped, const void* data,
                                                size_t dataSize) override;
 
     sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType,
@@ -210,11 +210,11 @@ private:
 
     bool createMtlTextureForBackendSurface(MTLPixelFormat,
                                            SkISize dimensions,
-                                           bool texturable,
+                                           GrTexturable,
                                            GrRenderable,
-                                           const BackendTextureData*,
                                            GrMipMapped,
-                                           GrMtlTextureInfo*);
+                                           GrMtlTextureInfo*,
+                                           const BackendTextureData*);
 
 #if GR_TEST_UTILS
     void testingOnly_startCapture() override;

@@ -156,8 +156,8 @@ sk_sp<GrTexture> GrGpu::createTextureCommon(const GrSurfaceDesc& desc,
     }
 
     GrMipMapped mipMapped = mipLevelCount > 1 ? GrMipMapped::kYes : GrMipMapped::kNo;
-    if (!this->caps()->validateSurfaceParams({desc.fWidth, desc.fHeight}, format, desc.fConfig,
-                                             renderable, renderTargetSampleCnt, mipMapped)) {
+    if (!this->caps()->validateSurfaceParams({desc.fWidth, desc.fHeight}, format, renderable,
+                                             renderTargetSampleCnt, mipMapped)) {
         return nullptr;
     }
 
@@ -272,6 +272,7 @@ sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& desc,
 sk_sp<GrTexture> GrGpu::createCompressedTexture(SkISize dimensions,
                                                 const GrBackendFormat& format,
                                                 SkBudgeted budgeted,
+                                                GrMipMapped mipMapped,
                                                 const void* data,
                                                 size_t dataSize) {
     this->handleDirtyContext();
@@ -291,11 +292,10 @@ sk_sp<GrTexture> GrGpu::createCompressedTexture(SkISize dimensions,
     // TODO: expand CompressedDataIsCorrect to work here too
     SkImage::CompressionType compressionType = this->caps()->compressionType(format);
 
-    if (dataSize < GrCompressedDataSize(compressionType, dimensions,
-                                        nullptr, GrMipMapped::kNo)) {
+    if (dataSize < GrCompressedDataSize(compressionType, dimensions, nullptr, mipMapped)) {
         return nullptr;
     }
-    return this->onCreateCompressedTexture(dimensions, format, budgeted, data, dataSize);
+    return this->onCreateCompressedTexture(dimensions, format, budgeted, mipMapped, data, dataSize);
 }
 
 sk_sp<GrTexture> GrGpu::wrapBackendTexture(const GrBackendTexture& backendTex,
@@ -465,10 +465,6 @@ bool GrGpu::readPixels(GrSurface* surface, int left, int top, int width, int hei
         if (rowBytes % GrColorTypeBytesPerPixel(dstColorType)) {
             return false;
         }
-    }
-
-    if (this->caps()->isFormatCompressed(surface->backendFormat())) {
-        return false;
     }
 
     this->handleDirtyContext();
@@ -812,9 +808,9 @@ bool GrGpu::CompressedDataIsCorrect(SkISize dimensions, SkImage::CompressionType
 GrBackendTexture GrGpu::createBackendTexture(SkISize dimensions,
                                              const GrBackendFormat& format,
                                              GrRenderable renderable,
-                                             const BackendTextureData* data,
                                              int numMipLevels,
-                                             GrProtected isProtected) {
+                                             GrProtected isProtected,
+                                             const BackendTextureData* data) {
     const GrCaps* caps = this->caps();
 
     if (!format.isValid()) {
@@ -846,16 +842,16 @@ GrBackendTexture GrGpu::createBackendTexture(SkISize dimensions,
         return {};
     }
 
-    return this->onCreateBackendTexture(dimensions, format, renderable, data,
+    return this->onCreateBackendTexture(dimensions, format, renderable,
                                         numMipLevels > 1 ? GrMipMapped::kYes : GrMipMapped::kNo,
-                                        isProtected);
+                                        isProtected, data);
 }
 
 GrBackendTexture GrGpu::createCompressedBackendTexture(SkISize dimensions,
                                                        const GrBackendFormat& format,
-                                                       const BackendTextureData* data,
                                                        GrMipMapped mipMapped,
-                                                       GrProtected isProtected) {
+                                                       GrProtected isProtected,
+                                                       const BackendTextureData* data) {
     const GrCaps* caps = this->caps();
 
     if (!format.isValid()) {
@@ -882,6 +878,6 @@ GrBackendTexture GrGpu::createCompressedBackendTexture(SkISize dimensions,
         return {};
     }
 
-    return this->onCreateCompressedBackendTexture(dimensions, format, data, mipMapped,
-                                                  isProtected);
+    return this->onCreateCompressedBackendTexture(dimensions, format, mipMapped,
+                                                  isProtected, data);
 }

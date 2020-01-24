@@ -74,7 +74,8 @@ enum GrPixelConfig {
     kRGBA_half_GrPixelConfig,
     kRGBA_half_Clamped_GrPixelConfig,
     kRGB_ETC1_GrPixelConfig,
-    kRGB_BC1_GrPixelConfig,
+    kBC1_RGB8_UNORM_GrPixelConfig,
+    kBC1_RGBA8_UNORM_GrPixelConfig,
     kAlpha_16_GrPixelConfig,
     kRG_1616_GrPixelConfig,
     kRGBA_16161616_GrPixelConfig,
@@ -119,6 +120,14 @@ static constexpr bool GrIsPrimTypeTris(GrPrimitiveType type) {
 }
 
 enum class GrPrimitiveRestart : bool {
+    kNo = false,
+    kYes = true
+};
+
+/**
+ * Should a created surface be texturable?
+ */
+enum class GrTexturable : bool {
     kNo = false,
     kYes = true
 };
@@ -797,16 +806,17 @@ typedef uint64_t GrFence;
  * Used to include or exclude specific GPU path renderers for testing purposes.
  */
 enum class GpuPathRenderers {
-    kNone              =  0, // Always use software masks and/or GrDefaultPathRenderer.
-    kDashLine          =  1 << 0,
-    kStencilAndCover   =  1 << 1,
-    kCoverageCounting  =  1 << 2,
-    kAAHairline        =  1 << 3,
-    kAAConvex          =  1 << 4,
-    kAALinearizing     =  1 << 5,
-    kSmall             =  1 << 6,
-    kTessellating      =  1 << 7,
-    kDefault           = (1 << 8) - 1  // All.
+    kNone              =   0,  // Always use software masks and/or GrDefaultPathRenderer.
+    kDashLine          =   1 << 0,
+    kGpuTessellation   =   1 << 1,
+    kStencilAndCover   =   1 << 2,
+    kCoverageCounting  =   1 << 3,
+    kAAHairline        =   1 << 4,
+    kAAConvex          =   1 << 5,
+    kAALinearizing     =   1 << 6,
+    kSmall             =   1 << 7,
+    kTessellating      =   1 << 8,
+    kDefault           = ((1 << 9) - 1) & ~kGpuTessellation  // All but kGpuTessellation.
 };
 
 /**
@@ -1220,11 +1230,14 @@ static constexpr GrColorType GrPixelConfigToColorType(GrPixelConfig config) {
             return GrColorType::kRGBA_F16;
         case kRGBA_half_Clamped_GrPixelConfig:
             return GrColorType::kRGBA_F16_Clamped;
+
+        // We may need a roughly equivalent color type for a compressed textures. This should be
+        // the logical format for decompressing the data into.
         case kRGB_ETC1_GrPixelConfig:
-        case kRGB_BC1_GrPixelConfig:
-            // We may need a roughly equivalent color type for a compressed texture. This should be
-            // the logical format for decompressing the data into.
+        case kBC1_RGB8_UNORM_GrPixelConfig:
             return GrColorType::kRGB_888x;
+        case kBC1_RGBA8_UNORM_GrPixelConfig:
+            return GrColorType::kRGBA_8888;
         case kAlpha_8_as_Alpha_GrPixelConfig:
             return GrColorType::kAlpha_8;
         case kAlpha_8_as_Red_GrPixelConfig:
@@ -1283,11 +1296,48 @@ static constexpr GrPixelConfig GrColorTypeToPixelConfig(GrColorType colorType) {
 
 static constexpr GrPixelConfig GrCompressionTypeToPixelConfig(SkImage::CompressionType compression) {
     switch (compression) {
-        case SkImage::CompressionType::kNone:           return kUnknown_GrPixelConfig;
-        case SkImage::CompressionType::kETC1:           return kRGB_ETC1_GrPixelConfig;
-        case SkImage::CompressionType::kBC1_RGB8_UNORM: return kRGB_BC1_GrPixelConfig;
+        case SkImage::CompressionType::kNone:            return kUnknown_GrPixelConfig;
+        case SkImage::CompressionType::kETC2_RGB8_UNORM: return kRGB_ETC1_GrPixelConfig;
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:  return kBC1_RGB8_UNORM_GrPixelConfig;
+        case SkImage::CompressionType::kBC1_RGBA8_UNORM: return kBC1_RGBA8_UNORM_GrPixelConfig;
     }
 
+    SkUNREACHABLE;
+}
+
+static constexpr bool GrCompressionTypeIsOpaque(SkImage::CompressionType compression) {
+    switch (compression) {
+        case SkImage::CompressionType::kNone:            return true;
+        case SkImage::CompressionType::kETC2_RGB8_UNORM: return true;
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:  return true;
+        case SkImage::CompressionType::kBC1_RGBA8_UNORM: return false;
+    }
+
+    SkUNREACHABLE;
+}
+
+// In general we try to not mix CompressionType and ColorType, but currently SkImage still requires
+// an SkColorType even for CompressedTypes so we need some conversion.
+static constexpr SkColorType GrCompressionTypeToSkColorType(SkImage::CompressionType compression) {
+    switch (compression) {
+        case SkImage::CompressionType::kNone:            return kUnknown_SkColorType;
+        case SkImage::CompressionType::kETC2_RGB8_UNORM: return kRGB_888x_SkColorType;
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:  return kRGB_888x_SkColorType;
+        case SkImage::CompressionType::kBC1_RGBA8_UNORM: return kRGBA_8888_SkColorType;
+    }
+
+    SkUNREACHABLE;
+}
+
+static constexpr GrColorType GrMaskFormatToColorType(GrMaskFormat format) {
+    switch (format) {
+        case kA8_GrMaskFormat:
+            return GrColorType::kAlpha_8;
+        case kA565_GrMaskFormat:
+            return GrColorType::kBGR_565;
+        case kARGB_GrMaskFormat:
+            return GrColorType::kRGBA_8888;
+    }
     SkUNREACHABLE;
 }
 
@@ -1358,9 +1408,10 @@ static constexpr const char* GrColorTypeToStr(GrColorType ct) {
 
 static constexpr const char* GrCompressionTypeToStr(SkImage::CompressionType compression) {
     switch (compression) {
-        case SkImage::CompressionType::kNone:           return "kNone";
-        case SkImage::CompressionType::kETC1:           return "kETC1";
-        case SkImage::CompressionType::kBC1_RGB8_UNORM: return "kBC1_RGB8_UNORM";
+        case SkImage::CompressionType::kNone:            return "kNone";
+        case SkImage::CompressionType::kETC2_RGB8_UNORM: return "kETC2_RGB8_UNORM";
+        case SkImage::CompressionType::kBC1_RGB8_UNORM:  return "kBC1_RGB8_UNORM";
+        case SkImage::CompressionType::kBC1_RGBA8_UNORM: return "kBC1_RGBA8_UNORM";
     }
     SkUNREACHABLE;
 }

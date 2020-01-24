@@ -41,8 +41,8 @@
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/GrXfermodeFragmentProcessor.h"
+#include "src/gpu/effects/generated/GrClampFragmentProcessor.h"
 #include "src/gpu/effects/generated/GrConstColorProcessor.h"
-#include "src/gpu/effects/generated/GrSaturateProcessor.h"
 #include "src/image/SkImage_Base.h"
 #include "src/shaders/SkShaderBase.h"
 
@@ -133,13 +133,13 @@ sk_sp<GrTextureProxy> GrCopyBaseMipMapToTextureProxy(GrRecordingContext* ctx,
     if (!ctx->priv().caps()->isFormatCopyable(baseProxy->backendFormat())) {
         return nullptr;
     }
-    return GrSurfaceProxy::Copy(ctx, baseProxy, GrMipMapped::kYes, SkBackingFit::kExact,
-                                SkBudgeted::kYes);
+    return GrSurfaceProxy::Copy(ctx, baseProxy, srcColorType, GrMipMapped::kYes,
+                                SkBackingFit::kExact, SkBudgeted::kYes);
 }
 
 sk_sp<GrTextureProxy> GrRefCachedBitmapTextureProxy(GrRecordingContext* ctx,
                                                     const SkBitmap& bitmap,
-                                                    const GrSamplerState& params,
+                                                    GrSamplerState params,
                                                     SkScalar scaleAdjust[2]) {
     return GrBitmapTextureMaker(ctx, bitmap).refTextureProxyForParams(params, scaleAdjust);
 }
@@ -480,7 +480,7 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
 #endif
     if (GrColorTypeClampType(dstColorInfo.colorType()) == GrClampType::kManual) {
         if (grPaint->numColorFragmentProcessors()) {
-            grPaint->addColorFragmentProcessor(GrSaturateProcessor::Make());
+            grPaint->addColorFragmentProcessor(GrClampFragmentProcessor::Make(false));
         } else {
             auto color = grPaint->getColor4f();
             grPaint->setColor4f({SkTPin(color.fR, 0.f, 1.f),

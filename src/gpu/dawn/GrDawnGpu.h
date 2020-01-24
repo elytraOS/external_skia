@@ -42,14 +42,14 @@ public:
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            const BackendTextureData*,
                                             GrMipMapped,
-                                            GrProtected) override;
+                                            GrProtected,
+                                            const BackendTextureData*) override;
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      const BackendTextureData*,
                                                       GrMipMapped,
-                                                      GrProtected) override;
+                                                      GrProtected,
+                                                      const BackendTextureData*) override;
 
     void deleteBackendTexture(const GrBackendTexture&) override;
 #if GR_TEST_UTILS
@@ -96,7 +96,7 @@ public:
 
     sk_sp<GrDawnProgram> getOrCreateRenderPipeline(GrRenderTarget*, const GrProgramInfo&);
 
-    wgpu::Sampler getOrCreateSampler(const GrSamplerState& samplerState);
+    wgpu::Sampler getOrCreateSampler(GrSamplerState samplerState);
 
     GrDawnRingBuffer::Slice allocateUniformRingBufferSlice(int size);
     GrDawnStagingBuffer* getStagingBuffer(size_t size);
@@ -110,7 +110,7 @@ private:
 
     virtual void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override {}
 
-    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc& desc,
+    sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc&,
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,
@@ -121,7 +121,7 @@ private:
 
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                const GrBackendFormat&,
-                                               SkBudgeted,
+                                               SkBudgeted, GrMipMapped,
                                                const void* data, size_t dataSize) override;
 
     sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType, GrWrapOwnership,
@@ -183,7 +183,7 @@ private:
     };
 
     struct SamplerHash {
-        size_t operator()(const GrSamplerState& samplerState) const {
+        size_t operator()(GrSamplerState samplerState) const {
             return SkOpts::hash_fn(&samplerState, sizeof(samplerState), 0);
         }
     };

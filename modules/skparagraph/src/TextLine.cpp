@@ -115,6 +115,71 @@ TextLine::TextLine(ParagraphImpl* master,
     }
 }
 
+SkRect TextLine::calculateBoundaries() {
+
+    auto boundaries = SkRect::MakeEmpty();
+    auto clusters = fMaster->clusters(fClusterRange);
+    Run* run = nullptr;
+    auto runShift = 0.0f;
+    auto clusterShift = 0.0f;
+    for (auto cluster = clusters.begin(); cluster != clusters.end(); ++cluster) {
+        if (run == nullptr || cluster->runIndex() != run->index()) {
+            run = &fMaster->run(cluster->runIndex());
+            runShift += clusterShift;
+            clusterShift = 0;
+        }
+        clusterShift += cluster->width();
+        for (auto i = cluster->startPos(); i < cluster->endPos(); ++i) {
+            auto posX = run->posX(i);
+            auto posY = run->posY(i);
+            auto bounds = run->getBounds(i);
+            bounds.offset(posX + runShift, posY);
+            boundaries.joinPossiblyEmptyRect(bounds);
+        }
+    }
+
+    // We need to take in account all the shadows when we calculate the boundaries
+    // TODO: Need to find a better solution
+    if (fHasShadows) {
+        SkRect shadowRect = SkRect::MakeEmpty();
+        this->iterateThroughVisualRuns(false,
+            [this, &shadowRect, boundaries]
+            (const Run* run, SkScalar runOffsetInLine, TextRange textRange, SkScalar* runWidthInLine) {
+            *runWidthInLine = this->iterateThroughSingleRunByStyles(
+                run, runOffsetInLine, textRange, StyleType::kShadow,
+                [&shadowRect, boundaries](TextRange textRange, const TextStyle& style, const ClipContext& context) {
+
+                    for (TextShadow shadow : style.getShadows()) {
+                        if (!shadow.hasShadow()) continue;
+                        SkPaint paint;
+                        paint.setColor(shadow.fColor);
+                        if (shadow.fBlurRadius != 0.0) {
+                            auto filter = SkMaskFilter::MakeBlur(
+                                    kNormal_SkBlurStyle,
+                                    SkDoubleToScalar(shadow.fBlurRadius),
+                                    false);
+                            paint.setMaskFilter(filter);
+                            SkRect bound;
+                            paint.doComputeFastBounds(boundaries, &bound, SkPaint::Style::kFill_Style);
+                            shadowRect.joinPossiblyEmptyRect(bound);
+                        }
+                    }
+                });
+            return true;
+            });
+        boundaries.fLeft += shadowRect.fLeft;
+        boundaries.fTop += shadowRect.fTop;
+        boundaries.fRight += shadowRect.fRight;
+        boundaries.fBottom += shadowRect.fBottom;
+    }
+
+    boundaries.offset(this->fOffset);         // Line offset from the beginning of the para
+    boundaries.offset(this->fShift, 0);     // Shift produced by formatting
+    boundaries.offset(0, this->baseline()); // Down by baseline
+
+    return boundaries;
+}
+
 void TextLine::paint(SkCanvas* textCanvas) {
     if (this->empty()) {
         return;
@@ -239,13 +304,13 @@ void TextLine::paintText(SkCanvas* canvas, TextRange textRange, const TextStyle&
 
     // TODO: This is the change for flutter, must be removed later
     SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + 0.5);
-
     SkTextBlobBuilder builder;
     context.run->copyTo(builder, SkToU32(context.pos), context.size, SkVector::Make(0, correctedBaseline));
     canvas->save();
     if (context.clippingNeeded) {
         canvas->clipRect(context.clip);
     }
+
     canvas->translate(context.fTextShift, 0);
     canvas->drawTextBlob(builder.make(), 0, 0, paint);
     canvas->restore();
@@ -516,7 +581,6 @@ void TextLine::createEllipsis(SkScalar maxWidth, const SkString& ellipsis, bool)
     // Go through the clusters in the reverse logical order
     // taking off cluster by cluster until the ellipsis fits
     SkScalar width = fAdvance.fX;
-    bool noWhitespace = false;
 
     auto attachEllipsis = [&](const Cluster* cluster){
         // Shape the ellipsis
@@ -528,7 +592,6 @@ void TextLine::createEllipsis(SkScalar maxWidth, const SkString& ellipsis, bool)
         if (width + run->advance().fX > maxWidth) {
             width -= cluster->width();
             // Continue if it's not
-            noWhitespace = true;
             return false;
         }
 
@@ -540,15 +603,6 @@ void TextLine::createEllipsis(SkScalar maxWidth, const SkString& ellipsis, bool)
 
     iterateThroughClustersInGlyphsOrder(
         true, false, [&](const Cluster* cluster, ClusterIndex index, bool leftToRight, bool ghost) {
-            if (cluster->isWhitespaces()) {
-                width -= cluster->width();
-                noWhitespace = false;
-                return true;
-            } else if (noWhitespace) {
-                width -= cluster->width();
-                return true;
-            }
-
             return !attachEllipsis(cluster);
         });
 

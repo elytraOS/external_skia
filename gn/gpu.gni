@@ -326,8 +326,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/GrRRectEffect.h",
   "$_src/gpu/effects/GrShadowGeoProc.cpp",
   "$_src/gpu/effects/GrShadowGeoProc.h",
-  "$_src/gpu/effects/GrSimpleTextureEffect.cpp",
-  "$_src/gpu/effects/GrSimpleTextureEffect.h",
+  "$_src/gpu/effects/GrTextureEffect.cpp",
+  "$_src/gpu/effects/GrTextureEffect.h",
   "$_src/gpu/effects/GrSkSLFP.cpp",
   "$_src/gpu/effects/GrSkSLFP.h",
   "$_src/gpu/effects/GrSRGBEffect.cpp",
@@ -360,6 +360,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/generated/GrCircleBlurFragmentProcessor.h",
   "$_src/gpu/effects/generated/GrCircleEffect.cpp",
   "$_src/gpu/effects/generated/GrCircleEffect.h",
+  "$_src/gpu/effects/generated/GrClampFragmentProcessor.cpp",
+  "$_src/gpu/effects/generated/GrClampFragmentProcessor.h",
   "$_src/gpu/effects/generated/GrColorMatrixFragmentProcessor.cpp",
   "$_src/gpu/effects/generated/GrColorMatrixFragmentProcessor.h",
   "$_src/gpu/effects/generated/GrComposeLerpEffect.cpp",
@@ -390,8 +392,6 @@ skia_gpu_sources = [
   "$_src/gpu/effects/generated/GrRGBToHSLFilterEffect.h",
   "$_src/gpu/effects/generated/GrRRectBlurEffect.cpp",
   "$_src/gpu/effects/generated/GrRRectBlurEffect.h",
-  "$_src/gpu/effects/generated/GrSaturateProcessor.cpp",
-  "$_src/gpu/effects/generated/GrSaturateProcessor.h",
 
   # gradients
   "$_src/gpu/gradients/GrGradientBitmapCache.cpp",
@@ -419,6 +419,17 @@ skia_gpu_sources = [
   "$_src/gpu/gradients/generated/GrClampedGradientEffect.h",
   "$_src/gpu/gradients/generated/GrTiledGradientEffect.cpp",
   "$_src/gpu/gradients/generated/GrTiledGradientEffect.h",
+
+  "$_src/gpu/tessellate/GrCoverShader.cpp",
+  "$_src/gpu/tessellate/GrCoverShader.h",
+  "$_src/gpu/tessellate/GrGpuTessellationPathRenderer.cpp",
+  "$_src/gpu/tessellate/GrGpuTessellationPathRenderer.h",
+  "$_src/gpu/tessellate/GrPathParser.cpp",
+  "$_src/gpu/tessellate/GrPathParser.h",
+  "$_src/gpu/tessellate/GrStencilPathShader.cpp",
+  "$_src/gpu/tessellate/GrStencilPathShader.h",
+  "$_src/gpu/tessellate/GrTessellatePathOp.cpp",
+  "$_src/gpu/tessellate/GrTessellatePathOp.h",
 
   # text
   "$_src/gpu/text/GrAtlasManager.cpp",

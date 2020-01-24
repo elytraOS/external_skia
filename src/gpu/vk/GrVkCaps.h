@@ -184,7 +184,7 @@ public:
     int getFragmentUniformSet() const;
 
     void addExtraSamplerKey(GrProcessorKeyBuilder*,
-                            const GrSamplerState&,
+                            GrSamplerState,
                             const GrBackendFormat&) const override;
 
     GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const override;
@@ -283,7 +283,7 @@ private:
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;
     };
-    static const size_t kNumVkFormats = 20;
+    static const size_t kNumVkFormats = 21;
     FormatInfo fFormatTable[kNumVkFormats];
 
     FormatInfo& getFormatInfo(VkFormat);
