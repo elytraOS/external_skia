@@ -225,9 +225,12 @@ static void draw_texture(GrRenderTargetContext* rtc, const GrClip& clip, const S
                              constraint == SkCanvas::kStrict_SrcRectConstraint ? &srcRect : nullptr,
                              ctm, std::move(textureXform));
     } else {
-        rtc->drawTexture(clip, std::move(proxy), srcColorInfo.colorType(), srcColorInfo.alphaType(),
-                         filter, paint.getBlendMode(), color, srcRect, dstRect, aa, aaFlags,
-                         constraint, ctm, std::move(textureXform));
+        GrSurfaceOrigin origin = proxy->origin();
+        GrSwizzle swizzle = proxy->textureSwizzle();
+        GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
+        rtc->drawTexture(clip, std::move(view), srcColorInfo.alphaType(), filter,
+                         paint.getBlendMode(), color, srcRect, dstRect, aa, aaFlags, constraint,
+                         ctm, std::move(textureXform));
     }
 }
 
@@ -241,13 +244,13 @@ static void draw_texture_producer(GrContext* context, GrRenderTargetContext* rtc
     if (attemptDrawTexture && can_use_draw_texture(paint)) {
         // We've done enough checks above to allow us to pass ClampNearest() and not check for
         // scaling adjustments.
-        auto [proxy, ct] = producer->refTextureProxy(GrMipMapped::kNo);
-        if (!proxy) {
+        auto [view, ct] = producer->refTextureProxyView(GrMipMapped::kNo);
+        if (!view.proxy()) {
             return;
         }
 
         draw_texture(rtc, clip, ctm, paint, src, dst, dstClip, aa, aaFlags, constraint,
-                     std::move(proxy),
+                     view.asTextureProxyRef(),
                      {ct, producer->alphaType(), sk_ref_sp(producer->colorSpace())});
         return;
     }
@@ -418,7 +421,10 @@ void SkGpuDevice::drawImageQuad(const SkImage* image, const SkRect* srcRect, con
                          dstClip, aa, aaFlags, constraint, std::move(proxy), colorInfo);
             return;
         }
-        GrTextureAdjuster adjuster(fContext.get(), std::move(proxy), colorInfo, pinnedUniqueID,
+        GrSurfaceOrigin origin = proxy->origin();
+        GrSwizzle swizzle = proxy->textureSwizzle();
+        GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
+        GrTextureAdjuster adjuster(fContext.get(), std::move(view), colorInfo, pinnedUniqueID,
                                    useDecal);
         draw_texture_producer(fContext.get(), fRenderTargetContext.get(), this->clip(), ctm,
                               paint, &adjuster, src, dst, dstClip, srcToDst, aa, aaFlags,
@@ -452,7 +458,8 @@ void SkGpuDevice::drawImageQuad(const SkImage* image, const SkRect* srcRect, con
         return;
     }
     if (as_IB(image)->getROPixels(&bm)) {
-        GrBitmapTextureMaker maker(fContext.get(), bm, useDecal);
+        GrBitmapTextureMaker maker(fContext.get(), bm, GrBitmapTextureMaker::Cached::kYes,
+                                   SkBackingFit::kExact, useDecal);
         draw_texture_producer(fContext.get(), fRenderTargetContext.get(), this->clip(), ctm,
                               paint, &maker, src, dst, dstClip, srcToDst, aa, aaFlags, constraint,
                               attemptDrawTexture);

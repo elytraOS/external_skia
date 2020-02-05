@@ -71,13 +71,35 @@ private:
     const SkSize              fLayerSize;
 };
 
+// Syntactic sugar/helper.
+class EffectBinder {
+public:
+    EffectBinder(const skjson::ArrayValue& jprops,
+                 const AnimationBuilder& abuilder,
+                 AnimatablePropertyContainer* acontainer)
+        : fProps(jprops)
+        , fBuilder(abuilder)
+        , fContainer(acontainer) {}
+
+    template <typename T>
+    const EffectBinder& bind(size_t prop_index, T& value) const {
+        fContainer->bind(fBuilder, EffectBuilder::GetPropValue(fProps, prop_index), value);
+
+        return *this;
+    }
+
+private:
+    const skjson::ArrayValue&    fProps;
+    const AnimationBuilder&      fBuilder;
+    AnimatablePropertyContainer* fContainer;
+};
 
 /**
  * Base class for mask-filter-related effects.
  */
 class MaskFilterEffectBase : public AnimatablePropertyContainer {
 public:
-    const sk_sp<sksg::MaskFilterEffect>& renderNode() const { return fMaskEffectNode; }
+    const sk_sp<sksg::MaskFilterEffect>& node() const { return fMaskEffectNode; }
 
 protected:
     MaskFilterEffectBase(sk_sp<sksg::RenderNode>, const SkSize&);

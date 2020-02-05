@@ -15,9 +15,6 @@
 
 class GrImageInfo;
 
-size_t GrCompressedDataSize(SkImage::CompressionType, SkISize baseDimensions,
-                            SkTArray<size_t>* individualMipOffsets, GrMipMapped);
-
 // Returns a value that can be used to set rowBytes for a transfer function.
 size_t GrCompressedRowBytes(SkImage::CompressionType, int w);
 
@@ -43,6 +40,7 @@ bool GrConvertPixels(const GrImageInfo& dstInfo,       void* dst, size_t dstRB,
 /** Clears the dst image to a constant color. */
 bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, SkColor4f color);
 
+#if GR_TEST_UTILS
 /**
  * BC1 compress an image that contains only either opaque black or transparent black and one
  * other color.
@@ -50,5 +48,6 @@ bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, SkColor4f
  *   transparent pixmaps -> kBC1_RGBA8_UNORM
  */
 void GrTwoColorBC1Compress(const SkPixmap& pixmap, SkColor otherColor, char* dstPixels);
+#endif
 
 #endif

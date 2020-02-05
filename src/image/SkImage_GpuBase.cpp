@@ -142,26 +142,22 @@ sk_sp<SkImage> SkImage_GpuBase::onMakeSubset(GrRecordingContext* context,
         return nullptr;
     }
 
-    sk_sp<GrSurfaceProxy> proxy = this->asTextureProxyRef(context);
+    const GrSurfaceProxyView& view = this->getSurfaceProxyView(context);
+    SkASSERT(view.proxy());
 
     GrColorType grColorType = SkColorTypeToGrColorType(this->colorType());
 
-    sk_sp<GrTextureProxy> copyProxy =
-            GrSurfaceProxy::Copy(context, proxy.get(), grColorType, GrMipMapped::kNo, subset,
-                                 SkBackingFit::kExact, proxy->isBudgeted());
+    GrSurfaceProxyView copyView =
+            GrSurfaceProxy::Copy(context, view.proxy(), view.origin(), grColorType,
+                                 GrMipMapped::kNo, subset, SkBackingFit::kExact,
+                                 view.proxy()->isBudgeted());
 
-    if (!copyProxy) {
+    if (!copyView.proxy()) {
         return nullptr;
     }
 
-    const GrSurfaceProxyView& currView = this->getSurfaceProxyView(context);
-    if (!currView.proxy()) {
-        return nullptr;
-    }
-
-    GrSurfaceProxyView view(std::move(copyProxy), currView.origin(), currView.swizzle());
     // MDB: this call is okay bc we know 'sContext' was kExact
-    return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID, std::move(view),
+    return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID, std::move(copyView),
                                    this->colorType(), this->alphaType(), this->refColorSpace());
 }
 
@@ -199,9 +195,9 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::asTextureProxyRef(GrRecordingContext* con
         return nullptr;
     }
 
-    GrTextureAdjuster adjuster(fContext.get(), this->asTextureProxyRef(context),
+    GrTextureAdjuster adjuster(fContext.get(), this->asSurfaceProxyViewRef(context),
                                this->imageInfo().colorInfo(), this->uniqueID());
-    return adjuster.refTextureProxyForParams(params, scaleAdjust);
+    return adjuster.refTextureProxyViewForParams(params, scaleAdjust).asTextureProxyRef();
 }
 
 GrBackendTexture SkImage_GpuBase::onGetBackendTexture(bool flushPendingGrContextIO,
@@ -348,8 +344,9 @@ bool SkImage_GpuBase::RenderYUVAToRGBA(GrContext* ctx, GrRenderTargetContext* re
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
 
+    const auto& caps = *ctx->priv().caps();
     auto fp = GrYUVtoRGBEffect::Make(proxies, yuvaIndices, yuvColorSpace,
-                                     GrSamplerState::Filter::kNearest);
+                                     GrSamplerState::Filter::kNearest, caps);
     if (colorSpaceXform) {
         fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(colorSpaceXform));
     }
@@ -527,24 +524,21 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
 
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
 
-    GrPixelConfig config = context->priv().caps()->getConfigFromBackendFormat(
-                                                                     backendFormat,
-                                                                     colorType);
-
     GrSurfaceDesc desc;
     desc.fWidth = width;
     desc.fHeight = height;
-    desc.fConfig = config;
 
     // Ganesh assumes that, when wrapping a mipmapped backend texture from a client, that its
     // mipmaps are fully fleshed out.
     GrMipMapsStatus mipMapsStatus = (GrMipMapped::kYes == mipMapped)
             ? GrMipMapsStatus::kValid : GrMipMapsStatus::kNotAllocated;
 
+    GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, colorType);
+
     // We pass kReadOnly here since we should treat content of the client's texture as immutable.
     // The promise API provides no way for the client to indicated that the texture is protected.
     return proxyProvider->createLazyProxy(
-            std::move(callback), backendFormat, desc, GrRenderable::kNo, 1, origin, mipMapped,
-            mipMapsStatus, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
-            GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
+            std::move(callback), backendFormat, desc, readSwizzle, GrRenderable::kNo, 1, origin,
+            mipMapped, mipMapsStatus, GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact,
+            SkBudgeted::kNo, GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 }

@@ -535,7 +535,9 @@ CanvasKit.onRuntimeInitialized = function() {
 
   CanvasKit.SkImage.prototype.readPixels = function(imageInfo, srcX, srcY) {
     var rowBytes;
-    switch (imageInfo.colorType){
+    // Important to use ["string"] notation here, otherwise the closure compiler will
+    // minify away the colorType.
+    switch (imageInfo["colorType"]) {
       case CanvasKit.ColorType.RGBA_8888:
         rowBytes = imageInfo.width * 4; // 1 byte per channel == 4 bytes per pixel in 8888
         break;
@@ -557,7 +559,7 @@ CanvasKit.onRuntimeInitialized = function() {
     // Put those pixels into a typed array of the right format and then
     // make a copy with slice() that we can return.
     var retVal = null;
-    switch (imageInfo.colorType){
+    switch (imageInfo["colorType"]) {
       case CanvasKit.ColorType.RGBA_8888:
         retVal = new Uint8Array(CanvasKit.HEAPU8.buffer, pPtr, pBytes).slice();
         break;
@@ -753,7 +755,27 @@ CanvasKit.onRuntimeInitialized = function() {
 
       callback(this._cached_canvas);
 
+      // We do not dispose() of the SkSurface here, as the client will typically
+      // call requestAnimationFrame again from within the supplied callback.
+      // For drawing a single frame, prefer drawOnce().
       this.flush();
+    }.bind(this));
+  }
+
+  // drawOnce will dispose of the surface after drawing the frame using the provided
+  // callback.
+  CanvasKit.SkSurface.prototype.drawOnce = function(callback, dirtyRect) {
+    if (!this._cached_canvas) {
+      this._cached_canvas = this.getCanvas();
+    }
+    window.requestAnimationFrame(function() {
+      if (this._context !== undefined) {
+        CanvasKit.setCurrentContext(this._context);
+      }
+      callback(this._cached_canvas);
+
+      this.flush();
+      this.dispose();
     }.bind(this));
   }
 

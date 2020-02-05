@@ -11,6 +11,7 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/private/SkTo.h"
+#include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkMipMap.h"
 #include "src/gpu/GrContextPriv.h"
@@ -465,8 +466,17 @@ bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
                                  GrColorType surfaceColorType, GrColorType bufferColorType,
                                  GrGpuBuffer* transferBuffer, size_t bufferOffset,
                                  size_t rowBytes) {
+    if (surfaceColorType != bufferColorType) {
+        return false;
+    }
+
+    size_t bpp = GrColorTypeBytesPerPixel(bufferColorType);
+    if (this->vkCaps().bytesPerPixel(texture->backendFormat()) != bpp) {
+        return false;
+    }
+
     // Vulkan only supports offsets that are both 4-byte aligned and aligned to a pixel.
-    if ((bufferOffset & 0x3) || (bufferOffset % GrColorTypeBytesPerPixel(bufferColorType))) {
+    if ((bufferOffset & 0x3) || (bufferOffset % bpp)) {
         return false;
     }
     GrVkTexture* vkTex = static_cast<GrVkTexture*>(texture);
@@ -487,7 +497,6 @@ bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
         SkIRect bounds = SkIRect::MakeWH(texture->width(), texture->height());
         SkASSERT(bounds.contains(subRect));
     )
-    size_t bpp = GrColorTypeBytesPerPixel(bufferColorType);
 
     // Set up copy region
     VkBufferImageCopy region;
@@ -526,6 +535,9 @@ bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int wi
     if (fProtectedContext == GrProtected::kYes) {
         return false;
     }
+    if (surfaceColorType != bufferColorType) {
+        return false;
+    }
 
     GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer);
 
@@ -540,6 +552,11 @@ bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int wi
         srcImage = rt;
     } else {
         srcImage = static_cast<GrVkTexture*>(surface->asTexture());
+    }
+
+    if (this->vkCaps().bytesPerPixel(srcImage->imageFormat()) !=
+        GrColorTypeBytesPerPixel(surfaceColorType)) {
+        return false;
     }
 
     // Set up copy region
@@ -701,8 +718,8 @@ static size_t fill_in_regions(GrVkCaps* vkCaps, SkTArray<VkBufferImageCopy>* reg
                                                               individualMipOffsets,
                                                               numMipLevels);
     } else {
-        combinedBufferSize = GrCompressedDataSize(compression, dimensions,
-                                                  individualMipOffsets, mipMapped);
+        combinedBufferSize = SkCompressedDataSize(compression, dimensions, individualMipOffsets,
+                                                  mipMapped == GrMipMapped::kYes);
     }
     SkASSERT(individualMipOffsets->count() == numMipLevels);
 
@@ -741,14 +758,13 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
         return false;
     }
 
-    if (GrPixelConfigToColorType(tex->config()) != dataColorType) {
+    if (!this->vkCaps().isFormatTexturableAndUploadable(dataColorType, tex->backendFormat())) {
         return false;
     }
 
     // For RGB_888x src data we are uploading it first to an RGBA texture and then copying it to the
     // dst RGB texture. Thus we do not upload mip levels for that.
     if (dataColorType == GrColorType::kRGB_888x && tex->imageFormat() == VK_FORMAT_R8G8B8_UNORM) {
-        SkASSERT(tex->config() == kRGB_888_GrPixelConfig);
         // First check that we'll be able to do the copy to the to the R8G8B8 image in the end via a
         // blit or draw.
         if (!this->vkCaps().formatCanBeDstofBlit(VK_FORMAT_R8G8B8_UNORM, tex->isLinearTiled()) &&
@@ -825,7 +841,6 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
         GrSurfaceDesc surfDesc;
         surfDesc.fWidth = width;
         surfDesc.fHeight = height;
-        surfDesc.fConfig = kRGBA_8888_GrPixelConfig;
 
         VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT |
                                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
@@ -1067,7 +1082,9 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc,
 
 sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
                                                     const GrBackendFormat& format,
-                                                    SkBudgeted budgeted, GrMipMapped mipMapped,
+                                                    SkBudgeted budgeted,
+                                                    GrMipMapped mipMapped,
+                                                    GrProtected isProtected,
                                                     const void* data, size_t dataSize) {
     VkFormat pixelFormat;
     SkAssertResult(format.asVkFormat(&pixelFormat));
@@ -1098,14 +1115,13 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
     imageDesc.fSamples = 1;
     imageDesc.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
     imageDesc.fUsageFlags = usageFlags;
-    imageDesc.fIsProtected = GrProtected::kNo;
+    imageDesc.fIsProtected = isProtected;
 
     GrMipMapsStatus mipMapsStatus = (mipMapped == GrMipMapped::kYes)
                                                                 ? GrMipMapsStatus::kValid
                                                                 : GrMipMapsStatus::kNotAllocated;
 
     GrSurfaceDesc desc;
-    desc.fConfig = this->vkCaps().getConfigFromCompressedBackendFormat(format);
     desc.fWidth = dimensions.width();
     desc.fHeight = dimensions.height();
     auto tex = GrVkTexture::MakeNewTexture(this, budgeted, desc, imageDesc,
@@ -1220,14 +1236,9 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
         return nullptr;
     }
 
-    GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendTex.getBackendFormat(),
-                                                                    colorType);
-    SkASSERT(kUnknown_GrPixelConfig != config);
-
     GrSurfaceDesc surfDesc;
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
-    surfDesc.fConfig = config;
 
     sk_sp<GrVkImageLayout> layout = backendTex.getGrVkImageLayout();
     SkASSERT(layout);
@@ -1256,13 +1267,9 @@ sk_sp<GrTexture> GrVkGpu::onWrapCompressedBackendTexture(const GrBackendTexture&
         return nullptr;
     }
 
-    auto config = this->caps()->getConfigFromCompressedBackendFormat(beTex.getBackendFormat());
-    SkASSERT(kUnknown_GrPixelConfig != config);
-
     GrSurfaceDesc surfDesc;
     surfDesc.fWidth = beTex.width();
     surfDesc.fHeight = beTex.height();
-    surfDesc.fConfig = config;
 
     sk_sp<GrVkImageLayout> layout = beTex.getGrVkImageLayout();
     SkASSERT(layout);
@@ -1296,15 +1303,9 @@ sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
         return nullptr;
     }
 
-
-    GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendTex.getBackendFormat(),
-                                                                    colorType);
-    SkASSERT(kUnknown_GrPixelConfig != config);
-
     GrSurfaceDesc surfDesc;
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
-    surfDesc.fConfig = config;
     sampleCnt = this->vkCaps().getRenderTargetSampleCount(sampleCnt, imageInfo.fFormat);
 
     sk_sp<GrVkImageLayout> layout = backendTex.getGrVkImageLayout();
@@ -1329,10 +1330,6 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
         return nullptr;
     }
 
-    GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendRT.getBackendFormat(),
-                                                                    colorType);
-    SkASSERT(kUnknown_GrPixelConfig != config);
-
     if (!check_image_info(this->vkCaps(), info, colorType, false)) {
         return nullptr;
     }
@@ -1348,7 +1345,6 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     GrSurfaceDesc desc;
     desc.fWidth = backendRT.width();
     desc.fHeight = backendRT.height();
-    desc.fConfig = config;
 
     sk_sp<GrVkImageLayout> layout = backendRT.getGrVkImageLayout();
 
@@ -1384,14 +1380,9 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
         return nullptr;
     }
 
-    GrPixelConfig config = this->caps()->getConfigFromBackendFormat(tex.getBackendFormat(),
-                                                                    grColorType);
-    SkASSERT(kUnknown_GrPixelConfig != config);
-
     GrSurfaceDesc desc;
     desc.fWidth = tex.width();
     desc.fHeight = tex.height();
-    desc.fConfig = config;
 
     sampleCnt = this->vkCaps().getRenderTargetSampleCount(sampleCnt, imageInfo.fFormat);
     if (!sampleCnt) {
@@ -1421,16 +1412,9 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapVulkanSecondaryCBAsRenderTarget(
         return nullptr;
     }
 
-    GrColorType grColorType = SkColorTypeToGrColorType(imageInfo.colorType());
-    GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendFormat, grColorType);
-    if (config == kUnknown_GrPixelConfig) {
-        return nullptr;
-    }
-
     GrSurfaceDesc desc;
     desc.fWidth = imageInfo.width();
     desc.fHeight = imageInfo.height();
-    desc.fConfig = config;
 
     return GrVkRenderTarget::MakeSecondaryCBRenderTarget(this, desc, vkInfo);
 }
@@ -2484,7 +2468,6 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
         GrSurfaceDesc surfDesc;
         surfDesc.fWidth = width;
         surfDesc.fHeight = height;
-        surfDesc.fConfig = kRGBA_8888_GrPixelConfig;
 
         VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                        VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -2525,6 +2508,9 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
                           false);
 
     size_t bpp = GrColorTypeBytesPerPixel(dstColorType);
+    if (this->vkCaps().bytesPerPixel(image->imageFormat()) != bpp) {
+        return false;
+    }
     size_t tightRowBytes = bpp * width;
 
     VkBufferImageCopy region;

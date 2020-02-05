@@ -467,7 +467,7 @@ func (b *builder) deriveCompileTaskName(jobName string, parts map[string]string)
 				"ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "T8888", "DDLTotal", "DDLRecord", "9x9",
 				"BonusConfigs", "SkottieTracing", "SkottieWASM", "GpuTess", "NonNVPR", "Mskp",
-				"Docker"}
+				"Docker", "PDF"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -850,7 +850,6 @@ func (b *builder) updateGoDeps(name string) string {
 			"--gerrit_project", "skia",
 			"--gerrit_url", "https://skia-review.googlesource.com",
 			"--repo", specs.PLACEHOLDER_REPO,
-			"--reviewers", "borenet@google.com",
 			"--revision", specs.PLACEHOLDER_REVISION,
 			"--patch_issue", specs.PLACEHOLDER_ISSUE,
 			"--patch_set", specs.PLACEHOLDER_PATCHSET,

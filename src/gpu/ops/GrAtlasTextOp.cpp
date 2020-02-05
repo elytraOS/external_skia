@@ -192,17 +192,16 @@ static void clip_quads(const SkIRect& clipRect, char* currVertex, const char* bl
             // In the LCD case the color will be garbage, but we'll overwrite it with the texcoords
             // and it avoids a lot of conditionals.
             auto color = *reinterpret_cast<const SkColor*>(blobVertices + sizeof(SkPoint));
-            size_t coordOffset = vertexStride - 2*sizeof(int16_t);
-            auto* blobCoordsLT = reinterpret_cast<const int16_t*>(blobVertices + coordOffset);
-            auto* blobCoordsRB = reinterpret_cast<const int16_t*>(blobVertices + 3 * vertexStride +
+            size_t coordOffset = vertexStride - 2*sizeof(uint16_t);
+            auto* blobCoordsLT = reinterpret_cast<const uint16_t*>(blobVertices + coordOffset);
+            auto* blobCoordsRB = reinterpret_cast<const uint16_t*>(blobVertices + 3 * vertexStride +
                                                                    coordOffset);
             // Pull out the texel coordinates and texture index bits
-            int16_t coordsRectL = blobCoordsLT[0];
-            int16_t coordsRectT = blobCoordsLT[1];
-            int16_t coordsRectR = blobCoordsRB[0];
-            int16_t coordsRectB = blobCoordsRB[1];
+            uint16_t coordsRectL = blobCoordsLT[0];
+            uint16_t coordsRectT = blobCoordsLT[1];
+            uint16_t coordsRectR = blobCoordsRB[0];
+            uint16_t coordsRectB = blobCoordsRB[1];
             int index0, index1;
-
             std::tie(coordsRectL, coordsRectT, index0) =
                     GrDrawOpAtlas::UnpackIndexFromTexCoords(coordsRectL, coordsRectT);
             std::tie(coordsRectR, coordsRectB, index1) =
@@ -291,7 +290,6 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
     }
 
     GrAtlasManager* atlasManager = target->atlasManager();
-    GrStrikeCache* glyphCache = target->glyphCache();
 
     GrMaskFormat maskFormat = this->maskFormat();
 
@@ -366,8 +364,7 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
 
         // TODO4F: Preserve float colors
         GrTextBlob::VertexRegenerator regenerator(
-                resourceProvider, args.fSubRunPtr, target->deferredUploadTarget(), glyphCache,
-                atlasManager);
+                resourceProvider, args.fSubRunPtr, target->deferredUploadTarget(), atlasManager);
 
         // Where the subRun begins and ends relative to totalGlyphsRegened.
         int subRunBegin = totalGlyphsRegened;
@@ -436,7 +433,7 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
             if (totalGlyphsRegened != subRunEnd) {
                 // Flush if not all glyphs drawn because either the quad buffer is full or the
                 // atlas is out of space.
-                this->flush(target, &flushInfo);
+                this->createDrawForGeneratedGlyphs(target, &flushInfo);
                 if (totalGlyphsRegened == quadBufferEnd) {
                     // Quad buffer is full. Get more buffer.
                     quadBufferBegin = totalGlyphsRegened;
@@ -457,7 +454,7 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
             }
         }
     }  // for all geometries
-    this->flush(target, &flushInfo);
+    this->createDrawForGeneratedGlyphs(target, &flushInfo);
 }
 
 void GrAtlasTextOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
@@ -468,7 +465,8 @@ void GrAtlasTextOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
     flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
 }
 
-void GrAtlasTextOp::flush(GrMeshDrawOp::Target* target, FlushInfo* flushInfo) const {
+void GrAtlasTextOp::createDrawForGeneratedGlyphs(
+        GrMeshDrawOp::Target* target, FlushInfo* flushInfo) const {
     if (!flushInfo->fGlyphsToFlush) {
         return;
     }

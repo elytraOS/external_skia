@@ -17,6 +17,7 @@
 
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContext.h"
+#include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrSurfaceProxy.h"
@@ -52,6 +53,7 @@ static SkBitmap create_bm() {
                                    SkIntToScalar(kSmallerSize), SkIntToScalar(kSmallerSize)),
                   p);
 
+    bm.setImmutable();
     return bm;
 }
 
@@ -69,10 +71,10 @@ static void test_image(const sk_sp<SkSpecialImage>& img, skiatest::Reporter* rep
     REPORTER_ASSERT(reporter, isGPUBacked == img->isTextureBacked());
 
     //--------------
-    // Test asTextureProxyRef - as long as there is a context this should succeed
+    // Test asSurfaceProxyViewRef - as long as there is a context this should succeed
     if (context) {
-        sk_sp<GrTextureProxy> proxy(img->asTextureProxyRef(context));
-        REPORTER_ASSERT(reporter, proxy);
+        GrSurfaceProxyView view = img->asSurfaceProxyViewRef(context);
+        REPORTER_ASSERT(reporter, view.asTextureProxy());
     }
 
     //--------------
@@ -195,7 +197,6 @@ static void test_texture_backed(skiatest::Reporter* reporter,
 // Test out the SkSpecialImage::makeTextureImage entry point
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_MakeTexture, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
-    GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     SkBitmap bm = create_bm();
 
     const SkIRect& subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
@@ -222,10 +223,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_MakeTexture, reporter, ctxInfo) 
 
     {
         // gpu
-        sk_sp<SkImage> rasterImage = SkImage::MakeFromBitmap(bm);
-        sk_sp<GrTextureProxy> proxy = proxyProvider->createTextureProxy(
-                rasterImage, 1, SkBudgeted::kNo, SkBackingFit::kExact);
-        if (!proxy) {
+        GrBitmapTextureMaker maker(context, bm);
+        auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+        if (!view.proxy()) {
             return;
         }
 
@@ -233,8 +233,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_MakeTexture, reporter, ctxInfo) 
                                                             context,
                                                             SkIRect::MakeWH(kFullSize, kFullSize),
                                                             kNeedNewImageUniqueID_SpecialImage,
-                                                            std::move(proxy),
-                                                            GrColorType::kRGBA_8888,
+                                                            std::move(view),
+                                                            grCT,
                                                             nullptr));
 
         {
@@ -253,13 +253,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_MakeTexture, reporter, ctxInfo) 
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
-    GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     SkBitmap bm = create_bm();
-    sk_sp<SkImage> rasterImage = SkImage::MakeFromBitmap(bm);
-
-    sk_sp<GrTextureProxy> proxy = proxyProvider->createTextureProxy(rasterImage, 1, SkBudgeted::kNo,
-                                                                    SkBackingFit::kExact);
-    if (!proxy) {
+    GrBitmapTextureMaker maker(context, bm);
+    auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+    if (!view.proxy()) {
         return;
     }
 
@@ -267,8 +264,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, ctxInfo) {
                                                             context,
                                                             SkIRect::MakeWH(kFullSize, kFullSize),
                                                             kNeedNewImageUniqueID_SpecialImage,
-                                                            proxy,
-                                                            GrColorType::kRGBA_8888,
+                                                            view,
+                                                            grCT,
                                                             nullptr));
 
     const SkIRect& subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
@@ -277,8 +274,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, ctxInfo) {
         sk_sp<SkSpecialImage> subSImg1(SkSpecialImage::MakeDeferredFromGpu(
                                                                context, subset,
                                                                kNeedNewImageUniqueID_SpecialImage,
-                                                               std::move(proxy),
-                                                               GrColorType::kRGBA_8888,
+                                                               std::move(view),
+                                                               grCT,
                                                                nullptr));
         test_image(subSImg1, reporter, context, true);
     }

@@ -13,8 +13,8 @@
 #include "include/private/SkThreadID.h"
 #include "include/private/SkVx.h"
 #include "src/core/SkCpu.h"
+#include "src/core/SkOpts.h"
 #include "src/core/SkVM.h"
-#include <functional>  // std::hash
 
 bool gSkVMJITViaDylib{false};
 
@@ -22,8 +22,10 @@ bool gSkVMJITViaDylib{false};
 // uninitialized memory, and we'll not see the writes it makes as properly
 // initializing memory.  Instead force the interpreter, which should let
 // MSAN see everything our programs do properly.
+//
+// Similarly, we can't get ASAN's checks unless we let it instrument our interpreter.
 #if defined(__has_feature)
-    #if __has_feature(memory_sanitizer)
+    #if __has_feature(memory_sanitizer) || __has_feature(address_sanitizer)
         #undef SKVM_JIT
     #endif
 #endif
@@ -141,8 +143,6 @@ namespace skvm {
                 case Op::load16: write(o, V{id}, "=", op, Arg{immy}); break;
                 case Op::load32: write(o, V{id}, "=", op, Arg{immy}); break;
 
-                case Op::gather8:  write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}); break;
-                case Op::gather16: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}); break;
                 case Op::gather32: write(o, V{id}, "=", op, Arg{immy}, Hex{immz}, V{x}); break;
 
                 case Op::uniform8:  write(o, V{id}, "=", op, Arg{immy}, Hex{immz}); break;
@@ -159,6 +159,8 @@ namespace skvm {
                 case Op::min_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::max_f32: write(o, V{id}, "=", op, V{x}, V{y}      ); break;
                 case Op::mad_f32: write(o, V{id}, "=", op, V{x}, V{y}, V{z}); break;
+
+                case Op::sqrt_f32: write(o, V{id}, "=", op, V{x}); break;
 
                 case Op::add_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}); break;
                 case Op::sub_f32_imm: write(o, V{id}, "=", op, V{x}, Splat{immy}); break;
@@ -264,8 +266,6 @@ namespace skvm {
                 case Op::load16: write(o, R{d}, "=", op, Arg{immy}); break;
                 case Op::load32: write(o, R{d}, "=", op, Arg{immy}); break;
 
-                case Op::gather8:  write(o, R{d}, "=", op, Arg{immy}, Hex{immz}, R{x}); break;
-                case Op::gather16: write(o, R{d}, "=", op, Arg{immy}, Hex{immz}, R{x}); break;
                 case Op::gather32: write(o, R{d}, "=", op, Arg{immy}, Hex{immz}, R{x}); break;
 
                 case Op::uniform8:  write(o, R{d}, "=", op, Arg{immy}, Hex{immz}); break;
@@ -282,6 +282,8 @@ namespace skvm {
                 case Op::min_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::max_f32: write(o, R{d}, "=", op, R{x}, R{y}      ); break;
                 case Op::mad_f32: write(o, R{d}, "=", op, R{x}, R{y}, R{z}); break;
+
+                case Op::sqrt_f32: write(o, R{d}, "=", op, R{x}); break;
 
                 case Op::add_f32_imm: write(o, R{d}, "=", op, R{x}, Splat{immy}); break;
                 case Op::sub_f32_imm: write(o, R{d}, "=", op, R{x}, Splat{immy}); break;
@@ -446,39 +448,22 @@ namespace skvm {
         return {fProgram, fStrides, debug_name};
     }
 
-    // TODO: it's probably not important that we include post-Builder::done() fields like
-    // death, can_hoist, and used_in_loop in operator==() and InstructionHash::operator().
-    // They'll always have the same, initial values as set in Builder::push().
-
+    // We skip fields only written after Builder::done() (death, can_hoist, used_in_loop) here
+    // for equality and hashing.  They'll always have the same default values in Builder::push().
     static bool operator==(const Builder::Instruction& a, const Builder::Instruction& b) {
-        return a.op           == b.op
-            && a.x            == b.x
-            && a.y            == b.y
-            && a.z            == b.z
-            && a.immy         == b.immy
-            && a.immz         == b.immz
-            && a.death        == b.death
-            && a.can_hoist    == b.can_hoist
-            && a.used_in_loop == b.used_in_loop;
+        return a.op   == b.op
+            && a.x    == b.x
+            && a.y    == b.y
+            && a.z    == b.z
+            && a.immy == b.immy
+            && a.immz == b.immz;
     }
 
-    // TODO: replace with SkOpts::hash()?
-    size_t Builder::InstructionHash::operator()(const Instruction& inst) const {
-        auto hash = [](auto v) {
-            return std::hash<decltype(v)>{}(v);
-        };
-        return hash((uint8_t)inst.op)
-             ^ hash(inst.x)
-             ^ hash(inst.y)
-             ^ hash(inst.z)
-             ^ hash(inst.immy)
-             ^ hash(inst.immz)
-             ^ hash(inst.death)
-             ^ hash(inst.can_hoist)
-             ^ hash(inst.used_in_loop);
+    uint32_t Builder::InstructionHash::operator()(const Instruction& inst, uint32_t seed) const {
+        return SkOpts::hash(&inst, offsetof(Instruction, death), seed);
     }
 
-    uint32_t Builder::hash() const { return fHash; }
+    uint64_t Builder::hash() const { return (uint64_t)fHashLo | (uint64_t)fHashHi << 32; }
 
     // Most instructions produce a value and return it by ID,
     // the value-producing instruction's own index in the program vector.
@@ -486,9 +471,11 @@ namespace skvm {
         Instruction inst{op, x, y, z, immy, immz,
                          /*death=*/0, /*can_hoist=*/true, /*used_in_loop=*/false};
 
-        // This InstructionHash{}() call should be free given we're about to use fIndex below.
-        fHash ^= InstructionHash{}(inst);
-        fHash = SkChecksum::CheapMix(fHash);  // Make sure instruction order matters.
+        // This first InstructionHash{}() call should be free given we're about to use fIndex below.
+        fHashLo ^= InstructionHash{}(inst, 0);    // Two hash streams with different seeds.
+        fHashHi ^= InstructionHash{}(inst, 1);
+        fHashLo = SkChecksum::CheapMix(fHashLo);  // Mix to make sure instruction order matters.
+        fHashHi = SkChecksum::CheapMix(fHashHi);
 
         // Basic common subexpression elimination:
         // if we've already seen this exact Instruction, use it instead of creating a new one.
@@ -538,10 +525,24 @@ namespace skvm {
     I32 Builder::load32(Arg ptr) { return {this->push(Op::load32, NA,NA,NA, ptr.ix) }; }
 
     I32 Builder::gather8 (Arg ptr, int offset, I32 index) {
-        return {this->push(Op::gather8 , index.id,NA,NA, ptr.ix,offset)};
+        // We'll gather32() the right 4 bytes, then select the correct byte.
+        skvm::I32 val = gather32(ptr, offset, shr(index,2)),
+                  rem = bit_and(index, splat(3));
+
+        val = bit_or(bit_and(eq(rem, splat(3)), shr(val, 24)),
+              bit_or(bit_and(eq(rem, splat(2)), shr(val, 16)),
+              bit_or(bit_and(eq(rem, splat(1)), shr(val,  8)),
+                     bit_and(eq(rem, splat(0)),     val     ))));
+        return bit_and(val, splat(0xff));
     }
     I32 Builder::gather16(Arg ptr, int offset, I32 index) {
-        return {this->push(Op::gather16, index.id,NA,NA, ptr.ix,offset)};
+        // We'll gather32() the right 4 bytes, then select the correct two.
+        skvm::I32 val = gather32(ptr, offset, shr(index,1)),
+                  rem = bit_and(index, splat(1));
+
+        val = bit_or(bit_and(eq(rem, splat(1)), shr(val, 16)),
+                     bit_and(eq(rem, splat(0)),     val     ));
+        return bit_and(val, splat(0xffff));
     }
     I32 Builder::gather32(Arg ptr, int offset, I32 index) {
         return {this->push(Op::gather32, index.id,NA,NA, ptr.ix,offset)};
@@ -631,6 +632,12 @@ namespace skvm {
         if (this->isImm(x.id, 1.0f)) { return this->add(y,z); }  // 1*y+z == y+z
         if (this->isImm(z.id, 0.0f)) { return this->mul(x,y); }  // x*y+0 == x*y
         return {this->push(Op::mad_f32, x.id, y.id, z.id)};
+    }
+
+    F32 Builder::sqrt(F32 x) {
+        float X;
+        if (this->allImm(x.id,&X)) { return this->splat(std::sqrt(X)); }
+        return {this->push(Op::sqrt_f32, x.id,NA,NA)};
     }
 
     F32 Builder::min(F32 x, F32 y) {
@@ -733,6 +740,10 @@ namespace skvm {
     I32 Builder::bit_and(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X&Y); }
+        if (this->isImm(y.id, 0)) { return this->splat(0); }   // (x & false) == false
+        if (this->isImm(x.id, 0)) { return this->splat(0); }   // (false & y) == false
+        if (this->isImm(y.id,~0)) { return x; }                // (x & true) == x
+        if (this->isImm(x.id,~0)) { return y; }                // (true & y) == y
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_and_imm, x.id,NA,NA, imm)}; }
@@ -743,6 +754,10 @@ namespace skvm {
     I32 Builder::bit_or(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X|Y); }
+        if (this->isImm(y.id, 0)) { return x; }                 // (x | false) == x
+        if (this->isImm(x.id, 0)) { return y; }                 // (false | y) == y
+        if (this->isImm(y.id,~0)) { return this->splat(~0); }   // (x | true) == true
+        if (this->isImm(x.id,~0)) { return this->splat(~0); }   // (true | y) == true
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_or_imm, x.id,NA,NA, imm)}; }
@@ -753,6 +768,8 @@ namespace skvm {
     I32 Builder::bit_xor(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X^Y); }
+        if (this->isImm(y.id, 0)) { return x; }   // (x ^ false) == x
+        if (this->isImm(x.id, 0)) { return y; }   // (false ^ y) == y
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return {this->push(Op::bit_xor_imm, x.id,NA,NA, imm)}; }
@@ -763,6 +780,9 @@ namespace skvm {
     I32 Builder::bit_clear(I32 x, I32 y) {
         int X,Y;
         if (this->allImm(x.id,&X, y.id,&Y)) { return this->splat(X&~Y); }
+        if (this->isImm(y.id, 0)) { return x; }                // (x & ~false) == x
+        if (this->isImm(y.id,~0)) { return this->splat(0); }   // (x & ~true) == false
+        if (this->isImm(x.id, 0)) { return this->splat(0); }   // (false & ~y) == false
     #if defined(SK_CPU_X86)
         int imm;
         if (this->allImm(y.id, &imm)) { return this->bit_and(x, this->splat(~imm)); }
@@ -773,6 +793,7 @@ namespace skvm {
     I32 Builder::select(I32 x, I32 y, I32 z) {
         int X,Y,Z;
         if (this->allImm(x.id,&X, y.id,&Y, z.id,&Z)) { return this->splat(X?Y:Z); }
+        // TODO: some cases to reduce to bit_and when y == 0 or z == 0?
         return {this->push(Op::select, x.id, y.id, z.id)};
     }
 
@@ -813,28 +834,28 @@ namespace skvm {
         return {this->push(Op::round, x.id)};
     }
 
-    F32 Builder::unorm(int bits, I32 x) {
+    F32 Builder::from_unorm(int bits, I32 x) {
         float limit = (1<<bits)-1.0f;
         return mul(to_f32(x), splat(1/limit));
     }
-    I32 Builder::unorm(int bits, F32 x) {
+    I32 Builder::to_unorm(int bits, F32 x) {
         float limit = (1<<bits)-1.0f;
         return round(mul(x, splat(limit)));
     }
 
     Color Builder::unpack_8888(I32 rgba) {
         return {
-            unorm(8, extract(rgba,  0, splat(0xff))),
-            unorm(8, extract(rgba,  8, splat(0xff))),
-            unorm(8, extract(rgba, 16, splat(0xff))),
-            unorm(8, extract(rgba, 24, splat(0xff))),
+            from_unorm(8, extract(rgba,  0, splat(0xff))),
+            from_unorm(8, extract(rgba,  8, splat(0xff))),
+            from_unorm(8, extract(rgba, 16, splat(0xff))),
+            from_unorm(8, extract(rgba, 24, splat(0xff))),
         };
     }
     Color Builder::unpack_565(I32 bgr) {
         return {
-            unorm(5, extract(bgr, 11, splat(0b011'111))),
-            unorm(6, extract(bgr,  5, splat(0b111'111))),
-            unorm(5, extract(bgr,  0, splat(0b011'111))),
+            from_unorm(5, extract(bgr, 11, splat(0b011'111))),
+            from_unorm(6, extract(bgr,  5, splat(0b111'111))),
+            from_unorm(5, extract(bgr,  0, splat(0b011'111))),
             splat(1.0f),
         };
     }
@@ -1124,9 +1145,10 @@ namespace skvm {
 
     void Assembler::vmovdqa(Ymm dst, Ymm src) { this->op(0x66,0x0f,0x6f, dst,src); }
 
-    void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(0,   0x0f,0x5b, dst,x); }
+    void Assembler::vcvtdq2ps (Ymm dst, Ymm x) { this->op(   0,0x0f,0x5b, dst,x); }
     void Assembler::vcvttps2dq(Ymm dst, Ymm x) { this->op(0xf3,0x0f,0x5b, dst,x); }
     void Assembler::vcvtps2dq (Ymm dst, Ymm x) { this->op(0x66,0x0f,0x5b, dst,x); }
+    void Assembler::vsqrtps   (Ymm dst, Ymm x) { this->op(   0,0x0f,0x51, dst,x); }
 
     Assembler::Label Assembler::here() {
         return { (int)this->size(), Label::NotYetSet, {} };
@@ -1688,32 +1710,12 @@ namespace skvm {
                     //     - *(const T**)foo loads the gather base and casts it to the right type.
                     // After all that we have an ordinary (uniform) pointer `ptr` to load from,
                     // and we then gather from it using the varying indices in r(x).
-                    STRIDE_1(Op::gather8):
-                        for (int i = 0; i < K; i++) {
-                            auto ptr = *(const uint8_t**)((const uint8_t*)arg(immy) + immz);
-                            r(d).i32[i] = (i==0) ? ptr[ r(x).i32[i] ] : 0;
-                        } break;
-                    STRIDE_1(Op::gather16):
-                        for (int i = 0; i < K; i++) {
-                            auto ptr = *(const uint16_t**)((const uint8_t*)arg(immy) + immz);
-                            r(d).i32[i] = (i==0) ? ptr[ r(x).i32[i] ] : 0;
-                        } break;
                     STRIDE_1(Op::gather32):
                         for (int i = 0; i < K; i++) {
                             auto ptr = *(const int**)((const uint8_t*)arg(immy) + immz);
                             r(d).i32[i] = (i==0) ? ptr[ r(x).i32[i] ] : 0;
                         } break;
 
-                    STRIDE_K(Op::gather8):
-                        for (int i = 0; i < K; i++) {
-                            auto ptr = *(const uint8_t**)((const uint8_t*)arg(immy) + immz);
-                            r(d).i32[i] = ptr[ r(x).i32[i] ];
-                        } break;
-                    STRIDE_K(Op::gather16):
-                        for (int i = 0; i < K; i++) {
-                            auto ptr = *(const uint16_t**)((const uint8_t*)arg(immy) + immz);
-                            r(d).i32[i] = ptr[ r(x).i32[i] ];
-                        } break;
                     STRIDE_K(Op::gather32):
                         for (int i = 0; i < K; i++) {
                             auto ptr = *(const int**)((const uint8_t*)arg(immy) + immz);
@@ -1789,6 +1791,8 @@ namespace skvm {
                     } break;
 
                     CASE(Op::mad_f32): r(d).f32 = r(x).f32 * r(y).f32 + r(z).f32; break;
+
+                    CASE(Op::sqrt_f32): r(d).f32 = sqrt(r(x).f32); break;
 
                     CASE(Op::add_i32): r(d).i32 = r(x).i32 + r(y).i32; break;
                     CASE(Op::sub_i32): r(d).i32 = r(x).i32 - r(y).i32; break;
@@ -2362,6 +2366,7 @@ namespace skvm {
                                                                  a->vmovdqa    (dst(),r[x]);
                                                                  a->vfmadd132ps(dst(),r[z], r[y]); }
                                                                  break;
+                case Op::sqrt_f32: a->vsqrtps(dst(), r[x]); break;
 
                 case Op::add_f32_imm: a->vaddps(dst(), r[x], &constants[immy].label); break;
                 case Op::sub_f32_imm: a->vsubps(dst(), r[x], &constants[immy].label); break;

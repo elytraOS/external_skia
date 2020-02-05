@@ -25,7 +25,6 @@
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrSkSLFP.h"
-#include "src/gpu/effects/GrTextureDomain.h"
 #include "src/gpu/effects/generated/GrConstColorProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -333,33 +332,35 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
 
     auto context = ctx.getContext();
 
-    sk_sp<GrTextureProxy> backgroundProxy, foregroundProxy;
+    GrSurfaceProxyView backgroundView, foregroundView;
 
     GrProtected isProtected = GrProtected::kNo;
     if (background) {
-        backgroundProxy = background->asTextureProxyRef(context);
-        isProtected = backgroundProxy->isProtected();
+        backgroundView = background->asSurfaceProxyViewRef(context);
+        SkASSERT(backgroundView.proxy());
+        isProtected = backgroundView.proxy()->isProtected();
     }
 
     if (foreground) {
-        foregroundProxy = foreground->asTextureProxyRef(context);
-        isProtected = foregroundProxy->isProtected();
+        foregroundView = foreground->asSurfaceProxyViewRef(context);
+        SkASSERT(foregroundView.proxy());
+        isProtected = foregroundView.proxy()->isProtected();
     }
 
     GrPaint paint;
     std::unique_ptr<GrFragmentProcessor> bgFP;
+    const auto& caps = *ctx.getContext()->priv().caps();
+    GrSamplerState sampler(GrSamplerState::WrapMode::kClampToBorder,
+                           GrSamplerState::Filter::kNearest);
 
-    if (backgroundProxy) {
+    if (background) {
         SkIRect bgSubset = background->subset();
         SkMatrix backgroundMatrix = SkMatrix::MakeTrans(
                 SkIntToScalar(bgSubset.left() - backgroundOffset.fX),
                 SkIntToScalar(bgSubset.top()  - backgroundOffset.fY));
-        bgFP = GrTextureEffect::Make(std::move(backgroundProxy), background->alphaType(),
-                                     backgroundMatrix, GrSamplerState::Filter::kNearest);
-        bgFP = GrDomainEffect::Make(
-                std::move(bgFP),
-                GrTextureDomain::MakeTexelDomain(bgSubset, GrTextureDomain::kDecal_Mode),
-                GrTextureDomain::kDecal_Mode, false);
+        bgFP = GrTextureEffect::MakeTexelSubset(backgroundView.detachProxy(),
+                                                background->alphaType(), backgroundMatrix, sampler,
+                                                bgSubset, caps);
         bgFP = GrColorSpaceXformEffect::Make(std::move(bgFP), background->getColorSpace(),
                                              background->alphaType(),
                                              ctx.colorSpace());
@@ -368,23 +369,19 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
                                            GrConstColorProcessor::InputMode::kIgnore);
     }
 
-    if (foregroundProxy) {
+    if (foreground) {
         SkIRect fgSubset = foreground->subset();
         SkMatrix foregroundMatrix = SkMatrix::MakeTrans(
                 SkIntToScalar(fgSubset.left() - foregroundOffset.fX),
                 SkIntToScalar(fgSubset.top()  - foregroundOffset.fY));
-        auto foregroundFP =
-                GrTextureEffect::Make(std::move(foregroundProxy), foreground->alphaType(),
-                                      foregroundMatrix, GrSamplerState::Filter::kNearest);
-        foregroundFP = GrDomainEffect::Make(
-                std::move(foregroundFP),
-                GrTextureDomain::MakeTexelDomain(fgSubset, GrTextureDomain::kDecal_Mode),
-                GrTextureDomain::kDecal_Mode, false);
-        foregroundFP = GrColorSpaceXformEffect::Make(std::move(foregroundFP),
-                                                     foreground->getColorSpace(),
-                                                     foreground->alphaType(),
-                                                     ctx.colorSpace());
-        paint.addColorFragmentProcessor(std::move(foregroundFP));
+        auto fgFP = GrTextureEffect::MakeTexelSubset(foregroundView.detachProxy(),
+                                                     foreground->alphaType(), foregroundMatrix,
+                                                     sampler, fgSubset, caps);
+        fgFP = GrColorSpaceXformEffect::Make(std::move(fgFP),
+                                             foreground->getColorSpace(),
+                                             foreground->alphaType(),
+                                             ctx.colorSpace());
+        paint.addColorFragmentProcessor(std::move(fgFP));
 
         static auto effect = std::get<0>(SkRuntimeEffect::Make(SkString(SKSL_ARITHMETIC_SRC)));
         ArithmeticFPInputs inputs;
@@ -418,7 +415,7 @@ sk_sp<SkSpecialImage> ArithmeticImageFilterImpl::filterImageGPU(
     return SkSpecialImage::MakeDeferredFromGpu(context,
                                                SkIRect::MakeWH(bounds.width(), bounds.height()),
                                                kNeedNewImageUniqueID_SpecialImage,
-                                               renderTargetContext->asTextureProxyRef(),
+                                               renderTargetContext->readSurfaceView(),
                                                renderTargetContext->colorInfo().colorType(),
                                                renderTargetContext->colorInfo().refColorSpace());
 }

@@ -11,7 +11,7 @@
 #ifndef GrRRectBlurEffect_DEFINED
 #define GrRRectBlurEffect_DEFINED
 #include "include/core/SkTypes.h"
-#include "include/core/SkMatrix44.h"
+#include "include/private/SkM44.h"
 
 #include "include/gpu/GrContext.h"
 #include "include/private/GrRecordingContext.h"
@@ -55,7 +55,7 @@ public:
                 key, GrColorType::kAlpha_8, kBottomLeft_GrSurfaceOrigin));
         if (!mask) {
             auto rtc = GrRenderTargetContext::MakeWithFallback(
-                    context, GrColorType::kAlpha_8, nullptr, SkBackingFit::kApprox, dimensions);
+                    context, GrColorType::kAlpha_8, nullptr, SkBackingFit::kExact, dimensions);
             if (!rtc) {
                 return nullptr;
             }
@@ -67,12 +67,12 @@ public:
             rtc->drawRRect(GrNoClip(), std::move(paint), GrAA::kYes, SkMatrix::I(), rrectToDraw,
                            GrStyle::SimpleFill());
 
-            sk_sp<GrTextureProxy> srcProxy(rtc->asTextureProxyRef());
-            if (!srcProxy) {
+            GrSurfaceProxyView srcView = rtc->readSurfaceView();
+            if (!srcView.asTextureProxy()) {
                 return nullptr;
             }
             auto rtc2 = SkGpuBlurUtils::GaussianBlur(context,
-                                                     std::move(srcProxy),
+                                                     std::move(srcView),
                                                      rtc->colorInfo().colorType(),
                                                      rtc->colorInfo().alphaType(),
                                                      nullptr,

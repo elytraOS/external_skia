@@ -32,11 +32,6 @@ class GrMtlGpu;
 class GrSurface;
 
 /**
- * Returns the Metal texture format for the given GrPixelConfig
- */
-bool GrPixelConfigToMTLFormat(GrPixelConfig config, MTLPixelFormat* format);
-
-/**
  * Returns a id<MTLTexture> to the MTLTexture pointed at by the const void*.
  */
 SK_ALWAYS_INLINE id<MTLTexture> GrGetMTLTexture(const void* mtlTexture)  {
@@ -85,13 +80,13 @@ id<MTLLibrary> GrCompileMtlShaderLibrary(const GrMtlGpu* gpu,
  * Replacement for newLibraryWithSource:options:error that has a timeout.
  */
 id<MTLLibrary> GrMtlNewLibraryWithSource(id<MTLDevice>, NSString* mslCode,
-                                         MTLCompileOptions*, bool* timedout);
+                                         MTLCompileOptions*, NSError**);
 
 /**
  * Replacement for newRenderPipelineStateWithDescriptor:error that has a timeout.
  */
 id<MTLRenderPipelineState> GrMtlNewRenderPipelineStateWithDescriptor(
-        id<MTLDevice>, MTLRenderPipelineDescriptor*, bool* timedout);
+        id<MTLDevice>, MTLRenderPipelineDescriptor*, NSError**);
 
 /**
  * Returns a MTLTexture corresponding to the GrSurface.

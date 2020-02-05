@@ -25,6 +25,24 @@ void AnimatablePropertyContainer::onTick(float t) {
     this->onSync();
 }
 
+void AnimatablePropertyContainer::attachDiscardableAdapter(
+        sk_sp<AnimatablePropertyContainer> child) {
+    if (!child) {
+        return;
+    }
+
+    if (child->isStatic()) {
+        child->tick(0);
+        return;
+    }
+
+    fAnimators.push_back(child);
+}
+
+void AnimatablePropertyContainer::shrink_to_fit() {
+    fAnimators.shrink_to_fit();
+}
+
 namespace  {
 
 class KeyframeAnimatorBase : public sksg::Animator {

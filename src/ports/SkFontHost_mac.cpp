@@ -700,12 +700,10 @@ struct OpszVariation {
 
 class SkTypeface_Mac : public SkTypeface {
 public:
-    SkTypeface_Mac(SkUniqueCFRef<CTFontRef> fontRef, SkUniqueCFRef<CFTypeRef> resourceRef,
-                   const SkFontStyle& fs, bool isFixedPitch, OpszVariation opszVariation,
-                   std::unique_ptr<SkStreamAsset> providedData)
+    SkTypeface_Mac(SkUniqueCFRef<CTFontRef> fontRef, const SkFontStyle& fs, bool isFixedPitch,
+                   OpszVariation opszVariation, std::unique_ptr<SkStreamAsset> providedData)
         : SkTypeface(fs, isFixedPitch)
         , fFontRef(std::move(fontRef))
-        , fOriginatingCFTypeRef(std::move(resourceRef))
         , fOpszVariation(opszVariation)
         , fHasColorGlyphs(
                 SkToBool(CTFontGetSymbolicTraits(fFontRef.get()) & kCTFontColorGlyphsTrait))
@@ -716,7 +714,6 @@ public:
     }
 
     SkUniqueCFRef<CTFontRef> fFontRef;
-    SkUniqueCFRef<CFTypeRef> fOriginatingCFTypeRef;
     const OpszVariation fOpszVariation;
     const bool fHasColorGlyphs;
 
@@ -763,7 +760,6 @@ static bool find_by_CTFontRef(SkTypeface* cached, void* context) {
 
 /** Creates a typeface, searching the cache if isLocalStream is false. */
 static sk_sp<SkTypeface> create_from_CTFontRef(SkUniqueCFRef<CTFontRef> font,
-                                               SkUniqueCFRef<CFTypeRef> resource,
                                                OpszVariation opszVariation,
                                                std::unique_ptr<SkStreamAsset> providedData) {
     SkASSERT(font);
@@ -782,8 +778,8 @@ static sk_sp<SkTypeface> create_from_CTFontRef(SkUniqueCFRef<CTFontRef> font,
     CTFontSymbolicTraits traits = CTFontGetSymbolicTraits(font.get());
     bool isFixedPitch = SkToBool(traits & kCTFontMonoSpaceTrait);
 
-    sk_sp<SkTypeface> face(new SkTypeface_Mac(std::move(font), std::move(resource),
-                                              style, isFixedPitch, opszVariation,
+    sk_sp<SkTypeface> face(new SkTypeface_Mac(std::move(font), style,
+                                              isFixedPitch, opszVariation,
                                               std::move(providedData)));
     if (!isFromStream) {
         SkTypefaceCache::Add(face);
@@ -798,7 +794,7 @@ static sk_sp<SkTypeface> create_from_desc(CTFontDescriptorRef desc) {
         return nullptr;
     }
 
-    return create_from_CTFontRef(std::move(ctFont), nullptr, OpszVariation(), nullptr);
+    return create_from_CTFontRef(std::move(ctFont), OpszVariation(), nullptr);
 }
 
 static SkUniqueCFRef<CTFontDescriptorRef> create_descriptor(const char familyName[],
@@ -817,8 +813,34 @@ static SkUniqueCFRef<CTFontDescriptorRef> create_descriptor(const char familyNam
         return nullptr;
     }
 
+    // TODO(crbug.com/1018581) Some CoreText versions have errant behavior when
+    // certain traits set.  Temporary workaround to omit specifying trait for
+    // those versions.
+    // Long term solution will involve serializing typefaces instead of relying
+    // upon this to match between processes.
+    //
+    // Compare CoreText.h in an up to date SDK for where these values come from.
+    static const uint32_t kSkiaLocalCTVersionNumber10_14 = 0x000B0000;
+    static const uint32_t kSkiaLocalCTVersionNumber10_15 = 0x000C0000;
+
     // CTFontTraits (symbolic)
     // macOS 14 and iOS 12 seem to behave badly when kCTFontSymbolicTrait is set.
+    // macOS 15 yields LastResort font instead of a good default font when
+    // kCTFontSymbolicTrait is set.
+    if (!(&CTGetCoreTextVersion && CTGetCoreTextVersion() >= kSkiaLocalCTVersionNumber10_14)) {
+        CTFontSymbolicTraits ctFontTraits = 0;
+        if (style.weight() >= SkFontStyle::kBold_Weight) {
+            ctFontTraits |= kCTFontBoldTrait;
+        }
+        if (style.slant() != SkFontStyle::kUpright_Slant) {
+            ctFontTraits |= kCTFontItalicTrait;
+        }
+        SkUniqueCFRef<CFNumberRef> cfFontTraits(
+                CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &ctFontTraits));
+        if (cfFontTraits) {
+            CFDictionaryAddValue(cfTraits.get(), kCTFontSymbolicTrait, cfFontTraits.get());
+        }
+    }
 
     // CTFontTraits (weight)
     CGFloat ctWeight = fontstyle_to_ct_weight(style.weight());
@@ -835,11 +857,14 @@ static SkUniqueCFRef<CTFontDescriptorRef> create_descriptor(const char familyNam
         CFDictionaryAddValue(cfTraits.get(), kCTFontWidthTrait, cfFontWidth.get());
     }
     // CTFontTraits (slant)
-    CGFloat ctSlant = style.slant() == SkFontStyle::kUpright_Slant ? 0 : 1;
-    SkUniqueCFRef<CFNumberRef> cfFontSlant(
-            CFNumberCreate(kCFAllocatorDefault, kCFNumberCGFloatType, &ctSlant));
-    if (cfFontSlant) {
-        CFDictionaryAddValue(cfTraits.get(), kCTFontSlantTrait, cfFontSlant.get());
+    // macOS 15 behaves badly when kCTFontSlantTrait is set.
+    if (!(&CTGetCoreTextVersion && CTGetCoreTextVersion() == kSkiaLocalCTVersionNumber10_15)) {
+        CGFloat ctSlant = style.slant() == SkFontStyle::kUpright_Slant ? 0 : 1;
+        SkUniqueCFRef<CFNumberRef> cfFontSlant(
+                CFNumberCreate(kCFAllocatorDefault, kCFNumberCGFloatType, &ctSlant));
+        if (cfFontSlant) {
+            CFDictionaryAddValue(cfTraits.get(), kCTFontSlantTrait, cfFontSlant.get());
+        }
     }
     // CTFontTraits
     CFDictionaryAddValue(cfAttributes.get(), kCTFontTraitsAttribute, cfTraits.get());
@@ -884,7 +909,7 @@ static sk_sp<SkTypeface> create_from_desc_and_style(CTFontDescriptorRef desc,
         }
     }
 
-    return create_from_CTFontRef(std::move(ctFont), nullptr, OpszVariation(), nullptr);
+    return create_from_CTFontRef(std::move(ctFont), OpszVariation(), nullptr);
 }
 
 /** Creates a typeface from a name, searching the cache. */
@@ -901,15 +926,11 @@ static sk_sp<SkTypeface> create_from_name(const char familyName[], const SkFontS
 /*  This function is visible on the outside. It first searches the cache, and if
  *  not found, returns a new entry (after adding it to the cache).
  */
-SkTypeface* SkCreateTypefaceFromCTFont(CTFontRef font, CFTypeRef resource) {
+sk_sp<SkTypeface> SkMakeTypefaceFromCTFont(CTFontRef font) {
     CFRetain(font);
-    if (resource) {
-        CFRetain(resource);
-    }
     return create_from_CTFontRef(SkUniqueCFRef<CTFontRef>(font),
-                                 SkUniqueCFRef<CFTypeRef>(resource),
                                  OpszVariation(),
-                                 nullptr).release();
+                                 nullptr);
 }
 
 static const char* map_css_names(const char* name) {
@@ -2820,7 +2841,7 @@ sk_sp<SkTypeface> SkTypeface_Mac::onMakeClone(const SkFontArguments& args) const
         return nullptr;
     }
 
-    return create_from_CTFontRef(std::move(ctVariant), nullptr, ctVariation.opsz,
+    return create_from_CTFontRef(std::move(ctVariant), ctVariation.opsz,
                                  fStream ? fStream->duplicate() : nullptr);
 }
 
@@ -2992,8 +3013,7 @@ protected:
         CFRange range = CFRangeMake(0, CFStringGetLength(string.get()));  // in UniChar units.
         SkUniqueCFRef<CTFontRef> fallbackFont(
                 CTFontCreateForString(familyFont.get(), string.get(), range));
-        return create_from_CTFontRef(std::move(fallbackFont), nullptr,
-                                     OpszVariation(), nullptr).release();
+        return create_from_CTFontRef(std::move(fallbackFont), OpszVariation(), nullptr).release();
     }
 
     SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
@@ -3011,7 +3031,7 @@ protected:
             return nullptr;
         }
 
-        return create_from_CTFontRef(std::move(ct), nullptr, OpszVariation(),
+        return create_from_CTFontRef(std::move(ct), OpszVariation(),
                                      SkMemoryStream::Make(std::move(data)));
     }
 
@@ -3030,7 +3050,7 @@ protected:
             return nullptr;
         }
 
-        return create_from_CTFontRef(std::move(ct), nullptr, OpszVariation(), std::move(stream));
+        return create_from_CTFontRef(std::move(ct), OpszVariation(), std::move(stream));
     }
 
     sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset> stream,
@@ -3071,7 +3091,7 @@ protected:
             return nullptr;
         }
 
-        return create_from_CTFontRef(std::move(ctVariant), nullptr, ctVariation.opsz,
+        return create_from_CTFontRef(std::move(ctVariant), ctVariation.opsz,
                                      std::move(stream));
     }
 
@@ -3110,8 +3130,8 @@ protected:
             return nullptr;
         }
 
-        return create_from_CTFontRef(std::move(ctVariant), nullptr,
-                                     ctVariation.opsz, fontData->detachStream());
+        return create_from_CTFontRef(std::move(ctVariant), ctVariation.opsz,
+                                     fontData->detachStream());
     }
 
     sk_sp<SkTypeface> onMakeFromFile(const char path[], int ttcIndex) const override {

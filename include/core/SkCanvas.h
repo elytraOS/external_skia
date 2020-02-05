@@ -756,7 +756,8 @@ public:
     */
     int saveLayer(const SaveLayerRec& layerRec);
 
-    int experimental_saveCamera(const SkMatrix44& projection, const SkMatrix44& camera);
+    int experimental_saveCamera(const SkM44& projection, const SkM44& camera);
+    int experimental_saveCamera(const SkScalar projection[16], const SkScalar camera[16]);
 
     /** Removes changes to SkMatrix and clip since SkCanvas state was
         last saved. The state is removed from the stack.
@@ -880,7 +881,6 @@ public:
     */
     void concat(const SkMatrix& matrix);
 
-    void experimental_concat44(const SkMatrix44&);
     void experimental_concat44(const SkM44&);
     void experimental_concat44(const SkScalar[]); // column-major
 
@@ -2513,6 +2513,10 @@ public:
     SkM44 experimental_getLocalToWorld() const;  // up to but not including top-most camera
     SkM44 experimental_getLocalToCamera() const; // up to and including top-most camera
 
+    void experimental_getLocalToDevice(SkScalar colMajor[16]) const;
+    void experimental_getLocalToWorld(SkScalar colMajor[16]) const;
+    void experimental_getLocalToCamera(SkScalar colMajor[16]) const;
+
     ///////////////////////////////////////////////////////////////////////////
 
     // don't call
@@ -2568,14 +2572,7 @@ protected:
     virtual void didConcat44(const SkScalar[]) {} // colMajor
     virtual void didConcat(const SkMatrix& ) {}
     virtual void didSetMatrix(const SkMatrix& ) {}
-#ifdef SK_SUPPORT_LEGACY_CANVAS_MATRIX_VIRTUALS
-    virtual void didTranslate(SkScalar dx, SkScalar dy) {
-        this->didConcat(SkMatrix::MakeTrans(dx, dy));
-    }
-#else
     virtual void didTranslate(SkScalar, SkScalar) {}
-#endif
-    // Called if SK_SUPPORT_LEGACY_CANVAS_MATRIX_VIRTUALS is not defined
     virtual void didScale(SkScalar, SkScalar) {}
 
     // NOTE: If you are adding a new onDraw virtual to SkCanvas, PLEASE add an override to

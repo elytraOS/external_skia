@@ -310,6 +310,7 @@ public:
 
         const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                                      GrRenderable::kYes);
+        GrSwizzle readSwizzle = caps->getReadSwizzle(format, GrColorType::kRGBA_8888);
 
         fAtlasProxy = GrProxyProvider::MakeFullyLazyProxy(
                 [format](GrResourceProvider* resourceProvider)
@@ -319,18 +320,17 @@ public:
                     // all 9 atlas draws occur
                     desc.fWidth = 9 /*this->numOps()*/ * kAtlasTileSize;
                     desc.fHeight = kAtlasTileSize;
-                    desc.fConfig = kRGBA_8888_GrPixelConfig;
 
                     return resourceProvider->createTexture(desc, format, GrRenderable::kYes, 1,
                                                            GrMipMapped::kNo, SkBudgeted::kYes,
                                                            GrProtected::kNo);
                 },
                 format,
+                readSwizzle,
                 GrRenderable::kYes,
                 1,
                 GrProtected::kNo,
                 kBottomLeft_GrSurfaceOrigin,
-                kRGBA_8888_GrPixelConfig,
                 *proxyProvider->caps(),
                 GrSurfaceProxy::UseAllocator::kNo);
 

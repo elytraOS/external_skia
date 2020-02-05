@@ -5,6 +5,14 @@
 namespace skia {
 namespace textlayout {
 
+namespace {
+    SkScalar relax(SkScalar a) {
+        // This rounding is done to match Flutter tests. Must be removed..
+      auto threshold = SkIntToScalar(1 << 12);
+      return SkScalarRoundToScalar(a * threshold)/threshold;
+    }
+}
+
 class ParagraphCacheKey {
 public:
     ParagraphCacheKey(const ParagraphImpl* paragraph)
@@ -38,36 +46,45 @@ public:
     size_t fUnresolvedGlyphs;
 };
 
-
 uint32_t ParagraphCache::KeyHash::mix(uint32_t hash, uint32_t data) const {
     hash += data;
     hash += (hash << 10);
     hash ^= (hash >> 6);
     return hash;
 }
+
 uint32_t ParagraphCache::KeyHash::operator()(const ParagraphCacheKey& key) const {
     uint32_t hash = 0;
     for (auto& ph : key.fPlaceholders) {
+        if (&ph == &key.fPlaceholders.back()) {
+            // Skip the last "dummy" placeholder
+            break;
+        }
         hash = mix(hash, SkGoodHash()(ph.fRange.start));
         hash = mix(hash, SkGoodHash()(ph.fRange.end));
-        hash = mix(hash, SkGoodHash()(ph.fStyle.fBaselineOffset));
+        hash = mix(hash, SkGoodHash()(relax(ph.fStyle.fBaselineOffset)));
         hash = mix(hash, SkGoodHash()(ph.fStyle.fBaseline));
         hash = mix(hash, SkGoodHash()(ph.fStyle.fAlignment));
-        hash = mix(hash, SkGoodHash()(ph.fStyle.fHeight));
-        hash = mix(hash, SkGoodHash()(ph.fStyle.fWidth));
+        if (ph.fStyle.fAlignment == PlaceholderAlignment::kBaseline) {
+            hash = mix(hash, SkGoodHash()(relax(ph.fStyle.fBaselineOffset)));
+        }
+        hash = mix(hash, SkGoodHash()(relax(ph.fStyle.fHeight)));
+        hash = mix(hash, SkGoodHash()(relax(ph.fStyle.fWidth)));
     }
     for (auto& ts : key.fTextStyles) {
         if (ts.fStyle.isPlaceholder()) {
             continue;
         }
-        hash = mix(hash, SkGoodHash()(ts.fStyle.getLetterSpacing()));
-        hash = mix(hash, SkGoodHash()(ts.fStyle.getWordSpacing()));
+        hash = mix(hash, SkGoodHash()(relax(ts.fStyle.getLetterSpacing())));
+        hash = mix(hash, SkGoodHash()(relax(ts.fStyle.getWordSpacing())));
+        hash = mix(hash, SkGoodHash()(ts.fStyle.getLocale()));
+        hash = mix(hash, SkGoodHash()(relax(ts.fStyle.getHeight())));
         hash = mix(hash, SkGoodHash()(ts.fRange));
         for (auto& ff : ts.fStyle.getFontFamilies()) {
             hash = mix(hash, SkGoodHash()(ff));
         }
         hash = mix(hash, SkGoodHash()(ts.fStyle.getFontStyle()));
-        hash = mix(hash, SkGoodHash()(ts.fStyle.getFontSize()));
+        hash = mix(hash, SkGoodHash()(relax(ts.fStyle.getFontSize())));
         hash = mix(hash, SkGoodHash()(ts.fRange.start));
         hash = mix(hash, SkGoodHash()(ts.fRange.end));
     }
@@ -89,8 +106,8 @@ bool operator==(const ParagraphCacheKey& a, const ParagraphCacheKey& b) {
         return false;
     }
 
-    if (!(a.fParagraphStyle == b.fParagraphStyle)) {
-        // This is too strong, but at least we will not lose lines
+    // There is no need to compare default paragraph styles - they are included into fTextStyles
+    if (a.fParagraphStyle.getHeight() != b.fParagraphStyle.getHeight()) {
         return false;
     }
 
@@ -110,7 +127,7 @@ bool operator==(const ParagraphCacheKey& a, const ParagraphCacheKey& b) {
             return false;
         }
     }
-    for (size_t i = 0; i < a.fPlaceholders.size(); ++i) {
+    for (size_t i = 0; i < a.fPlaceholders.size() - 1; ++i) {
         auto& tsa = a.fPlaceholders[i];
         auto& tsb = b.fPlaceholders[i];
         if (!(tsa.fStyle.equals(tsb.fStyle))) {
@@ -130,7 +147,7 @@ bool operator==(const ParagraphCacheKey& a, const ParagraphCacheKey& b) {
 struct ParagraphCache::Entry {
 
     Entry(ParagraphCacheValue* value) : fValue(value) {}
-    ParagraphCacheValue* fValue;
+    std::unique_ptr<ParagraphCacheValue> fValue;
 };
 
 ParagraphCache::ParagraphCache()
@@ -212,6 +229,7 @@ bool ParagraphCache::findParagraph(ParagraphImpl* paragraph) {
     SkAutoMutexExclusive lock(fParagraphMutex);
     ParagraphCacheKey key(paragraph);
     std::unique_ptr<Entry>* entry = fLRUCacheMap.find(key);
+
     if (!entry) {
         // We have a cache miss
 #ifdef PARAGRAPH_CACHE_STATS

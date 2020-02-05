@@ -113,7 +113,7 @@ namespace skvm {
         enum { NEAREST, FLOOR, CEIL, TRUNC };  // vroundps immediates
 
         using DstEqOpX = void(Ymm dst, Ymm x);
-        DstEqOpX vmovdqa, vcvtdq2ps, vcvttps2dq, vcvtps2dq;
+        DstEqOpX vmovdqa, vcvtdq2ps, vcvttps2dq, vcvtps2dq, vsqrtps;
 
         void vpblendvb(Ymm dst, Ymm x, Ymm y, Ymm z);
 
@@ -286,7 +286,7 @@ namespace skvm {
         M(store8)   M(store16)   M(store32)   \
         M(index)                              \
         M(load8)    M(load16)    M(load32)    \
-        M(gather8)  M(gather16)  M(gather32)  \
+                                 M(gather32)  \
         M(uniform8) M(uniform16) M(uniform32) \
         M(splat)                              \
         M(add_f32) M(add_i32) M(add_i16x2)    \
@@ -296,6 +296,7 @@ namespace skvm {
         M(min_f32)                            \
         M(max_f32)                            \
         M(mad_f32)                            \
+        M(sqrt_f32)                           \
                    M(shl_i32) M(shl_i16x2)    \
                    M(shr_i32) M(shr_i16x2)    \
                    M(sra_i32) M(sra_i16x2)    \
@@ -319,7 +320,7 @@ namespace skvm {
         M(select) M(bytes) M(pack)            \
     // End of SKVM_OPS
 
-    enum class Op : uint8_t {
+    enum class Op : int {
     #define M(op) op,
         SKVM_OPS(M)
     #undef M
@@ -338,9 +339,11 @@ namespace skvm {
     class Builder {
     public:
         struct Instruction {
+            // Tightly packed for hashing:
             Op  op;         // v* = op(x,y,z,imm), where * == index of this Instruction.
             Val x,y,z;      // Enough arguments for mad().
             int immy,immz;  // Immediate bit pattern, shift count, argument index, etc.
+            // End tightly packed for hashing.
 
             // Not populated until done() has been called.
             int  death;         // Index of last live instruction taking this input; live if != 0.
@@ -422,13 +425,26 @@ namespace skvm {
         F32 min(F32 x, F32 y);
         F32 max(F32 x, F32 y);
         F32 mad(F32 x, F32 y, F32 z);  //  x*y+z, often an FMA
+        F32 sqrt(F32 x);
 
+        F32 negate(F32 x) {
+            return sub(splat(0.0f), x);
+        }
         F32 lerp(F32 lo, F32 hi, F32 t) {
             return mad(sub(hi,lo), t, lo);
         }
-
         F32 clamp(F32 x, F32 lo, F32 hi) {
             return max(lo, min(x, hi));
+        }
+        F32 abs(F32 x) {
+            return bit_cast(bit_and(bit_cast(x),
+                                    splat(0x7fffffff)));
+        }
+        F32 fract(F32 x) {
+            return sub(x, floor(x));
+        }
+        F32 norm(F32 x, F32 y) {
+            return sqrt(mad(x,x, mul(y,y)));
         }
 
         I32 eq (F32 x, F32 y);
@@ -442,15 +458,6 @@ namespace skvm {
         I32 trunc(F32 x);
         I32 round(F32 x);
         I32 bit_cast(F32 x) { return {x.id}; }
-
-        F32 abs(F32 x) {
-            return bit_cast(bit_and(bit_cast(x),
-                                    splat(0x7fffffff)));
-        }
-
-        F32 fract(F32 x) {
-            return sub(x, floor(x));
-        }
 
         // int math, comparisons, etc.
         I32 add(I32 x, I32 y);
@@ -526,8 +533,8 @@ namespace skvm {
         I32 pack   (I32 x, I32 y, int bits);   // x | (y << bits), assuming (x & (y << bits)) == 0
 
         // Common idioms used in several places, worth centralizing for consistency.
-        F32 unorm(int bits, I32);   // E.g. unorm(8, x) -> x * (1/255.0f)
-        I32 unorm(int bits, F32);   // E.g. unorm(8, f) -> round(x * 255)
+        F32 from_unorm(int bits, I32);   // E.g. from_unorm(8, x) -> x * (1/255.0f)
+        I32   to_unorm(int bits, F32);   // E.g.   to_unorm(8, x) -> round(x * 255)
 
         Color unpack_8888(I32 rgba);
         Color unpack_565 (I32 bgr );  // bottom 16 bits
@@ -539,11 +546,11 @@ namespace skvm {
 
         void dump(SkWStream* = nullptr) const;
 
-        uint32_t hash() const;
+        uint64_t hash() const;
 
     private:
         struct InstructionHash {
-            size_t operator()(const Instruction& inst) const;
+            uint32_t operator()(const Instruction& inst, uint32_t seed=0) const;
         };
 
         Val push(Op, Val x, Val y=NA, Val z=NA, int immy=0, int immz=0);
@@ -562,7 +569,8 @@ namespace skvm {
         SkTHashMap<Instruction, Val, InstructionHash> fIndex;
         std::vector<Instruction>                      fProgram;
         std::vector<int>                              fStrides;
-        uint32_t                                      fHash{0};
+        uint32_t                                      fHashLo{0},
+                                                      fHashHi{0};
     };
 
     // Helper to streamline allocating and working with uniforms.

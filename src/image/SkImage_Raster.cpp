@@ -12,6 +12,7 @@
 #include "include/core/SkSurface.h"
 #include "include/private/SkImageInfoPriv.h"
 #include "src/codec/SkColorTable.h"
+#include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkTLazy.h"
@@ -176,9 +177,12 @@ sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrRecordingContext* cont
     uint32_t uniqueID;
     sk_sp<GrTextureProxy> tex = this->refPinnedTextureProxy(context, &uniqueID);
     if (tex) {
-        GrTextureAdjuster adjuster(context, fPinnedProxy, fBitmap.info().colorInfo(),
+        GrSurfaceOrigin origin = tex->origin();
+        GrSwizzle swizzle = tex->textureSwizzle();
+        GrSurfaceProxyView view(std::move(tex), origin, swizzle);
+        GrTextureAdjuster adjuster(context, std::move(view), fBitmap.info().colorInfo(),
                                    fPinnedUniqueID);
-        return adjuster.refTextureProxyForParams(params, scaleAdjust);
+        return adjuster.refTextureProxyViewForParams(params, scaleAdjust).asTextureProxyRef();
     }
 
     return GrRefCachedBitmapTextureProxy(context, fBitmap, params, scaleAdjust);
@@ -280,6 +284,39 @@ sk_sp<SkImage> SkImage::MakeRasterData(const SkImageInfo& info, sk_sp<SkData> da
     }
 
     return sk_make_sp<SkImage_Raster>(info, std::move(data), rowBytes);
+}
+
+// TODO: this could be improved to decode and make use of the mipmap
+// levels potentially present in the compressed data. For now, any
+// mipmap levels are discarded.
+sk_sp<SkImage> SkImage::MakeRasterFromCompressed(sk_sp<SkData> data,
+                                                 int width, int height,
+                                                 CompressionType type) {
+    size_t expectedSize = SkCompressedFormatDataSize(type, { width, height }, false);
+    if (!data || data->size() < expectedSize) {
+        return nullptr;
+    }
+
+    SkAlphaType at = SkCompressionTypeIsOpaque(type) ? kOpaque_SkAlphaType
+                                                     : kPremul_SkAlphaType;
+
+    SkImageInfo ii = SkImageInfo::MakeN32(width, height, at);
+
+    if (!SkImage_Raster::ValidArgs(ii, ii.minRowBytes(), nullptr)) {
+        return nullptr;
+    }
+
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocPixels(ii)) {
+        return nullptr;
+    }
+
+    if (!SkDecompress(std::move(data), { width, height }, type, &bitmap)) {
+        return nullptr;
+    }
+
+    bitmap.setImmutable();
+    return MakeFromBitmap(bitmap);
 }
 
 sk_sp<SkImage> SkImage::MakeFromRaster(const SkPixmap& pmap, RasterReleaseProc proc,

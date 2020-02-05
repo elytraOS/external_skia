@@ -226,12 +226,26 @@ sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
                                       kAdopt_GrWrapOwnership, nullptr, nullptr);
 }
 
-sk_sp<SkImage> SkImage::MakeFromCompressed(GrContext* context, sk_sp<SkData> data,
-                                           int width, int height, CompressionType type,
-                                           GrMipMapped mipMapped) {
+sk_sp<SkImage> SkImage::MakeTextureFromCompressed(GrContext* context, sk_sp<SkData> data,
+                                                  int width, int height, CompressionType type,
+                                                  GrMipMapped mipMapped,
+                                                  GrProtected isProtected) {
+    if (!context || !data) {
+        return nullptr;
+    }
+
+    GrBackendFormat beFormat = context->compressedBackendFormat(type);
+    if (!beFormat.isValid()) {
+        sk_sp<SkImage> tmp = MakeRasterFromCompressed(std::move(data), width, height, type);
+        if (!tmp) {
+            return nullptr;
+        }
+        return tmp->makeTextureImage(context, mipMapped);
+    }
+
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     sk_sp<GrTextureProxy> proxy = proxyProvider->createCompressedTextureProxy(
-            {width, height}, SkBudgeted::kYes, mipMapped, type, std::move(data));
+            {width, height}, SkBudgeted::kYes, mipMapped, isProtected, type, std::move(data));
     if (!proxy) {
         return nullptr;
     }
@@ -401,14 +415,10 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
 
 static sk_sp<SkImage> create_image_from_producer(GrContext* context, GrTextureProducer* producer,
                                                  uint32_t id, GrMipMapped mipMapped) {
-    // TODO: have texture producer return a GrSurfaceProxyView
-    auto [proxy, colorType] = producer->refTextureProxy(mipMapped);
-    if (!proxy) {
+    auto [view, colorType] = producer->refTextureProxyView(mipMapped);
+    if (!view.proxy()) {
         return nullptr;
     }
-    GrSurfaceOrigin origin = proxy->origin();
-    const GrSwizzle& swizzle = proxy->textureSwizzle();
-    GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
     return sk_make_sp<SkImage_Gpu>(sk_ref_sp(context), id, std::move(view),
                                    GrColorTypeToSkColorType(colorType),
                                    producer->alphaType(), sk_ref_sp(producer->colorSpace()));
@@ -424,12 +434,12 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, GrMipMapped mipMapp
             return nullptr;
         }
 
-        sk_sp<GrTextureProxy> proxy = as_IB(this)->asTextureProxyRef(context);
-        SkASSERT(proxy);
-        if (GrMipMapped::kNo == mipMapped || proxy->mipMapped() == mipMapped) {
+        GrSurfaceProxyView view = as_IB(this)->asSurfaceProxyViewRef(context);
+        SkASSERT(view.asTextureProxy());
+        if (GrMipMapped::kNo == mipMapped || view.asTextureProxy()->mipMapped() == mipMapped) {
             return sk_ref_sp(const_cast<SkImage*>(this));
         }
-        GrTextureAdjuster adjuster(context, std::move(proxy), this->imageInfo().colorInfo(),
+        GrTextureAdjuster adjuster(context, std::move(view), this->imageInfo().colorInfo(),
                                    this->uniqueID());
         return create_image_from_producer(context, &adjuster, this->uniqueID(), mipMapped);
     }
@@ -440,7 +450,7 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, GrMipMapped mipMapp
     }
 
     if (const SkBitmap* bmp = as_IB(this)->onPeekBitmap()) {
-        GrBitmapTextureMaker maker(context, *bmp);
+        GrBitmapTextureMaker maker(context, *bmp, GrBitmapTextureMaker::Cached::kYes);
         return create_image_from_producer(context, &maker, this->uniqueID(), mipMapped);
     }
     return nullptr;
@@ -543,23 +553,23 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrContext* context,
     // Turn the pixmap into a GrTextureProxy
     SkBitmap bmp;
     bmp.installPixels(*pixmap);
-    GrBitmapTextureMaker bitmapMaker(context, bmp, false, false);
+    GrBitmapTextureMaker bitmapMaker(context, bmp);
     GrMipMapped mipMapped = buildMips ? GrMipMapped::kYes : GrMipMapped::kNo;
-    auto [proxy, grCT] = bitmapMaker.refTextureProxy(mipMapped);
-    if (!proxy) {
+    auto [view, grCT] = bitmapMaker.refTextureProxyView(mipMapped);
+    if (!view.proxy()) {
         return SkImage::MakeRasterCopy(*pixmap);
     }
 
-    sk_sp<GrTexture> texture = sk_ref_sp(proxy->peekTexture());
+    sk_sp<GrTexture> texture = sk_ref_sp(view.proxy()->peekTexture());
 
     // Flush any writes or uploads
-    context->priv().flushSurface(proxy.get());
+    context->priv().flushSurface(view.proxy());
     GrGpu* gpu = context->priv().getGpu();
 
     std::unique_ptr<GrSemaphore> sema = gpu->prepareTextureForCrossContextUsage(texture.get());
 
     SkColorType skCT = GrColorTypeToSkColorType(grCT);
-    auto gen = GrBackendTextureImageGenerator::Make(std::move(texture), proxy->origin(),
+    auto gen = GrBackendTextureImageGenerator::Make(std::move(texture), view.origin(),
                                                     std::move(sema), skCT,
                                                     pixmap->alphaType(),
                                                     pixmap->info().refColorSpace());
