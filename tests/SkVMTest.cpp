@@ -105,7 +105,7 @@ DEF_TEST(SkVM, r) {
         skvm::Program program = b.done();
         REPORTER_ASSERT(r, program.nregs() == 2);
 
-        std::vector<skvm::Builder::Instruction> insts = b.program();
+        std::vector<skvm::OptimizedInstruction> insts = b.optimize();
         REPORTER_ASSERT(r, insts.size() == 6);
         REPORTER_ASSERT(r,  insts[0].can_hoist && insts[0].death == 2 && !insts[0].used_in_loop);
         REPORTER_ASSERT(r,  insts[1].can_hoist && insts[1].death == 2 && !insts[1].used_in_loop);
@@ -161,7 +161,6 @@ DEF_TEST(SkVM, r) {
         dump(b, &buf);
     }
 
-#if defined(SK_CPU_X86)
     sk_sp<SkData> blob = buf.detachAsData();
     {
 
@@ -182,7 +181,6 @@ DEF_TEST(SkVM, r) {
             }
         }
     }
-#endif
 
     auto test_8888 = [&](skvm::Program&& program) {
         uint32_t src[9];
@@ -277,7 +275,7 @@ DEF_TEST(SkVM_Pointless, r) {
         }
     });
 
-    for (const skvm::Builder::Instruction& inst : b.program()) {
+    for (const skvm::OptimizedInstruction& inst : b.optimize()) {
         REPORTER_ASSERT(r, inst.death == 0 && inst.can_hoist == true);
     }
 }
@@ -378,7 +376,7 @@ DEF_TEST(SkVM_gathers, r) {
         b.store8 (buf8 , b.gather8 (uniforms,0, b.bit_and(x, b.splat(31))));
     }
 
-    test_jit_and_interpreter(r, b.done(), [&](const skvm::Program& program) {
+    test_interpreter_only(r, b.done(), [&](const skvm::Program& program) {
         const int img[] = {12,34,56,78, 90,98,76,54};
 
         constexpr int N = 20;

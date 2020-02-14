@@ -47,10 +47,10 @@ bool SkColorFilter::appendStages(const SkStageRec& rec, bool shaderIsOpaque) con
 
 bool SkColorFilter::program(skvm::Builder* p,
                             SkColorSpace* dstCS,
-                            skvm::Uniforms* uniforms,
+                            skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
                             skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
     skvm::F32 original = *a;
-    if (this->onProgram(p, dstCS, uniforms, r,g,b,a)) {
+    if (this->onProgram(p, dstCS, uniforms,alloc, r,g,b,a)) {
         if (this->getFlags() & kAlphaUnchanged_Flag) {
             *a = original;
         }
@@ -61,7 +61,7 @@ bool SkColorFilter::program(skvm::Builder* p,
 
 bool SkColorFilter::onProgram(skvm::Builder*,
                               SkColorSpace* dstCS,
-                              skvm::Uniforms* uniforms,
+                              skvm::Uniforms* uniforms, SkArenaAlloc*,
                               skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const {
     return false;
 }
@@ -401,16 +401,25 @@ sk_sp<SkColorFilter> SkColorFilters::Lerp(float weight, sk_sp<SkColorFilter> cf0
 
 class SkRuntimeColorFilter : public SkColorFilter {
 public:
-    SkRuntimeColorFilter(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> inputs)
-        : fEffect(std::move(effect))
-        , fInputs(std::move(inputs)) {}
+    SkRuntimeColorFilter(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> inputs,
+                         sk_sp<SkColorFilter> children[], size_t childCount)
+            : fEffect(std::move(effect))
+            , fInputs(std::move(inputs))
+            , fChildren(children, children + childCount) {}
 
 #if SK_SUPPORT_GPU
-    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(GrRecordingContext* context,
-                                                             const GrColorInfo&) const override {
-        return GrSkSLFP::Make(context, fEffect, "Runtime Color Filter",
-                              fInputs ? fInputs->data() : nullptr,
-                              fInputs ? fInputs->size() : 0);
+    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(
+            GrRecordingContext* context, const GrColorInfo& colorInfo) const override {
+        auto fp = GrSkSLFP::Make(context, fEffect, "Runtime Color Filter", fInputs);
+        for (const auto& child : fChildren) {
+            auto childFP = child ? child->asFragmentProcessor(context, colorInfo) : nullptr;
+            if (!childFP) {
+                // TODO: This is the case that should eventually mean "the original input color"
+                return nullptr;
+            }
+            fp->addChild(std::move(childFP));
+        }
+        return fp;
     }
 #endif
 
@@ -441,13 +450,15 @@ public:
 
 protected:
     void flatten(SkWriteBuffer& buffer) const override {
-        // See comment in CreateProc about this index
-        buffer.writeInt(fEffect->index());
         buffer.writeString(fEffect->source().c_str());
         if (fInputs) {
             buffer.writeDataAsByteArray(fInputs.get());
         } else {
             buffer.writeByteArray(nullptr, 0);
+        }
+        buffer.write32(fChildren.size());
+        for (const auto& child : fChildren) {
+            buffer.writeFlattenable(child.get());
         }
     }
 
@@ -456,6 +467,7 @@ private:
 
     sk_sp<SkRuntimeEffect> fEffect;
     sk_sp<SkData> fInputs;
+    std::vector<sk_sp<SkColorFilter>> fChildren;
 
     mutable SkMutex fInterpreterMutex;
     mutable std::unique_ptr<SkSL::Interpreter<SkRasterPipeline_InterpreterCtx::VECTOR_WIDTH>>
@@ -468,22 +480,25 @@ private:
 };
 
 sk_sp<SkFlattenable> SkRuntimeColorFilter::CreateProc(SkReadBuffer& buffer) {
-    // We don't have a way to ensure that indices are consistent and correct when deserializing.
-    // For now, all shaders get a new unique ID after serialization.
-    int index = buffer.readInt();
-    (void)index;
-
     SkString sksl;
     buffer.readString(&sksl);
     sk_sp<SkData> inputs = buffer.readByteArrayAsData();
 
+    std::vector<sk_sp<SkColorFilter>> children;
+    children.resize(buffer.read32());
+    for (size_t i = 0; i < children.size(); ++i) {
+        children[i] = buffer.readColorFilter();
+    }
+
     auto effect = std::get<0>(SkRuntimeEffect::Make(std::move(sksl)));
-    return sk_sp<SkFlattenable>(new SkRuntimeColorFilter(std::move(effect), std::move(inputs)));
+    return effect->makeColorFilter(std::move(inputs), children.data(), children.size());
 }
 
 // Private helper method so SkRuntimeEffect can access SkRuntimeColorFilter
-sk_sp<SkColorFilter> SkMakeRuntimeColorFilter(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> inputs) {
-    return sk_sp<SkColorFilter>(new SkRuntimeColorFilter(std::move(effect), std::move(inputs)));
+sk_sp<SkColorFilter> SkMakeRuntimeColorFilter(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> inputs,
+                                              sk_sp<SkColorFilter> children[], size_t childCount) {
+    return sk_sp<SkColorFilter>(
+            new SkRuntimeColorFilter(std::move(effect), std::move(inputs), children, childCount));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

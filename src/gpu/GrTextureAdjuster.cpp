@@ -33,9 +33,8 @@ void GrTextureAdjuster::didCacheCopy(const GrUniqueKey& copyKey, uint32_t contex
     // We don't currently have a mechanism for notifications on Images!
 }
 
-GrSurfaceProxyView GrTextureAdjuster::refTextureProxyViewCopy(const CopyParams& copyParams,
-                                                              bool willBeMipped,
-                                                              bool copyForMipsOnly) {
+GrSurfaceProxyView GrTextureAdjuster::copy(const CopyParams& copyParams, bool willBeMipped,
+                                           bool copyForMipsOnly) {
     GrProxyProvider* proxyProvider = this->context()->priv().proxyProvider();
 
     GrUniqueKey key;
@@ -48,7 +47,7 @@ GrSurfaceProxyView GrTextureAdjuster::refTextureProxyViewCopy(const CopyParams& 
         if (cachedCopy && (!willBeMipped || GrMipMapped::kYes == cachedCopy->mipMapped())) {
             // TODO: Once we no longer use CopyOnGpu which can fallback to arbitrary formats and
             // colorTypes, we can use the swizzle of the originalView.
-            GrSwizzle swizzle = cachedCopy->textureSwizzle();
+            GrSwizzle swizzle = cachedCopy->textureSwizzleDoNotUse();
             return GrSurfaceProxyView(std::move(cachedCopy), originalView.origin(), swizzle);
         }
     }
@@ -109,8 +108,7 @@ GrSurfaceProxyView GrTextureAdjuster::onRefTextureProxyViewForParams(GrSamplerSt
         }
     }
 
-    GrSurfaceProxyView result = this->refTextureProxyViewCopy(copyParams, willBeMipped,
-                                                              needsCopyForMipsOnly);
+    GrSurfaceProxyView result = this->copy(copyParams, willBeMipped, needsCopyForMipsOnly);
     if (!result.proxy() && needsCopyForMipsOnly) {
         // If we were unable to make a copy and we only needed a copy for mips, then we will return
         // the source texture here and require that the GPU backend is able to fall back to using
@@ -130,8 +128,7 @@ std::unique_ptr<GrFragmentProcessor> GrTextureAdjuster::createFragmentProcessor(
     SkMatrix textureMatrix = origTextureMatrix;
 
     SkScalar scaleAdjust[2] = { 1.0f, 1.0f };
-    GrSurfaceProxyView view =
-            this->refTextureProxyViewForParams(filterOrNullForBicubic, scaleAdjust);
+    GrSurfaceProxyView view = this->viewForParams(filterOrNullForBicubic, scaleAdjust);
     if (!view.proxy()) {
         return nullptr;
     }

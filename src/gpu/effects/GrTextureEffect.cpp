@@ -78,7 +78,6 @@ GrTextureEffect::Sampling::Sampling(GrSamplerState sampler, SkISize size, const 
 GrTextureEffect::Sampling::Sampling(const GrSurfaceProxy& proxy,
                                     GrSamplerState sampler,
                                     const SkRect& subset,
-                                    bool adjustForFilter,
                                     const SkRect* domain,
                                     const GrCaps& caps) {
     using Mode = GrSamplerState::WrapMode;
@@ -91,9 +90,8 @@ GrTextureEffect::Sampling::Sampling(const GrSurfaceProxy& proxy,
         Filter fFilter;
     };
 
-    auto resolve = [adjustForFilter, filter = sampler.filter(), &caps](int size, Mode mode,
-                                                                       Span subset, Span domain) {
-        float inset;
+    auto resolve = [filter = sampler.filter(), &caps](int size, Mode mode, Span subset,
+                                                      Span domain) {
         Result1D r;
         r.fFilter = filter;
         bool canDoHW = (mode != Mode::kClampToBorder || caps.clampToBorderSupport()) &&
@@ -104,10 +102,27 @@ GrTextureEffect::Sampling::Sampling(const GrSurfaceProxy& proxy,
             return r;
         }
 
-        inset = (adjustForFilter && filter != Filter::kNearest) ? 0.5 : 0;
-        auto insetSubset = subset.makeInset(inset);
-
-        if (canDoHW && insetSubset.contains(domain)) {
+        bool domainIsSafe = false;
+        Span insetSubset;
+        if (filter == Filter::kNearest) {
+            Span isubset{sk_float_floor(subset.fA), sk_float_ceil(subset.fB)};
+            if (domain.fA > isubset.fA && domain.fB < isubset.fB) {
+                domainIsSafe = true;
+            }
+            if (mode == Mode::kClamp) {
+                // This inset prevents sampling neighboring texels that could occur when
+                // texture coords fall exactly at texel boundaries (depending on precision
+                // and GPU-specific snapping at the boundary).
+                insetSubset = isubset.makeInset(0.5f);
+            } else {
+                // TODO: Handle other modes properly in this case.
+                insetSubset = subset;
+            }
+        } else {
+            insetSubset = subset.makeInset(0.5f);
+            domainIsSafe = insetSubset.contains(domain);
+        }
+        if (canDoHW && domainIsSafe) {
             r.fShaderMode = ShaderMode::kNone;
             r.fHWMode = mode;
             return r;
@@ -149,68 +164,68 @@ bool GrTextureEffect::Sampling::usesDecal() const {
            fHWSampler.wrapModeY() == GrSamplerState::WrapMode::kClampToBorder;
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::Make(sk_sp<GrSurfaceProxy> proxy,
+std::unique_ptr<GrFragmentProcessor> GrTextureEffect::Make(GrSurfaceProxyView view,
                                                            SkAlphaType alphaType,
                                                            const SkMatrix& matrix,
                                                            GrSamplerState::Filter filter) {
     return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(proxy), alphaType, matrix, Sampling(filter)));
+            new GrTextureEffect(std::move(view), alphaType, matrix, Sampling(filter)));
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::Make(sk_sp<GrSurfaceProxy> proxy,
+std::unique_ptr<GrFragmentProcessor> GrTextureEffect::Make(GrSurfaceProxyView view,
                                                            SkAlphaType alphaType,
                                                            const SkMatrix& matrix,
                                                            GrSamplerState sampler,
                                                            const GrCaps& caps) {
-    Sampling sampling(sampler, proxy->dimensions(), caps);
+    Sampling sampling(sampler, view.proxy()->dimensions(), caps);
     return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(proxy), alphaType, matrix, sampling));
+            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeTexelSubset(sk_sp<GrSurfaceProxy> proxy,
+std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeTexelSubset(GrSurfaceProxyView view,
                                                                       SkAlphaType alphaType,
                                                                       const SkMatrix& matrix,
                                                                       GrSamplerState sampler,
                                                                       const SkIRect& subset,
                                                                       const GrCaps& caps) {
-    Sampling sampling(*proxy, sampler, SkRect::Make(subset), true, nullptr, caps);
+    Sampling sampling(*view.proxy(), sampler, SkRect::Make(subset), nullptr, caps);
     return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(proxy), alphaType, matrix, sampling));
+            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeTexelSubset(sk_sp<GrSurfaceProxy> proxy,
+std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeTexelSubset(GrSurfaceProxyView view,
                                                                       SkAlphaType alphaType,
                                                                       const SkMatrix& matrix,
                                                                       GrSamplerState sampler,
                                                                       const SkIRect& subset,
                                                                       const SkRect& domain,
                                                                       const GrCaps& caps) {
-    Sampling sampling(*proxy, sampler, SkRect::Make(subset), true, &domain, caps);
+    Sampling sampling(*view.proxy(), sampler, SkRect::Make(subset), &domain, caps);
     return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(proxy), alphaType, matrix, sampling));
+            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeSubset(sk_sp<GrSurfaceProxy> proxy,
+std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeSubset(GrSurfaceProxyView view,
                                                                  SkAlphaType alphaType,
                                                                  const SkMatrix& matrix,
                                                                  GrSamplerState sampler,
                                                                  const SkRect& subset,
                                                                  const GrCaps& caps) {
-    Sampling sampling(*proxy, sampler, subset, false, nullptr, caps);
+    Sampling sampling(*view.proxy(), sampler, subset, nullptr, caps);
     return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(proxy), alphaType, matrix, sampling));
+            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
 }
 
-std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeSubset(sk_sp<GrSurfaceProxy> proxy,
+std::unique_ptr<GrFragmentProcessor> GrTextureEffect::MakeSubset(GrSurfaceProxyView view,
                                                                  SkAlphaType alphaType,
                                                                  const SkMatrix& matrix,
                                                                  GrSamplerState sampler,
                                                                  const SkRect& subset,
                                                                  const SkRect& domain,
                                                                  const GrCaps& caps) {
-    Sampling sampling(*proxy, sampler, subset, false, &domain, caps);
+    Sampling sampling(*view.proxy(), sampler, subset, &domain, caps);
     return std::unique_ptr<GrFragmentProcessor>(
-            new GrTextureEffect(std::move(proxy), alphaType, matrix, sampling));
+            new GrTextureEffect(std::move(view), alphaType, matrix, sampling));
 }
 
 GrGLSLFragmentProcessor* GrTextureEffect::onCreateGLSLInstance() const {
@@ -220,39 +235,6 @@ GrGLSLFragmentProcessor* GrTextureEffect::onCreateGLSLInstance() const {
 
     public:
         void emitCode(EmitArgs& args) override {
-            auto appendWrap = [](GrGLSLShaderBuilder* builder, ShaderMode mode, const char* inCoord,
-                                 const char* domainStart, const char* domainEnd, bool is2D,
-                                 const char* out) {
-                switch (mode) {
-                    case ShaderMode::kNone:
-                        builder->codeAppendf("%s = %s;\n", out, inCoord);
-                        break;
-                    case ShaderMode::kDecal:
-                        // The lookup coordinate to use for decal will be clamped just like
-                        // kClamp_Mode, it's just that the post-processing will be different, so
-                        // fall through
-                    case ShaderMode::kClamp:
-                        builder->codeAppendf("%s = clamp(%s, %s, %s);", out, inCoord, domainStart,
-                                             domainEnd);
-                        break;
-                    case ShaderMode::kRepeat:
-                        builder->codeAppendf("%s = mod(%s - %s, %s - %s) + %s;", out, inCoord,
-                                             domainStart, domainEnd, domainStart, domainStart);
-                        break;
-                    case ShaderMode::kMirrorRepeat: {
-                        const char* type = is2D ? "float2" : "float";
-                        builder->codeAppend("{");
-                        builder->codeAppendf("%s w = %s - %s;", type, domainEnd, domainStart);
-                        builder->codeAppendf("%s w2 = 2 * w;", type);
-                        builder->codeAppendf("%s m = mod(%s - %s, w2);", type, inCoord,
-                                             domainStart);
-                        builder->codeAppendf("%s = mix(m, w2 - m, step(w, m)) + %s;", out,
-                                             domainStart);
-                        builder->codeAppend("}");
-                        break;
-                    }
-                }
-            };
             auto te = args.fFp.cast<GrTextureEffect>();
             const char* coords;
             if (args.fFp.coordTransformsApplyToLocalCoords()) {
@@ -275,33 +257,53 @@ GrGLSLFragmentProcessor* GrTextureEffect::onCreateGLSLInstance() const {
 
                 // Always use a local variable for the input coordinates; often callers pass in an
                 // expression and we want to cache it across all of its references in the code below
-                auto inCoords = fb->ensureCoords2D(args.fTransformedCoords[0].fVaryingPoint);
+                fb->codeAppendf(
+                        "float2 inCoord = %s;",
+                        fb->ensureCoords2D(args.fTransformedCoords[0].fVaryingPoint).c_str());
                 fb->codeAppend("float2 clampedCoord;");
-                SkString start;
-                SkString end;
-                if (te.fShaderModes[0] == te.fShaderModes[1]) {
-                    // Doing the domain setup using vectors seems to avoid shader compilation issues
-                    // on Chromecast, possibly due to reducing shader length.
-                    start.printf("%s.xy", subsetName);
-                    end.printf("%s.zw", subsetName);
-                    appendWrap(fb, te.fShaderModes[0], inCoords.c_str(), start.c_str(), end.c_str(),
-                               true, "clampedCoord");
-                } else {
-                    SkString origX, origY;
-                    // Apply x mode to the x coordinate using the left and right edges of the domain
-                    // rect (stored as the x and z components of the domain uniform).
-                    start.printf("%s.x", subsetName);
-                    end.printf("%s.z", subsetName);
-                    origX.printf("%s.x", inCoords.c_str());
-                    appendWrap(fb, te.fShaderModes[0], origX.c_str(), start.c_str(), end.c_str(),
-                               false, "clampedCoord.x");
-                    // Repeat the same logic for y.
-                    start.printf("%s.y", subsetName);
-                    end.printf("%s.w", subsetName);
-                    origY.printf("%s.y", inCoords.c_str());
-                    appendWrap(fb, te.fShaderModes[1], origY.c_str(), start.c_str(), end.c_str(),
-                               false, "clampedCoord.y");
-                }
+
+                auto subsetCoord = [fb, subsetName](ShaderMode mode, const char* coordSwizzle,
+                                                    const char* subsetStartSwizzle,
+                                                    const char* subsetStopSwizzle) {
+                    switch (mode) {
+                        case ShaderMode::kNone:
+                            fb->codeAppendf("clampedCoord.%s = inCoord.%s;\n", coordSwizzle,
+                                            coordSwizzle);
+                            break;
+                        case ShaderMode::kDecal:
+                            // The lookup coordinate to use for decal will be clamped just like
+                            // kClamp_Mode, it's just that the post-processing will be different, so
+                            // fall through
+                        case ShaderMode::kClamp:
+                            fb->codeAppendf("clampedCoord.%s = clamp(inCoord.%s, %s.%s, %s.%s);",
+                                            coordSwizzle, coordSwizzle, subsetName,
+                                            subsetStartSwizzle, subsetName, subsetStopSwizzle);
+                            break;
+                        case ShaderMode::kRepeat:
+                            fb->codeAppendf(
+                                    "clampedCoord.%s = mod(inCoord.%s - %s.%s, %s.%s - %s.%s) + "
+                                    "%s.%s;",
+                                    coordSwizzle, coordSwizzle, subsetName, subsetStartSwizzle,
+                                    subsetName, subsetStopSwizzle, subsetName, subsetStartSwizzle,
+                                    subsetName, subsetStartSwizzle);
+                            break;
+                        case ShaderMode::kMirrorRepeat: {
+                            fb->codeAppend("{");
+                            fb->codeAppendf("float w = %s.%s - %s.%s;", subsetName,
+                                            subsetStopSwizzle, subsetName, subsetStartSwizzle);
+                            fb->codeAppendf("float w2 = 2 * w;");
+                            fb->codeAppendf("float m = mod(inCoord.%s - %s.%s, w2);", coordSwizzle,
+                                            subsetName, subsetStartSwizzle);
+                            fb->codeAppendf("clampedCoord.%s = mix(m, w2 - m, step(w, m)) + %s.%s;",
+                                            coordSwizzle, subsetName, subsetStartSwizzle);
+                            fb->codeAppend("}");
+                            break;
+                        }
+                    }
+                };
+
+                subsetCoord(te.fShaderModes[0], "x", "x", "z");
+                subsetCoord(te.fShaderModes[1], "y", "y", "w");
                 SkString textureLookup;
                 fb->appendTextureLookup(&textureLookup, args.fTexSamplers[0], "clampedCoord");
                 fb->codeAppendf("half4 textureColor = %s;", textureLookup.c_str());
@@ -321,16 +323,16 @@ GrGLSLFragmentProcessor* GrTextureEffect::onCreateGLSLInstance() const {
                     // behavior depending on if it's 0 or 1.
                     if (decalX && decalY) {
                         fb->codeAppendf(
-                                "half err = max(half(abs(clampedCoord.x - %s.x) * %s.x), "
-                                "               half(abs(clampedCoord.y - %s.y) * %s.y));",
-                                inCoords.c_str(), decalName, inCoords.c_str(), decalName);
+                                "half err = max(half(abs(clampedCoord.x - inCoord.x) * %s.x), "
+                                "               half(abs(clampedCoord.y - inCoord.y) * %s.y));",
+                                decalName, decalName);
                     } else if (decalX) {
-                        fb->codeAppendf("half err = half(abs(clampedCoord.x - %s.x) * %s.x);",
-                                        inCoords.c_str(), decalName);
+                        fb->codeAppendf("half err = half(abs(clampedCoord.x - inCoord.x) * %s.x);",
+                                        decalName);
                     } else {
                         SkASSERT(decalY);
-                        fb->codeAppendf("half err = half(abs(clampedCoord.y - %s.y) * %s.y);",
-                                        inCoords.c_str(), decalName);
+                        fb->codeAppendf("half err = half(abs(clampedCoord.y - inCoord.y) * %s.y);",
+                                        decalName);
                     }
 
                     // Apply a transform to the error rate, which let's us simulate nearest or
@@ -408,12 +410,12 @@ bool GrTextureEffect::onIsEqual(const GrFragmentProcessor& other) const {
            fSubset == that.fSubset;
 }
 
-GrTextureEffect::GrTextureEffect(sk_sp<GrSurfaceProxy> texture, SkAlphaType alphaType,
+GrTextureEffect::GrTextureEffect(GrSurfaceProxyView view, SkAlphaType alphaType,
                                  const SkMatrix& matrix, const Sampling& sampling)
         : GrFragmentProcessor(kGrTextureEffect_ClassID,
                               ModulateForSamplerOptFlags(alphaType, sampling.usesDecal()))
-        , fCoordTransform(matrix, texture.get())
-        , fSampler(std::move(texture), sampling.fHWSampler)
+        , fCoordTransform(matrix, view.proxy(), view.origin())
+        , fSampler(std::move(view), sampling.fHWSampler)
         , fSubset(sampling.fShaderSubset)
         , fShaderModes{sampling.fShaderModes[0], sampling.fShaderModes[1]} {
     // We always compare the range even when it isn't used so assert we have canonical don't care
@@ -445,7 +447,7 @@ const GrFragmentProcessor::TextureSampler& GrTextureEffect::onTextureSampler(int
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrTextureEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrTextureEffect::TestCreate(GrProcessorTestData* testData) {
-    auto [proxy, ct, at] = testData->randomProxy();
+    auto [view, ct, at] = testData->randomView();
     GrSamplerState::WrapMode wrapModes[2];
     GrTest::TestWrapModes(testData->fRandom, wrapModes);
     if (!testData->caps()->npotTextureTileSupport()) {
@@ -460,6 +462,6 @@ std::unique_ptr<GrFragmentProcessor> GrTextureEffect::TestCreate(GrProcessorTest
                                              : GrSamplerState::Filter::kNearest);
 
     const SkMatrix& matrix = GrTest::TestMatrix(testData->fRandom);
-    return GrTextureEffect::Make(std::move(proxy), at, matrix, params, *testData->caps());
+    return GrTextureEffect::Make(std::move(view), at, matrix, params, *testData->caps());
 }
 #endif

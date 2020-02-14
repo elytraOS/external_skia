@@ -82,10 +82,12 @@ public:
     sk_sp<SkShader> makeShader(sk_sp<SkData> inputs, sk_sp<SkShader> children[], size_t childCount,
                                const SkMatrix* localMatrix, bool isOpaque);
 
+    sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> inputs, sk_sp<SkColorFilter> children[],
+                                         size_t childCount);
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<SkData> inputs);
 
     const SkString& source() const { return fSkSL; }
-    int index() const { return fIndex; }
+    uint32_t hash() const { return fHash; }
 
     template <typename T>
     class ConstIterable {
@@ -134,7 +136,7 @@ private:
     using SpecializeResult = std::tuple<std::unique_ptr<SkSL::Program>, SkString>;
     SpecializeResult specialize(SkSL::Program& baseProgram, const void* inputs);
 
-    int fIndex;
+    uint32_t fHash;
     SkString fSkSL;
 
     std::unique_ptr<SkSL::Compiler> fCompiler;

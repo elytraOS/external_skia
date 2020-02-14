@@ -200,8 +200,8 @@ GrPathRenderer::CanDrawPath GrSmallPathRenderer::onCanDrawPath(const CanDrawPath
         return CanDrawPath::kNo;
     }
     SkRect bounds = args.fShape->styledBounds();
-    SkScalar minDim = SkMinScalar(bounds.width(), bounds.height());
-    SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
+    SkScalar minDim = std::min(bounds.width(), bounds.height());
+    SkScalar maxDim = std::max(bounds.width(), bounds.height());
     SkScalar minSize = minDim * SkScalarAbs(scaleFactors[0]);
     SkScalar maxSize = maxDim * SkScalarAbs(scaleFactors[1]);
     if (maxDim > kMaxDim || kMinSize > minSize || maxSize > kMaxSize) {
@@ -397,12 +397,12 @@ private:
                     // approximate the scale since we can't get it from the matrix
                     SkRect xformedBounds;
                     args.fViewMatrix.mapRect(&xformedBounds, bounds);
-                    maxScale = SkScalarAbs(SkTMax(xformedBounds.width() / bounds.width(),
+                    maxScale = SkScalarAbs(std::max(xformedBounds.width() / bounds.width(),
                                                   xformedBounds.height() / bounds.height()));
                 } else {
                     maxScale = SkScalarAbs(args.fViewMatrix.getMaxScale());
                 }
-                SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
+                SkScalar maxDim = std::max(bounds.width(), bounds.height());
                 // We try to create the DF at a 2^n scaled path resolution (1/2, 1, 2, 4, etc.)
                 // In the majority of cases this will yield a crisper rendering.
                 SkScalar mipScale = 1.0f;
@@ -432,7 +432,7 @@ private:
                     }
                     mipSize = newMipSize;
                 }
-                SkScalar desiredDimension = SkTMin(mipSize, kMaxMIP);
+                SkScalar desiredDimension = std::min(mipSize, kMaxMIP);
 
                 // check to see if df path is cached
                 ShapeDataKey key(args.fShape, SkScalarCeilToInt(desiredDimension));
@@ -796,7 +796,7 @@ private:
         }
 
         if (flushInfo->fInstancesToFlush) {
-            GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
+            GrMesh* mesh = target->allocMesh();
             mesh->setIndexedPatterned(flushInfo->fIndexBuffer,
                                       GrResourceProvider::NumIndicesPerNonAAQuad(),
                                       GrResourceProvider::NumVertsPerNonAAQuad(),

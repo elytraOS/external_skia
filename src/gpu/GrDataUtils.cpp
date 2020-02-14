@@ -138,6 +138,8 @@ static uint16_t to565(SkColor col) {
 static void create_BC1_block(SkColor col0, SkColor col1, BC1Block* block) {
     block->fColor0 = to565(col0);
     block->fColor1 = to565(col1);
+    SkASSERT(block->fColor0 <= block->fColor1); // we always assume transparent blocks
+
     if (col0 == SK_ColorTRANSPARENT) {
         // This sets all 16 pixels to just use color3 (under the assumption
         // that this is a kBC1_RGBA8_UNORM texture. Note that in this case
@@ -274,8 +276,8 @@ size_t GrComputeTightCombinedBufferSize(size_t bytesPerPixel, SkISize baseDimens
     int desiredAlignment = (bytesPerPixel == 3) ? 12 : (bytesPerPixel > 4 ? bytesPerPixel : 4);
 
     for (int currentMipLevel = 1; currentMipLevel < mipLevelCount; ++currentMipLevel) {
-        levelDimensions = {SkTMax(1, levelDimensions.width() /2),
-                           SkTMax(1, levelDimensions.height()/2)};
+        levelDimensions = {std::max(1, levelDimensions.width() /2),
+                           std::max(1, levelDimensions.height()/2)};
 
         size_t trimmedSize = levelDimensions.area() * bytesPerPixel;
         const size_t alignmentDiff = combinedBufferSize % desiredAlignment;
@@ -315,7 +317,7 @@ void GrFillInCompressedData(SkImage::CompressionType type, SkISize dimensions,
         }
 
         offset += levelSize;
-        dimensions = {SkTMax(1, dimensions.width()/2), SkTMax(1, dimensions.height()/2)};
+        dimensions = {std::max(1, dimensions.width()/2), std::max(1, dimensions.height()/2)};
     }
 }
 

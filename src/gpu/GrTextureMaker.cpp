@@ -62,7 +62,7 @@ GrSurfaceProxyView GrTextureMaker::onRefTextureProxyViewForParams(GrSamplerState
             GrMipMapped mipped = cachedProxy->mipMapped();
             // TODO: Once we no longer use CopyOnGpu which can fallback to arbitrary formats and
             // colorTypes, we can use the swizzle of the originalView.
-            GrSwizzle swizzle = cachedProxy->textureSwizzle();
+            GrSwizzle swizzle = cachedProxy->textureSwizzleDoNotUse();
             cachedView = GrSurfaceProxyView(std::move(cachedProxy), origOrigin, swizzle);
             if (!willBeMipped || GrMipMapped::kYes == mipped) {
                 return cachedView;
@@ -134,8 +134,7 @@ std::unique_ptr<GrFragmentProcessor> GrTextureMaker::createFragmentProcessor(
     }
 
     SkScalar scaleAdjust[2] = { 1.0f, 1.0f };
-    GrSurfaceProxyView view = this->refTextureProxyViewForParams(filterOrNullForBicubic,
-                                                                 scaleAdjust);
+    GrSurfaceProxyView view = this->viewForParams(filterOrNullForBicubic, scaleAdjust);
     if (!view.proxy()) {
         return nullptr;
     }

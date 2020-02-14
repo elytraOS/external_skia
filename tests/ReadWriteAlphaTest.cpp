@@ -56,10 +56,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, ctxInfo) {
     bool match;
     static const size_t kRowBytes[] = {0, X_SIZE, X_SIZE + 1, 2 * X_SIZE - 1};
     {
-        GrSurfaceDesc desc;
-        desc.fWidth     = X_SIZE;
-        desc.fHeight    = Y_SIZE;
-
         // We are initializing the texture with zeros here
         memset(alphaData, 0, X_SIZE * Y_SIZE);
         unsigned char alphaDataCopy[X_SIZE * Y_SIZE];
@@ -71,7 +67,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, ctxInfo) {
         bitmap.installPixels(ii, alphaDataCopy, ii.minRowBytes());
         bitmap.setImmutable();
         GrBitmapTextureMaker maker(context, bitmap);
-        auto [view, grCT] = maker.refTextureProxyView(GrMipMapped::kNo);
+        auto[view, grCT] = maker.view(GrMipMapped::kNo);
         if (!view.proxy()) {
             ERRORF(reporter, "Could not create alpha texture.");
             return;
