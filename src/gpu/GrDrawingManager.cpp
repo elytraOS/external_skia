@@ -534,7 +534,7 @@ GrSemaphoresSubmitted GrDrawingManager::flushSurfaces(GrSurfaceProxy* proxies[],
             if (rtProxy->isMSAADirty()) {
                 SkASSERT(rtProxy->peekRenderTarget());
                 gpu->resolveRenderTarget(rtProxy->peekRenderTarget(), rtProxy->msaaDirtyRect(),
-                                         rtProxy->origin(), GrGpu::ForExternalIO::kYes);
+                                         GrGpu::ForExternalIO::kYes);
                 rtProxy->markMSAAResolved();
             }
         }
@@ -583,7 +583,7 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
 
     ddl->fArenas = std::move(fContext->priv().detachArenas());
 
-    fContext->priv().detachProgramInfos(&ddl->fProgramInfos);
+    fContext->priv().detachProgramData(&ddl->fProgramData);
 
     if (fPathRendererChain) {
         if (auto ccpr = fPathRendererChain->getCoverageCountingPathRenderer()) {

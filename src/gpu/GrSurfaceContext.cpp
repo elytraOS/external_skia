@@ -77,7 +77,7 @@ std::unique_ptr<GrSurfaceContext> GrSurfaceContext::Make(GrRecordingContext* con
     GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, colorType);
 
     sk_sp<GrTextureProxy> proxy = context->priv().proxyProvider()->createProxy(
-            format, dimensions, swizzle, renderable, renderTargetSampleCnt, origin, mipMapped, fit,
+            format, dimensions, swizzle, renderable, renderTargetSampleCnt, mipMapped, fit,
             budgeted, isProtected);
     if (!proxy) {
         return nullptr;
@@ -240,7 +240,7 @@ bool GrSurfaceContext::readPixels(const GrImageInfo& origDstInfo, void* dst, siz
         return tempCtx->readPixels(dstInfo, dst, rowBytes, {0, 0}, direct);
     }
 
-    bool flip = srcProxy->origin() == kBottomLeft_GrSurfaceOrigin;
+    bool flip = this->origin() == kBottomLeft_GrSurfaceOrigin;
 
     auto supportedRead = caps->supportedReadPixelsColorType(
             this->colorInfo().colorType(), srcProxy->backendFormat(), dstInfo.colorType());
@@ -378,9 +378,9 @@ bool GrSurfaceContext::writePixels(const GrImageInfo& origSrcInfo, const void* s
         // we can use a draw instead which doesn't have this origin restriction. Thus for render
         // targets we will use top left and otherwise we will make the origins match.
         GrSurfaceOrigin tempOrigin =
-                this->asRenderTargetContext() ? kTopLeft_GrSurfaceOrigin : dstProxy->origin();
+                this->asRenderTargetContext() ? kTopLeft_GrSurfaceOrigin : this->origin();
         auto tempProxy = direct->priv().proxyProvider()->createProxy(
-                format, srcInfo.dimensions(), tempReadSwizzle, GrRenderable::kNo, 1, tempOrigin,
+                format, srcInfo.dimensions(), tempReadSwizzle, GrRenderable::kNo, 1,
                 GrMipMapped::kNo, SkBackingFit::kApprox, SkBudgeted::kYes, GrProtected::kNo);
         if (!tempProxy) {
             return false;
@@ -436,7 +436,7 @@ bool GrSurfaceContext::writePixels(const GrImageInfo& origSrcInfo, const void* s
             caps->supportedWritePixelsColorType(this->colorInfo().colorType(),
                                                 dstProxy->backendFormat(),
                                                 srcInfo.colorType()).fColorType;
-    bool flip = dstProxy->origin() == kBottomLeft_GrSurfaceOrigin;
+    bool flip = this->origin() == kBottomLeft_GrSurfaceOrigin;
     bool makeTight = !caps->writePixelsRowBytesSupport() && rowBytes != tightRowBytes;
     bool convert = premul || unpremul || needColorConversion || makeTight ||
                    (srcInfo.colorType() != allowedColorType) || flip;
@@ -637,13 +637,10 @@ std::unique_ptr<GrRenderTargetContext> GrSurfaceContext::rescale(
             } else if (nextH == srcH) {
                 dir = GrBicubicEffect::Direction::kX;
             }
-            if (srcW != texView.proxy()->width() || srcH != texView.proxy()->height()) {
-                auto domain = GrTextureDomain::MakeTexelDomain(
-                        SkIRect::MakeXYWH(srcX, srcY, srcW, srcH), GrTextureDomain::kClamp_Mode);
-                fp = GrBicubicEffect::Make(std::move(texView), matrix, domain, dir, prevAlphaType);
-            } else {
-                fp = GrBicubicEffect::Make(std::move(texView), matrix, dir, prevAlphaType);
-            }
+            static constexpr GrSamplerState::WrapMode kWM = GrSamplerState::WrapMode::kClamp;
+            auto subset = SkRect::MakeXYWH(srcX, srcY, srcW, srcH);
+            fp = GrBicubicEffect::MakeSubset(std::move(texView), prevAlphaType, matrix, kWM, kWM,
+                                             subset, dir, *this->caps());
             if (xform) {
                 fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(xform));
             }
@@ -709,7 +706,7 @@ GrSurfaceContext::PixelTransferResult GrSurfaceContext::transferPixels(GrColorTy
         return {};
     }
     auto srcRect = rect;
-    bool flip = proxy->origin() == kBottomLeft_GrSurfaceOrigin;
+    bool flip = this->origin() == kBottomLeft_GrSurfaceOrigin;
     if (flip) {
         srcRect = SkIRect::MakeLTRB(rect.fLeft, this->height() - rect.fBottom, rect.fRight,
                                     this->height() - rect.fTop);

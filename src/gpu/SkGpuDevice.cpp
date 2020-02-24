@@ -216,12 +216,12 @@ void SkGpuDevice::clearAll() {
 }
 
 void SkGpuDevice::replaceRenderTargetContext(std::unique_ptr<GrRenderTargetContext> rtc,
-                                             bool shouldRetainContent) {
+                                             SkSurface::ContentChangeMode mode) {
     SkASSERT(rtc->width() == this->width());
     SkASSERT(rtc->height() == this->height());
     SkASSERT(rtc->numSamples() == fRenderTargetContext->numSamples());
     SkASSERT(rtc->asSurfaceProxy()->priv().isExact());
-    if (shouldRetainContent) {
+    if (mode == SkSurface::kRetain_ContentChangeMode) {
         if (this->context()->abandoned()) {
             return;
         }
@@ -235,7 +235,7 @@ void SkGpuDevice::replaceRenderTargetContext(std::unique_ptr<GrRenderTargetConte
     fRenderTargetContext = std::move(rtc);
 }
 
-void SkGpuDevice::replaceRenderTargetContext(bool shouldRetainContent) {
+void SkGpuDevice::replaceRenderTargetContext(SkSurface::ContentChangeMode mode) {
     ASSERT_SINGLE_OWNER
 
     SkBudgeted budgeted = fRenderTargetContext->priv().isBudgeted();
@@ -252,7 +252,7 @@ void SkGpuDevice::replaceRenderTargetContext(bool shouldRetainContent) {
     if (!newRTC) {
         return;
     }
-    this->replaceRenderTargetContext(std::move(newRTC), shouldRetainContent);
+    this->replaceRenderTargetContext(std::move(newRTC), mode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -938,16 +938,18 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
     if (needsTextureDomain && (SkCanvas::kStrict_SrcRectConstraint == constraint)) {
         if (bicubic) {
             static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
-            fp = GrBicubicEffect::Make(std::move(view), texMatrix, srcRect, kDir, srcAlphaType);
+            fp = GrBicubicEffect::MakeSubset(std::move(view), srcAlphaType, texMatrix,
+                                             samplerState.wrapModeX(), samplerState.wrapModeY(),
+                                             srcRect, kDir, caps);
         } else {
             fp = GrTextureEffect::MakeSubset(std::move(view), srcAlphaType, texMatrix,
                                              samplerState, srcRect, caps);
         }
     } else if (bicubic) {
         SkASSERT(GrSamplerState::Filter::kNearest == samplerState.filter());
-        GrSamplerState::WrapMode wrapMode[2] = {samplerState.wrapModeX(), samplerState.wrapModeY()};
         static constexpr auto kDir = GrBicubicEffect::Direction::kXY;
-        fp = GrBicubicEffect::Make(std::move(view), texMatrix, wrapMode, kDir, srcAlphaType);
+        fp = GrBicubicEffect::Make(std::move(view), srcAlphaType, texMatrix,
+                                   samplerState.wrapModeX(), samplerState.wrapModeY(), kDir, caps);
     } else {
         fp = GrTextureEffect::Make(std::move(view), srcAlphaType, texMatrix, samplerState, caps);
     }

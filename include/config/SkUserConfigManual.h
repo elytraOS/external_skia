@@ -21,6 +21,10 @@
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
+  
+  // Staging flags
+  #define SK_LEGACY_PATH_ARCTO_ENDPOINT
+  #define SK_SUPPORT_EXPERIMENTAL_CANVAS44
  
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG

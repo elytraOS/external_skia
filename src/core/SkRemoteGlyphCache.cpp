@@ -19,8 +19,8 @@
 #include "src/core/SkDraw.h"
 #include "src/core/SkEnumerate.h"
 #include "src/core/SkGlyphRun.h"
+#include "src/core/SkScalerCache.h"
 #include "src/core/SkSpan.h"
-#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTLazy.h"
 #include "src/core/SkTraceEvent.h"
@@ -993,7 +993,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
                 pathPtr = &path;
             }
 
-            strike->preparePath(allocatedGlyph, pathPtr);
+            strike->mergePath(allocatedGlyph, pathPtr);
         }
     }
 
@@ -1015,5 +1015,5 @@ sk_sp<SkTypeface> SkStrikeClient::addTypeface(const WireTypeface& wire) {
             wire.typefaceID, wire.glyphCount, wire.style, wire.isFixed,
             fDiscardableHandleManager, fIsLogging);
     fRemoteFontIdToTypeface.set(wire.typefaceID, newTypeface);
-    return newTypeface;
+    return std::move(newTypeface);
 }

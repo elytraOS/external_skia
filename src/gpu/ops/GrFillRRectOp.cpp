@@ -457,6 +457,10 @@ void GrFillRRectOp::onPrePrepare(GrRecordingContext* context,
     // This is equivalent to a GrOpFlushState::detachAppliedClip
     GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip();
 
+    // TODO: it would be cool if, right here, we created both the program info and desc
+    // in the record-time arena. Then, if the program info had already been seen, we could
+    // get pointers back to the prior versions and be able to return the allocated space
+    // back to the arena.
     fProgramInfo = this->createProgramInfo(context->priv().caps(), arena, dstView,
                                            std::move(appliedClip), dstProxyView);
 
@@ -811,7 +815,8 @@ void GrFillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
                               fBaseInstance, GrPrimitiveRestart::kNo);
     mesh->setVertexData(std::move(fVertexBuffer));
 
-    flushState->opsRenderPass()->draw(*fProgramInfo, mesh, 1, this->bounds());
+    flushState->opsRenderPass()->bindPipeline(*fProgramInfo, this->bounds());
+    flushState->opsRenderPass()->drawMeshes(*fProgramInfo, mesh, 1);
 }
 
 // Will the given corner look good if we use HW derivatives?

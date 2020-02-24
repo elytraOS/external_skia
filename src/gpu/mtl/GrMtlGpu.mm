@@ -497,7 +497,7 @@ sk_sp<GrTexture> GrMtlGpu::onCreateTexture(SkISize dimensions,
                            levelClearMask);
     }
 
-    return tex;
+    return std::move(tex);
 }
 
 sk_sp<GrTexture> GrMtlGpu::onCreateCompressedTexture(SkISize dimensions,
@@ -608,7 +608,7 @@ sk_sp<GrTexture> GrMtlGpu::onCreateCompressedTexture(SkISize dimensions,
     [transferBuffer didModifyRange: NSMakeRange(bufferOffset, dataSize)];
 #endif
 
-    return tex;
+    return std::move(tex);
 }
 
 static id<MTLTexture> get_texture_from_backend(const GrBackendTexture& backendTex) {
@@ -1009,6 +1009,10 @@ void GrMtlGpu::deleteBackendTexture(const GrBackendTexture& tex) {
     // Nothing to do here, will get cleaned up when the GrBackendTexture object goes away
 }
 
+bool GrMtlGpu::compile(const GrProgramDesc&, const GrProgramInfo&) {
+    return false;
+}
+
 #if GR_TEST_UTILS
 bool GrMtlGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     SkASSERT(GrBackendApi::kMetal == tex.backend());
@@ -1366,7 +1370,7 @@ void GrMtlGpu::waitSemaphore(GrSemaphore* semaphore) {
     }
 }
 
-void GrMtlGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect&, GrSurfaceOrigin,
+void GrMtlGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect&,
                                      ForExternalIO forExternalIO) {
     this->resolveTexture(static_cast<GrMtlRenderTarget*>(target)->mtlResolveTexture(),
                          static_cast<GrMtlRenderTarget*>(target)->mtlColorTexture());

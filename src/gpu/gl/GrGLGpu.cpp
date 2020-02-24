@@ -452,7 +452,6 @@ GrGLGpu::~GrGLGpu() {
         }
     }
 
-    delete fProgramCache;
     fSamplerObjectCache.reset();
 }
 
@@ -495,8 +494,7 @@ void GrGLGpu::disconnect(DisconnectType type) {
     }
 
     fHWProgram.reset();
-    delete fProgramCache;
-    fProgramCache = nullptr;
+    fProgramCache.reset();
 
     fHWProgramID = 0;
     fTempSrcFBOID = 0;
@@ -708,7 +706,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
                                             backendTex.getGLTextureParams(), cacheable, ioType);
     // We don't know what parameters are already set on wrapped textures.
     texture->textureParamsModified();
-    return texture;
+    return std::move(texture);
 }
 
 static bool check_compressed_backend_texture(const GrBackendTexture& backendTex,
@@ -761,7 +759,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapCompressedBackendTexture(const GrBackendTexture&
                                             kRead_GrIOType);
     // We don't know what parameters are already set on wrapped textures.
     texture->textureParamsModified();
-    return texture;
+    return std::move(texture);
 }
 
 sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture& backendTex,
@@ -807,7 +805,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
     texRT->baseLevelWasBoundToFBO();
     // We don't know what parameters are already set on wrapped textures.
     texRT->textureParamsModified();
-    return texRT;
+    return std::move(texRT);
 }
 
 sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT,
@@ -1395,7 +1393,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(SkISize dimensions,
             }
         }
     }
-    return tex;
+    return std::move(tex);
 }
 
 sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(SkISize dimensions,
@@ -1432,7 +1430,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateCompressedTexture(SkISize dimensions,
     // The non-sampler params are still at their default values.
     tex->parameters()->set(&initialState, GrGLTextureParameters::NonsamplerState(),
                            fResetTimestampForTextureParameters);
-    return tex;
+    return std::move(tex);
 }
 
 GrBackendTexture GrGLGpu::onCreateCompressedBackendTexture(SkISize dimensions,
@@ -1755,19 +1753,15 @@ void GrGLGpu::flushScissor(const GrScissorState& scissorState, int rtWidth, int 
                            GrSurfaceOrigin rtOrigin) {
     if (scissorState.enabled()) {
         auto scissor = GrNativeRect::MakeRelativeTo(rtOrigin, rtHeight, scissorState.rect());
-        // if the scissor fully contains the viewport then we fall through and
-        // disable the scissor test.
-        if (!scissor.contains(rtWidth, rtHeight)) {
-            if (fHWScissorSettings.fRect != scissor) {
-                GL_CALL(Scissor(scissor.fX, scissor.fY, scissor.fWidth, scissor.fHeight));
-                fHWScissorSettings.fRect = scissor;
-            }
-            if (kYes_TriState != fHWScissorSettings.fEnabled) {
-                GL_CALL(Enable(GR_GL_SCISSOR_TEST));
-                fHWScissorSettings.fEnabled = kYes_TriState;
-            }
-            return;
+        if (fHWScissorSettings.fRect != scissor) {
+            GL_CALL(Scissor(scissor.fX, scissor.fY, scissor.fWidth, scissor.fHeight));
+            fHWScissorSettings.fRect = scissor;
         }
+        if (kYes_TriState != fHWScissorSettings.fEnabled) {
+            GL_CALL(Enable(GR_GL_SCISSOR_TEST));
+            fHWScissorSettings.fEnabled = kYes_TriState;
+        }
+        return;
     }
 
     // See fall through note above
@@ -1815,6 +1809,11 @@ void GrGLGpu::disableWindowRectangles() {
 }
 
 bool GrGLGpu::flushGLState(GrRenderTarget* renderTarget, const GrProgramInfo& programInfo) {
+    this->handleDirtyContext();
+
+    if (GrPrimitiveType::kPatches == programInfo.primitiveType()) {
+        this->flushPatchVertexCount(programInfo.tessellationPatchVertexCount());
+    }
 
     sk_sp<GrGLProgram> program(fProgramCache->findOrCreateProgram(renderTarget, programInfo));
     if (!program) {
@@ -2356,21 +2355,9 @@ void GrGLGpu::flushViewport(int width, int height) {
     #endif
 #endif
 
-void GrGLGpu::draw(GrRenderTarget* renderTarget,
-                   const GrProgramInfo& programInfo,
-                   const GrMesh meshes[],
-                   int meshCount) {
-    this->handleDirtyContext();
-
+void GrGLGpu::drawMeshes(GrRenderTarget* renderTarget, const GrProgramInfo& programInfo,
+                         const GrMesh meshes[], int meshCount) {
     SkASSERT(meshCount); // guaranteed by GrOpsRenderPass::draw
-
-    if (!this->flushGLState(renderTarget, programInfo)) {
-        return;
-    }
-
-    if (GrPrimitiveType::kPatches == programInfo.primitiveType()) {
-        this->flushPatchVertexCount(programInfo.tessellationPatchVertexCount());
-    }
 
     bool hasDynamicScissors = programInfo.hasDynamicScissors();
     bool hasDynamicPrimProcTextures = programInfo.hasDynamicPrimProcTextures();
@@ -2507,7 +2494,7 @@ void GrGLGpu::sendIndexedInstancedMeshToGpu(GrPrimitiveType primitiveType, const
 }
 
 void GrGLGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                                    GrSurfaceOrigin resolveOrigin, ForExternalIO) {
+                                    ForExternalIO) {
     // Some extensions automatically resolves the texture when it is read.
     SkASSERT(this->glCaps().usesMSAARenderBuffers());
 
@@ -2524,7 +2511,9 @@ void GrGLGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resol
         // Apple's extension uses the scissor as the blit bounds.
         GrScissorState scissorState;
         scissorState.set(resolveRect);
-        this->flushScissor(scissorState, rt->width(), rt->height(), resolveOrigin);
+        // Passing in kTopLeft_GrSurfaceOrigin will make sure no transformation of the rect
+        // happens inside flushScissor since resolveRect is already in native device coordinates.
+        this->flushScissor(scissorState, rt->width(), rt->height(), kTopLeft_GrSurfaceOrigin);
         this->disableWindowRectangles();
         GL_CALL(ResolveMultisampleFramebuffer());
     } else {
@@ -2536,12 +2525,10 @@ void GrGLGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resol
             r = target->width();
             t = target->height();
         } else {
-            auto rect = GrNativeRect::MakeRelativeTo(
-                    resolveOrigin, rt->height(), resolveRect);
-            l = rect.fX;
-            b = rect.fY;
-            r = rect.fX + rect.fWidth;
-            t = rect.fY + rect.fHeight;
+            l = resolveRect.x();
+            b = resolveRect.y();
+            r = resolveRect.x() + resolveRect.width();
+            t = resolveRect.y() + resolveRect.height();
         }
 
         // BlitFrameBuffer respects the scissor, so disable it.

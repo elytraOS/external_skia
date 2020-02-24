@@ -148,7 +148,7 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
          !vkGpu->vkCaps().supportsProtectedMemory()) {
          return nullptr;
      }
-     return vkGpu;
+     return std::move(vkGpu);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -625,15 +625,13 @@ void GrVkGpu::resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect&
 }
 
 void GrVkGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                                    GrSurfaceOrigin resolveOrigin, ForExternalIO forExternalIO) {
+                                    ForExternalIO forExternalIO) {
     SkASSERT(target->numSamples() > 1);
     GrVkRenderTarget* rt = static_cast<GrVkRenderTarget*>(target);
     SkASSERT(rt->msaaImage());
 
-    auto nativeResolveRect = GrNativeRect::MakeRelativeTo(
-            resolveOrigin, target->height(), resolveRect);
-    this->resolveImage(target, rt, nativeResolveRect.asSkIRect(),
-                       SkIPoint::Make(nativeResolveRect.fX, nativeResolveRect.fY));
+    this->resolveImage(target, rt, resolveRect,
+                       SkIPoint::Make(resolveRect.x(), resolveRect.y()));
 
     if (ForExternalIO::kYes == forExternalIO) {
         // This resolve is called when we are preparing an msaa surface for external I/O. It is
@@ -1074,7 +1072,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(SkISize dimensions,
         this->currentCommandBuffer()->clearColorImage(this, tex.get(), &kZeroClearColor,
                                                       ranges.count(), ranges.begin());
     }
-    return tex;
+    return std::move(tex);
 }
 
 sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
@@ -1128,7 +1126,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
         return nullptr;
     }
 
-    return tex;
+    return std::move(tex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1336,7 +1334,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
         SkASSERT(tgt->canAttemptStencilAttachment());
     }
 
-    return tgt;
+    return std::move(tgt);
 }
 
 sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBackendTexture& tex,
@@ -2006,6 +2004,10 @@ void GrVkGpu::deleteBackendTexture(const GrBackendTexture& tex) {
     if (tex.getVkImageInfo(&info)) {
         GrVkImage::DestroyImageInfo(this, const_cast<GrVkImageInfo*>(&info));
     }
+}
+
+bool GrVkGpu::compile(const GrProgramDesc&, const GrProgramInfo&) {
+    return false;
 }
 
 #if GR_TEST_UTILS

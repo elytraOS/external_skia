@@ -79,7 +79,6 @@ public:
     // GrColorType is necessary to set the proxy's texture swizzle.
     sk_sp<GrTextureProxy> findOrCreateProxyByUniqueKey(const GrUniqueKey&,
                                                        GrColorType,
-                                                       GrSurfaceOrigin,
                                                        UseAllocator);
 
     bool instatiateProxy(GrSurfaceProxy*);
@@ -95,9 +94,7 @@ public:
     const GrCaps* caps() const;
     GrOpMemoryPool* opMemoryPool() const;
 
-#if GR_TEST_UTILS
-    bool testingOnly_getSuppressAllocationWarnings() const;
-#endif
+    void printWarningMessage(const char* msg) const;
 
 private:
     GrOnFlushResourceProvider(const GrOnFlushResourceProvider&) = delete;

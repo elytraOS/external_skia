@@ -195,10 +195,9 @@ public:
     };
 
     /**
-     * Resolves MSAA.
+     * Resolves MSAA. The resolveRect must already be in the native destination space.
      */
-    void resolveRenderTarget(GrRenderTarget*, const SkIRect& resolveRect, GrSurfaceOrigin,
-                             ForExternalIO);
+    void resolveRenderTarget(GrRenderTarget*, const SkIRect& resolveRect, ForExternalIO);
 
     /**
      * Uses the base of the texture to recompute the contents of the other levels.
@@ -553,6 +552,11 @@ public:
      */
     virtual void deleteBackendTexture(const GrBackendTexture&) = 0;
 
+    /**
+     * In this case we have a program descriptor and a program info but no render target.
+     */
+    virtual bool compile(const GrProgramDesc&, const GrProgramInfo&) = 0;
+
     virtual bool precompileShader(const SkData& key, const SkData& data) { return false; }
 
 #if GR_TEST_UTILS
@@ -725,7 +729,7 @@ private:
 
     // overridden by backend-specific derived class to perform the resolve
     virtual void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect,
-                                       GrSurfaceOrigin resolveOrigin, ForExternalIO) = 0;
+                                       ForExternalIO) = 0;
 
     // overridden by backend specific derived class to perform mip map level regeneration.
     virtual bool onRegenerateMipMapLevels(GrTexture*) = 0;

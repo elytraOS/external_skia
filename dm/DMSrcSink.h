@@ -366,7 +366,7 @@ public:
                   std::function<void(GrContext*)> initContext = nullptr) const;
 
     sk_gpu_test::GrContextFactory::ContextType contextType() const { return fContextType; }
-    const sk_gpu_test::GrContextFactory::ContextOverrides& contextOverrides() {
+    const sk_gpu_test::GrContextFactory::ContextOverrides& contextOverrides() const {
         return fContextOverrides;
     }
     SkCommandLineConfigGpu::SurfType surfType() const { return fSurfType; }
@@ -382,6 +382,11 @@ public:
     SkColorInfo colorInfo() const override {
         return SkColorInfo(fColorType, fAlphaType, fColorSpace);
     }
+
+protected:
+    sk_sp<SkSurface> createDstSurface(GrContext*, SkISize size, GrBackendTexture*,
+                                      GrBackendRenderTarget*) const;
+    bool readBack(SkSurface*, SkBitmap* dst) const;
 
 private:
     sk_gpu_test::GrContextFactory::ContextType        fContextType;
@@ -442,6 +447,33 @@ public:
     }
 
 private:
+    typedef GPUSink INHERITED;
+};
+
+// This sink attempts to better simulate the Chrome DDL use-case. It:
+//    creates the DDLs on separate recording threads
+//    performs all the GPU work on a separate GPU thread
+// In the future this should be expanded to:
+//    upload on a utility thread w/ access to a shared context
+//    compile the programs on the utility thread
+//    perform fine grained scheduling of gpu tasks based on their image and program prerequisites
+//    create a single "compositing" DDL that is replayed last
+class GPUDDLSink : public GPUSink {
+public:
+    GPUDDLSink(const SkCommandLineConfigGpu*, const GrContextOptions&);
+
+    Result draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+
+private:
+    Result ddlDraw(const Src&,
+                   sk_sp<SkSurface> dstSurface,
+                   SkTaskGroup* recordingTaskGroup,
+                   SkTaskGroup* gpuTaskGroup,
+                   GrContext* gpuCtx) const;
+
+    std::unique_ptr<SkExecutor> fRecordingThreadPool;
+    std::unique_ptr<SkExecutor> fGPUThread;
+
     typedef GPUSink INHERITED;
 };
 
