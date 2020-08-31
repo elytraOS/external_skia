@@ -16,9 +16,8 @@
 #include "tools/debugger/DebugLayerManager.h"
 #include "tools/debugger/DrawCommand.h"
 
-#include "include/gpu/GrContext.h"
 #include "src/gpu/GrAuditTrail.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContext.h"
 
 #include <string>
@@ -228,7 +227,7 @@ DrawCommand* DebugCanvas::getDrawCommandAt(int index) {
 
 GrAuditTrail* DebugCanvas::getAuditTrail(SkCanvas* canvas) {
     GrAuditTrail* at  = nullptr;
-    GrContext*    ctx = canvas->getGrContext();
+    auto ctx = canvas->recordingContext();
     if (ctx) {
         at = ctx->priv().auditTrail();
     }
@@ -318,17 +317,21 @@ void DebugCanvas::onClipRegion(const SkRegion& region, SkClipOp op) {
     this->addDrawCommand(new ClipRegionCommand(region, op));
 }
 
-void DebugCanvas::didConcat44(const SkScalar m[16]) {
+void DebugCanvas::onClipShader(sk_sp<SkShader> cs, SkClipOp op) {
+    this->addDrawCommand(new ClipShaderCommand(std::move(cs), op));
+}
+
+void DebugCanvas::didConcat44(const SkM44& m) {
     // TODO
     this->INHERITED::didConcat44(m);
 }
 
 void DebugCanvas::didScale(SkScalar x, SkScalar y) {
-    this->didConcat(SkMatrix::MakeScale(x, y));
+    this->didConcat(SkMatrix::Scale(x, y));
 }
 
 void DebugCanvas::didTranslate(SkScalar x, SkScalar y) {
-    this->didConcat(SkMatrix::MakeTrans(x, y));
+    this->didConcat(SkMatrix::Translate(x, y));
 }
 
 void DebugCanvas::didConcat(const SkMatrix& matrix) {
@@ -361,36 +364,6 @@ void DebugCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData*
         fAndroidClip = rect;
     }
     this->addDrawCommand(new DrawAnnotationCommand(rect, key, sk_ref_sp(value)));
-}
-
-void DebugCanvas::onDrawBitmap(const SkBitmap& bitmap,
-                               SkScalar        left,
-                               SkScalar        top,
-                               const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapCommand(bitmap, left, top, paint));
-}
-
-void DebugCanvas::onDrawBitmapLattice(const SkBitmap& bitmap,
-                                      const Lattice&  lattice,
-                                      const SkRect&   dst,
-                                      const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapLatticeCommand(bitmap, lattice, dst, paint));
-}
-
-void DebugCanvas::onDrawBitmapRect(const SkBitmap&   bitmap,
-                                   const SkRect*     src,
-                                   const SkRect&     dst,
-                                   const SkPaint*    paint,
-                                   SrcRectConstraint constraint) {
-    this->addDrawCommand(
-            new DrawBitmapRectCommand(bitmap, src, dst, paint, (SrcRectConstraint)constraint));
-}
-
-void DebugCanvas::onDrawBitmapNine(const SkBitmap& bitmap,
-                                   const SkIRect&  center,
-                                   const SkRect&   dst,
-                                   const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapNineCommand(bitmap, center, dst, paint));
 }
 
 void DebugCanvas::onDrawImage(const SkImage* image,
@@ -517,11 +490,8 @@ void DebugCanvas::onDrawPatch(const SkPoint  cubics[12],
 }
 
 void DebugCanvas::onDrawVerticesObject(const SkVertices*      vertices,
-                                       const SkVertices::Bone bones[],
-                                       int                    boneCount,
                                        SkBlendMode            bmode,
                                        const SkPaint&         paint) {
-    // TODO: ANIMATION NOT LOGGED
     this->addDrawCommand(
             new DrawVerticesCommand(sk_ref_sp(const_cast<SkVertices*>(vertices)), bmode, paint));
 }

@@ -11,6 +11,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/private/SkMutex.h"
 #include "include/private/SkOnce.h"
+#include "include/utils/SkCustomTypeface.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkFontDescriptor.h"
@@ -23,16 +24,6 @@ SkTypeface::SkTypeface(const SkFontStyle& style, bool isFixedPitch)
     : fUniqueID(SkTypefaceCache::NewFontID()), fStyle(style), fIsFixedPitch(isFixedPitch) { }
 
 SkTypeface::~SkTypeface() { }
-
-#ifdef SK_WHITELIST_SERIALIZED_TYPEFACES
-extern void WhitelistSerializeTypeface(const SkTypeface*, SkWStream* );
-#define SK_TYPEFACE_DELEGATE WhitelistSerializeTypeface
-#else
-#define SK_TYPEFACE_DELEGATE nullptr
-#endif
-
-void (*gSerializeTypefaceDelegate)(const SkTypeface*, SkWStream* ) = SK_TYPEFACE_DELEGATE;
-sk_sp<SkTypeface> (*gDeserializeTypefaceDelegate)(SkStream* ) = nullptr;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -161,6 +152,12 @@ sk_sp<SkTypeface> SkTypeface::MakeFromData(sk_sp<SkData> data, int index) {
 }
 
 sk_sp<SkTypeface> SkTypeface::MakeFromFontData(std::unique_ptr<SkFontData> data) {
+    if (data->hasStream()) {
+        if (auto tf = SkCustomTypefaceBuilder::Deserialize(data->getStream())) {
+            return tf;
+        }
+    }
+
     return SkFontMgr::RefDefault()->makeFromFontData(std::move(data));
 }
 
@@ -175,11 +172,6 @@ sk_sp<SkTypeface> SkTypeface::makeClone(const SkFontArguments& args) const {
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkTypeface::serialize(SkWStream* wstream, SerializeBehavior behavior) const {
-    if (gSerializeTypefaceDelegate) {
-        (*gSerializeTypefaceDelegate)(this, wstream);
-        return;
-    }
-
     bool isLocalData = false;
     SkFontDescriptor desc;
     this->onGetFontDescriptor(&desc, &isLocalData);
@@ -195,7 +187,27 @@ void SkTypeface::serialize(SkWStream* wstream, SerializeBehavior behavior) const
     //       has said they don't want the fontdata? Does this actually happen (getDescriptor returns
     //       fontdata as well?)
     if (shouldSerializeData && !desc.hasFontData()) {
-        desc.setFontData(this->onMakeFontData());
+        SkFontArguments args;
+
+        int index;
+        std::unique_ptr<SkStreamAsset> stream = this->openStream(&index);
+        args.setCollectionIndex(index);
+
+        SkAutoSTMalloc<4, SkFontArguments::VariationPosition::Coordinate> variation;
+        int numAxes = this->getVariationDesignPosition(nullptr, 0);
+        if (0 < numAxes) {
+            variation.reset(numAxes);
+            numAxes = this->getVariationDesignPosition(variation.get(), numAxes);
+            if (0 < numAxes) {
+                SkFontArguments::VariationPosition pos{variation.get(), numAxes};
+                args.setVariationDesignPosition(pos);
+            }
+        }
+
+        if (stream) {
+            std::unique_ptr<SkFontData> fontData(new SkFontData(std::move(stream), args));
+            desc.setFontData(std::move(fontData));
+        }
     }
     desc.serialize(wstream);
 }
@@ -207,10 +219,6 @@ sk_sp<SkData> SkTypeface::serialize(SerializeBehavior behavior) const {
 }
 
 sk_sp<SkTypeface> SkTypeface::MakeDeserialize(SkStream* stream) {
-    if (gDeserializeTypefaceDelegate) {
-        return (*gDeserializeTypefaceDelegate)(stream);
-    }
-
     SkFontDescriptor desc;
     if (!SkFontDescriptor::Deserialize(stream, &desc)) {
         return nullptr;
@@ -280,20 +288,6 @@ std::unique_ptr<SkStreamAsset> SkTypeface::openStream(int* ttcIndex) const {
     }
     return this->onOpenStream(ttcIndex);
 }
-
-std::unique_ptr<SkFontData> SkTypeface::makeFontData() const {
-    return this->onMakeFontData();
-}
-
-// This implementation is temporary until this method can be made pure virtual.
-std::unique_ptr<SkFontData> SkTypeface::onMakeFontData() const {
-    int index;
-    std::unique_ptr<SkStreamAsset> stream(this->onOpenStream(&index));
-    if (!stream) {
-        return nullptr;
-    }
-    return std::make_unique<SkFontData>(std::move(stream), index, nullptr, 0);
-};
 
 void SkTypeface::unicharsToGlyphs(const SkUnichar uni[], int count, SkGlyphID glyphs[]) const {
     if (count > 0 && glyphs && uni) {
@@ -407,6 +401,9 @@ bool SkTypeface::onComputeBounds(SkRect* bounds) const {
 
     SkFontMetrics fm;
     ctx->getFontMetrics(&fm);
+    if (!fm.hasBounds()) {
+        return false;
+    }
     bounds->setLTRB(fm.fXMin * invTextSize, fm.fTop * invTextSize,
                     fm.fXMax * invTextSize, fm.fBottom * invTextSize);
     return true;

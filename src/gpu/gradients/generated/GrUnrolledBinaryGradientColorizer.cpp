@@ -10,7 +10,7 @@
  **************************************************************************************************/
 #include "GrUnrolledBinaryGradientColorizer.h"
 
-#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -62,78 +62,112 @@ public:
         (void)thresholds1_7;
         auto thresholds9_13 = _outer.thresholds9_13;
         (void)thresholds9_13;
-        scale0_1Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                       "scale0_1");
+        scale0_1Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                       kFloat4_GrSLType, "scale0_1");
         if (intervalCount > 1) {
-            scale2_3Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                           "scale2_3");
+            scale2_3Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                           kFloat4_GrSLType, "scale2_3");
         }
         if (intervalCount > 2) {
-            scale4_5Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                           "scale4_5");
+            scale4_5Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                           kFloat4_GrSLType, "scale4_5");
         }
         if (intervalCount > 3) {
-            scale6_7Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                           "scale6_7");
+            scale6_7Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                           kFloat4_GrSLType, "scale6_7");
         }
         if (intervalCount > 4) {
-            scale8_9Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                           "scale8_9");
+            scale8_9Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                           kFloat4_GrSLType, "scale8_9");
         }
         if (intervalCount > 5) {
-            scale10_11Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+            scale10_11Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                              kFloat4_GrSLType, "scale10_11");
         }
         if (intervalCount > 6) {
-            scale12_13Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+            scale12_13Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                              kFloat4_GrSLType, "scale12_13");
         }
         if (intervalCount > 7) {
-            scale14_15Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+            scale14_15Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                              kFloat4_GrSLType, "scale14_15");
         }
-        bias0_1Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                      "bias0_1");
+        bias0_1Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                      kFloat4_GrSLType, "bias0_1");
         if (intervalCount > 1) {
-            bias2_3Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                          "bias2_3");
+            bias2_3Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                          kFloat4_GrSLType, "bias2_3");
         }
         if (intervalCount > 2) {
-            bias4_5Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                          "bias4_5");
+            bias4_5Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                          kFloat4_GrSLType, "bias4_5");
         }
         if (intervalCount > 3) {
-            bias6_7Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                          "bias6_7");
+            bias6_7Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                          kFloat4_GrSLType, "bias6_7");
         }
         if (intervalCount > 4) {
-            bias8_9Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                          "bias8_9");
+            bias8_9Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                          kFloat4_GrSLType, "bias8_9");
         }
         if (intervalCount > 5) {
-            bias10_11Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+            bias10_11Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                             kFloat4_GrSLType, "bias10_11");
         }
         if (intervalCount > 6) {
-            bias12_13Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+            bias12_13Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                             kFloat4_GrSLType, "bias12_13");
         }
         if (intervalCount > 7) {
-            bias14_15Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+            bias14_15Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                             kFloat4_GrSLType, "bias14_15");
         }
-        thresholds1_7Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf4_GrSLType,
-                                                            "thresholds1_7");
-        thresholds9_13Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+        thresholds1_7Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                            kHalf4_GrSLType, "thresholds1_7");
+        thresholds9_13Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                              kHalf4_GrSLType, "thresholds9_13");
         fragBuilder->codeAppendf(
-                "half t = %s.x;\nfloat4 scale, bias;\nif (%d <= 4 || t < %s.w) {\n    if (%d <= 2 "
-                "|| t < %s.y) {\n        if (%d <= 1 || t < %s.x) {\n            scale = %s;\n     "
-                "       bias = %s;\n        } else {\n            scale = %s;\n            bias = "
-                "%s;\n        }\n    } else {\n        if (%d <= 3 || t < %s.z) {\n            "
-                "scale = %s;\n            bias = %s;\n        } else {\n            scale = %s;\n  "
-                "          bias = %s;\n        }\n    }\n} else {\n    if (%d <= 6 || t < %s.y) "
-                "{\n        if (%d <= 5 || t <",
+                R"SkSL(half t = %s.x;
+float4 scale, bias;
+if (%d <= 4 || t < %s.w) {
+    if (%d <= 2 || t < %s.y) {
+        if (%d <= 1 || t < %s.x) {
+            scale = %s;
+            bias = %s;
+        } else {
+            scale = %s;
+            bias = %s;
+        }
+    } else {
+        if (%d <= 3 || t < %s.z) {
+            scale = %s;
+            bias = %s;
+        } else {
+            scale = %s;
+            bias = %s;
+        }
+    }
+} else {
+    if (%d <= 6 || t < %s.y) {
+        if (%d <= 5 || t < %s.x) {
+            scale = %s;
+            bias = %s;
+        } else {
+            scale = %s;
+            bias = %s;
+        }
+    } else {
+        if (%d <= 7 || t < %s.z) {
+            scale = %s;
+            bias = %s;
+        } else {
+            scale = %s;
+            bias = %s;
+        }
+    }
+}
+%s = half4(float(t) * scale + bias);
+)SkSL",
                 args.fInputColor, _outer.intervalCount,
                 args.fUniformHandler->getUniformCStr(thresholds1_7Var), _outer.intervalCount,
                 args.fUniformHandler->getUniformCStr(thresholds1_7Var), _outer.intervalCount,
@@ -154,14 +188,7 @@ public:
                 bias6_7Var.isValid() ? args.fUniformHandler->getUniformCStr(bias6_7Var)
                                      : "float4(0)",
                 _outer.intervalCount, args.fUniformHandler->getUniformCStr(thresholds9_13Var),
-                _outer.intervalCount);
-        fragBuilder->codeAppendf(
-                " %s.x) {\n            scale = %s;\n            bias = %s;\n        } else {\n     "
-                "       scale = %s;\n            bias = %s;\n        }\n    } else {\n        if "
-                "(%d <= 7 || t < %s.z) {\n            scale = %s;\n            bias = %s;\n        "
-                "} else {\n            scale = %s;\n            bias = %s;\n        }\n    "
-                "}\n}\n%s = half4(float(t) * scale + bias);\n",
-                args.fUniformHandler->getUniformCStr(thresholds9_13Var),
+                _outer.intervalCount, args.fUniformHandler->getUniformCStr(thresholds9_13Var),
                 scale8_9Var.isValid() ? args.fUniformHandler->getUniformCStr(scale8_9Var)
                                       : "float4(0)",
                 bias8_9Var.isValid() ? args.fUniformHandler->getUniformCStr(bias8_9Var)
@@ -309,7 +336,9 @@ GrUnrolledBinaryGradientColorizer::GrUnrolledBinaryGradientColorizer(
         , bias12_13(src.bias12_13)
         , bias14_15(src.bias14_15)
         , thresholds1_7(src.thresholds1_7)
-        , thresholds9_13(src.thresholds9_13) {}
+        , thresholds9_13(src.thresholds9_13) {
+    this->cloneAndRegisterAllChildProcessors(src);
+}
 std::unique_ptr<GrFragmentProcessor> GrUnrolledBinaryGradientColorizer::clone() const {
     return std::unique_ptr<GrFragmentProcessor>(new GrUnrolledBinaryGradientColorizer(*this));
 }

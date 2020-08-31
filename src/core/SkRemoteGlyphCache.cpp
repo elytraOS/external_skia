@@ -28,8 +28,9 @@
 #include "src/core/SkZip.h"
 
 #if SK_SUPPORT_GPU
+#include "include/gpu/GrContextOptions.h"
 #include "src/gpu/GrDrawOpAtlas.h"
-#include "src/gpu/text/GrTextContext.h"
+#include "src/gpu/text/GrSDFTOptions.h"
 #endif
 
 static SkDescriptor* auto_descriptor_from_desc(const SkDescriptor* source_desc,
@@ -392,8 +393,9 @@ public:
 protected:
     void drawGlyphRunList(const SkGlyphRunList& glyphRunList) override {
         #if SK_SUPPORT_GPU
-        GrTextContext::Options options;
-        GrTextContext::SanitizeOptions(&options);
+        GrContextOptions ctxOptions;
+        GrSDFTOptions options =
+                {ctxOptions.fMinDistanceFieldFontSize, ctxOptions.fGlyphsAsPathsFontSize};
 
     #ifdef SK_CAPTURE_DRAW_TEXT_BLOB
         if (SkTextBlobTrace::Capture* capture = fStrikeServer->fCapture.get()) {
@@ -774,7 +776,11 @@ void SkStrikeServer::RemoteStrike::prepareForMaskDrawing(
     for (auto [i, variant, _] : SkMakeEnumerate(drawables->input())) {
         SkPackedGlyphID packedID = variant.packedID();
         if (fSentLowGlyphIDs.test(packedID)) {
-            SkASSERT(fSentGlyphs.find(packedID) != nullptr);
+            #ifdef SK_DEBUG
+                MaskSummary* summary = fSentGlyphs.find(packedID);
+                SkASSERT(summary != nullptr);
+                SkASSERT(summary->canDrawAsMask && summary->canDrawAsSDFT);
+            #endif
             continue;
         }
 
@@ -788,11 +794,14 @@ void SkStrikeServer::RemoteStrike::prepareForMaskDrawing(
             this->ensureScalerContext();
             fContext->getMetrics(glyph);
 
-            fSentLowGlyphIDs.setIfLower(packedID);
-
             MaskSummary newSummary =
                     {packedID.value(), CanDrawAsMask(*glyph), CanDrawAsSDFT(*glyph)};
+
             summary = fSentGlyphs.set(newSummary);
+
+            if (summary->canDrawAsMask && summary->canDrawAsSDFT) {
+                fSentLowGlyphIDs.setIfLower(packedID);
+            }
         }
 
         // Reject things that are too big.
@@ -943,7 +952,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
         SkAutoDescriptor ad;
         auto* client_desc = auto_descriptor_from_desc(sourceAd.getDesc(), tf->uniqueID(), &ad);
 
-        auto strike = fStrikeCache->findStrikeExclusive(*client_desc);
+        auto strike = fStrikeCache->findStrike(*client_desc);
         // Metrics are only sent the first time. If the metrics are not initialized, there must
         // be an existing strike.
         if (fontMetricsInitialized && strike == nullptr) READ_FAILURE
@@ -953,7 +962,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             // effects.
             SkScalerContextEffects effects;
             auto scaler = tf->createScalerContext(effects, client_desc);
-            strike = fStrikeCache->createStrikeExclusive(
+            strike = fStrikeCache->createStrike(
                     *client_desc, std::move(scaler), &fontMetrics,
                     std::make_unique<DiscardableStrikePinner>(
                             spec.discardableHandleId, fDiscardableHandleManager));

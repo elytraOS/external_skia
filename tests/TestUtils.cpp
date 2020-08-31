@@ -14,6 +14,7 @@
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrImageInfo.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrTextureProxy.h"
@@ -75,18 +76,18 @@ void TestWritePixels(skiatest::Reporter* reporter,
 }
 
 void TestCopyFromSurface(skiatest::Reporter* reporter,
-                         GrContext* context,
+                         GrRecordingContext* rContext,
                          GrSurfaceProxy* proxy,
                          GrSurfaceOrigin origin,
                          GrColorType colorType,
                          uint32_t expectedPixelValues[],
                          const char* testName) {
-    GrSurfaceProxyView view = GrSurfaceProxy::Copy(context, proxy, origin, colorType,
-                                                   GrMipMapped::kNo, SkBackingFit::kExact,
-                                                   SkBudgeted::kYes);
-    SkASSERT(view.asTextureProxy());
-
-    auto dstContext = GrSurfaceContext::Make(context, std::move(view), colorType,
+    auto copy = GrSurfaceProxy::Copy(rContext, proxy, origin, GrMipmapped::kNo,
+                                     SkBackingFit::kExact, SkBudgeted::kYes);
+    SkASSERT(copy && copy->asTextureProxy());
+    auto swizzle = rContext->priv().caps()->getReadSwizzle(copy->backendFormat(), colorType);
+    GrSurfaceProxyView view(std::move(copy), origin, swizzle);
+    auto dstContext = GrSurfaceContext::Make(rContext, std::move(view), colorType,
                                              kPremul_SkAlphaType, nullptr);
     SkASSERT(dstContext);
 
@@ -104,22 +105,47 @@ void FillPixelData(int width, int height, GrColor* data) {
     }
 }
 
-bool CreateBackendTexture(GrContext* context,
+bool CreateBackendTexture(GrDirectContext* dContext,
+                          GrBackendTexture* backendTex,
+                          int width, int height,
+                          SkColorType colorType,
+                          const SkColor4f& color,
+                          GrMipmapped mipMapped,
+                          GrRenderable renderable,
+                          GrProtected isProtected) {
+    SkImageInfo info = SkImageInfo::Make(width, height, colorType, kPremul_SkAlphaType);
+    return CreateBackendTexture(dContext, backendTex, info, color, mipMapped, renderable,
+                                isProtected);
+}
+
+bool CreateBackendTexture(GrDirectContext* dContext,
                           GrBackendTexture* backendTex,
                           const SkImageInfo& ii,
                           const SkColor4f& color,
-                          GrMipMapped mipMapped,
-                          GrRenderable renderable) {
-    *backendTex = context->createBackendTexture(ii.width(), ii.height(), ii.colorType(),
-                                                color, mipMapped, renderable);
+                          GrMipmapped mipMapped,
+                          GrRenderable renderable,
+                          GrProtected isProtected) {
+    bool finishedBECreate = false;
+    auto markFinished = [](void* context) {
+        *(bool*)context = true;
+    };
+
+    *backendTex = dContext->createBackendTexture(ii.width(), ii.height(), ii.colorType(),
+                                                 color, mipMapped, renderable, isProtected,
+                                                 markFinished, &finishedBECreate);
+    if (backendTex->isValid()) {
+        dContext->submit();
+        while (!finishedBECreate) {
+            dContext->checkAsyncWorkCompletion();
+        }
+    }
     return backendTex->isValid();
 }
 
-void DeleteBackendTexture(GrContext* context, const GrBackendTexture& backendTex) {
-    GrFlushInfo flushInfo;
-    flushInfo.fFlags = kSyncCpu_GrFlushFlag;
-    context->flush(flushInfo);
-    context->deleteBackendTexture(backendTex);
+void DeleteBackendTexture(GrDirectContext* dContext, const GrBackendTexture& backendTex) {
+    dContext->flush();
+    dContext->submit(true);
+    dContext->deleteBackendTexture(backendTex);
 }
 
 bool DoesFullBufferContainCorrectColor(const GrColor* srcBuffer,

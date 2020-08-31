@@ -25,13 +25,13 @@ struct PrefixExpression : public Expression {
     , fOperand(std::move(operand))
     , fOperator(op) {}
 
-    bool isConstant() const override {
-        return fOperator == Token::MINUS && fOperand->isConstant();
+    bool isCompileTimeConstant() const override {
+        return fOperator == Token::Kind::TK_MINUS && fOperand->isCompileTimeConstant();
     }
 
     bool hasProperty(Property property) const override {
-        if (property == Property::kSideEffects && (fOperator == Token::PLUSPLUS ||
-                                                   fOperator == Token::MINUSMINUS)) {
+        if (property == Property::kSideEffects && (fOperator == Token::Kind::TK_PLUSPLUS ||
+                                                   fOperator == Token::Kind::TK_MINUSMINUS)) {
             return true;
         }
         return fOperand->hasProperty(property);
@@ -50,29 +50,31 @@ struct PrefixExpression : public Expression {
     }
 
     SKSL_FLOAT getFVecComponent(int index) const override {
-        SkASSERT(fOperator == Token::Kind::MINUS);
+        SkASSERT(fOperator == Token::Kind::TK_MINUS);
         return -fOperand->getFVecComponent(index);
     }
 
     SKSL_INT getIVecComponent(int index) const override {
-        SkASSERT(fOperator == Token::Kind::MINUS);
+        SkASSERT(fOperator == Token::Kind::TK_MINUS);
         return -fOperand->getIVecComponent(index);
     }
 
     SKSL_FLOAT getMatComponent(int col, int row) const override {
-        SkASSERT(fOperator == Token::Kind::MINUS);
+        SkASSERT(fOperator == Token::Kind::TK_MINUS);
         return -fOperand->getMatComponent(col, row);
+    }
+
+    int nodeCount() const override {
+        return 1 + fOperand->nodeCount();
     }
 
     std::unique_ptr<Expression> clone() const override {
         return std::unique_ptr<Expression>(new PrefixExpression(fOperator, fOperand->clone()));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return Compiler::OperatorName(fOperator) + fOperand->description();
     }
-#endif
 
     std::unique_ptr<Expression> fOperand;
     const Token::Kind fOperator;

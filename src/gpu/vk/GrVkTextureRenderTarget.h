@@ -30,15 +30,16 @@ public:
                                                                      SkISize dimensions,
                                                                      int sampleCnt,
                                                                      const GrVkImage::ImageDesc&,
-                                                                     GrMipMapsStatus);
+                                                                     GrMipmapStatus);
 
-    static sk_sp<GrVkTextureRenderTarget> MakeWrappedTextureRenderTarget(GrVkGpu*,
-                                                                         SkISize dimensions,
-                                                                         int sampleCnt,
-                                                                         GrWrapOwnership,
-                                                                         GrWrapCacheable,
-                                                                         const GrVkImageInfo&,
-                                                                         sk_sp<GrVkImageLayout>);
+    static sk_sp<GrVkTextureRenderTarget> MakeWrappedTextureRenderTarget(
+            GrVkGpu*,
+            SkISize dimensions,
+            int sampleCnt,
+            GrWrapOwnership,
+            GrWrapCacheable,
+            const GrVkImageInfo&,
+            sk_sp<GrBackendSurfaceMutableStateImpl>);
 
     GrBackendFormat backendFormat() const override { return this->getBackendFormat(); }
 
@@ -62,36 +63,36 @@ private:
                             SkISize dimensions,
                             int sampleCnt,
                             const GrVkImageInfo& info,
-                            sk_sp<GrVkImageLayout> layout,
+                            sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
                             const GrVkImageView* texView,
                             const GrVkImageInfo& msaaInfo,
-                            sk_sp<GrVkImageLayout> msaaLayout,
+                            sk_sp<GrBackendSurfaceMutableStateImpl> msaaMutableState,
                             const GrVkImageView* colorAttachmentView,
                             const GrVkImageView* resolveAttachmentView,
-                            GrMipMapsStatus);
+                            GrMipmapStatus);
 
     // non-MSAA, not-wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkBudgeted budgeted,
                             SkISize dimensions,
                             const GrVkImageInfo& info,
-                            sk_sp<GrVkImageLayout> layout,
+                            sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
                             const GrVkImageView* texView,
                             const GrVkImageView* colorAttachmentView,
-                            GrMipMapsStatus);
+                            GrMipmapStatus);
 
     // MSAA, wrapped
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkISize dimensions,
                             int sampleCnt,
                             const GrVkImageInfo& info,
-                            sk_sp<GrVkImageLayout> layout,
+                            sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
                             const GrVkImageView* texView,
                             const GrVkImageInfo& msaaInfo,
-                            sk_sp<GrVkImageLayout> msaaLayout,
+                            sk_sp<GrBackendSurfaceMutableStateImpl> msaaMutableState,
                             const GrVkImageView* colorAttachmentView,
                             const GrVkImageView* resolveAttachmentView,
-                            GrMipMapsStatus,
+                            GrMipmapStatus,
                             GrBackendObjectOwnership,
                             GrWrapCacheable);
 
@@ -99,10 +100,10 @@ private:
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkISize dimensions,
                             const GrVkImageInfo& info,
-                            sk_sp<GrVkImageLayout> layout,
+                            sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
                             const GrVkImageView* texView,
                             const GrVkImageView* colorAttachmentView,
-                            GrMipMapsStatus,
+                            GrMipmapStatus,
                             GrBackendObjectOwnership,
                             GrWrapCacheable);
 

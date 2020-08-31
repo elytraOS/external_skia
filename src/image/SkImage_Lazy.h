@@ -8,7 +8,9 @@
 #ifndef SkImage_Lazy_DEFINED
 #define SkImage_Lazy_DEFINED
 
+#include "include/private/SkIDChangeListener.h"
 #include "include/private/SkMutex.h"
+#include "src/gpu/SkGr.h"
 #include "src/image/SkImage_Base.h"
 
 #if SK_SUPPORT_GPU
@@ -33,7 +35,6 @@ public:
     };
 
     SkImage_Lazy(Validator* validator);
-    ~SkImage_Lazy() override;
 
     SkIRect onGetSubset() const override {
         return SkIRect::MakeXYWH(fOrigin.fX, fOrigin.fY, this->width(), this->height());
@@ -42,41 +43,42 @@ public:
     bool onReadPixels(const SkImageInfo&, void*, size_t, int srcX, int srcY,
                       CachingHint) const override;
 #if SK_SUPPORT_GPU
-    GrSurfaceProxyView refView(GrRecordingContext*, GrSamplerState,
-                               SkScalar scaleAdjust[2]) const override;
-    sk_sp<SkCachedData> getPlanes(SkYUVASizeInfo*, SkYUVAIndex[4],
-                                  SkYUVColorSpace*, const void* planes[4]) override;
+    GrSurfaceProxyView refView(GrRecordingContext*, GrMipmapped) const override;
+    sk_sp<SkCachedData> getPlanes(SkYUVASizeInfo*,
+                                  SkYUVAIndex[4],
+                                  SkYUVColorSpace*,
+                                  const void* planes[4]) const override;
 #endif
     sk_sp<SkData> onRefEncoded() const override;
-    sk_sp<SkImage> onMakeSubset(GrRecordingContext*, const SkIRect&) const override;
+    sk_sp<SkImage> onMakeSubset(const SkIRect&, GrDirectContext*) const override;
     bool getROPixels(SkBitmap*, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
-    sk_sp<SkImage> onMakeColorTypeAndColorSpace(GrRecordingContext*,
-                                                SkColorType, sk_sp<SkColorSpace>) const override;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
+                                                GrDirectContext*) const override;
     sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const final;
 
-    bool onIsValid(GrContext*) const override;
+    bool onIsValid(GrRecordingContext*) const override;
 
 #if SK_SUPPORT_GPU
-    // Returns the texture proxy. If we're going to generate and cache the texture, we should use
-    // the passed in key (if the key is valid). If genType is AllowedTexGenType::kCheap and the
-    // texture is not trivial to construct, returns nullptr.
+    // Returns the texture proxy. CachingHint refers to whether the generator's output should be
+    // cached in CPU memory. We will always cache the generated texture on success.
     GrSurfaceProxyView lockTextureProxyView(GrRecordingContext*,
-                                            const GrUniqueKey& key,
-                                            SkImage::CachingHint,
-                                            bool willBeMipped,
-                                            GrTextureMaker::AllowedTexGenType genType) const;
+                                            GrImageTexGenPolicy,
+                                            GrMipmapped) const;
 
     // Returns the GrColorType to use with the GrTextureProxy returned from lockTextureProxy. This
     // may be different from the color type on the image in the case where we need up upload CPU
     // data to a texture but the GPU doesn't support the format of CPU data. In this case we convert
     // the data to RGBA_8888 unorm on the CPU then upload that.
     GrColorType colorTypeOfLockTextureProxy(const GrCaps* caps) const;
-
-    void makeCacheKeyFromOrigKey(const GrUniqueKey& origKey, GrUniqueKey* cacheKey) const;
 #endif
 
 private:
+    void addUniqueIDListener(sk_sp<SkIDChangeListener>) const;
+#if SK_SUPPORT_GPU
+    GrSurfaceProxyView textureProxyViewFromPlanes(GrRecordingContext*, SkBudgeted) const;
+#endif
+
     class ScopedGenerator;
 
     // Note that this->imageInfo() is not necessarily the info from the generator. It may be
@@ -85,18 +87,15 @@ private:
     sk_sp<SharedGenerator> fSharedGenerator;
     const SkIPoint         fOrigin;
 
-    uint32_t fUniqueID;
-
     // Repeated calls to onMakeColorTypeAndColorSpace will result in a proliferation of unique IDs
     // and SkImage_Lazy instances. Cache the result of the last successful call.
     mutable SkMutex             fOnMakeColorTypeAndSpaceMutex;
     mutable sk_sp<SkImage>      fOnMakeColorTypeAndSpaceResult;
 
 #if SK_SUPPORT_GPU
-    // When the SkImage_Lazy goes away, we will iterate over all the unique keys we've used and
-    // send messages to the GrContexts to say the unique keys are no longer valid. The GrContexts
-    // can then release the resources, conntected with the those unique keys, from their caches.
-    mutable SkTDArray<GrUniqueKeyInvalidatedMessage*> fUniqueKeyInvalidatedMessages;
+    // When the SkImage_Lazy goes away, we will iterate over all the listeners to inform them
+    // of the unique ID's demise. This is used to remove cached textures from GrContext.
+    mutable SkIDChangeListener::List fUniqueIDListeners;
 #endif
 
     typedef SkImage_Base INHERITED;

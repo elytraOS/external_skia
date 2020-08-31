@@ -55,7 +55,7 @@ namespace {
     struct FooRefCnt : public SkRefCnt {
         FooRefCnt() : x(-2), y(-3.0f) { created++; }
         FooRefCnt(int X, float Y) : x(X), y(Y) { created++; }
-        ~FooRefCnt() { destroyed++; }
+        ~FooRefCnt() override { destroyed++; }
 
         int x;
         float y;
@@ -167,6 +167,14 @@ DEF_TEST(ArenaAlloc, r) {
             current = new (temp)Node(current);
         }
         start.start = current;
+    }
+
+    {
+        SkSTArenaAlloc<64> arena;
+        auto a = arena.makeInitializedArray<int>(8, [](size_t i ) { return i; });
+        for (size_t i = 0; i < 8; i++) {
+            REPORTER_ASSERT(r, a[i] == (int)i);
+        }
     }
 
     REPORTER_ASSERT(r, created == 128);

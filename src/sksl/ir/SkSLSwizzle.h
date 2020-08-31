@@ -44,12 +44,6 @@ static const Type& get_type(const Context& context, Expression& value, size_t co
             case 3: return *context.fHalf3_Type;
             case 4: return *context.fHalf4_Type;
         }
-    } else if (base == *context.fDouble_Type) {
-        switch (count) {
-            case 2: return *context.fDouble2_Type;
-            case 3: return *context.fDouble3_Type;
-            case 4: return *context.fDouble4_Type;
-        }
     } else if (base == *context.fInt_Type) {
         switch (count) {
             case 2: return *context.fInt2_Type;
@@ -112,7 +106,7 @@ struct Swizzle : public Expression {
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override {
-        if (fBase->fKind == Expression::kConstructor_Kind && fBase->isConstant()) {
+        if (fBase->fKind == Expression::kConstructor_Kind && fBase->isCompileTimeConstant()) {
             // we're swizzling a constant vector, e.g. float4(1).x. Simplify it.
             SkASSERT(fBase->fKind == Expression::kConstructor_Kind);
             if (fType.isInteger()) {
@@ -136,11 +130,14 @@ struct Swizzle : public Expression {
         return fBase->hasProperty(property);
     }
 
+    int nodeCount() const override {
+        return 1 + fBase->nodeCount();
+    }
+
     std::unique_ptr<Expression> clone() const override {
         return std::unique_ptr<Expression>(new Swizzle(fType, fBase->clone(), fComponents));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         String result = fBase->description() + ".";
         for (int x : fComponents) {
@@ -148,7 +145,6 @@ struct Swizzle : public Expression {
         }
         return result;
     }
-#endif
 
     std::unique_ptr<Expression> fBase;
     std::vector<int> fComponents;

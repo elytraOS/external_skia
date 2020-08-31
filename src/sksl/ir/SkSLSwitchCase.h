@@ -23,6 +23,17 @@ struct SwitchCase : public Statement {
     , fValue(std::move(value))
     , fStatements(std::move(statements)) {}
 
+    int nodeCount() const override {
+        int result = 1;
+        if (fValue) {
+            result += fValue->nodeCount();
+        }
+        for (const auto& s : fStatements) {
+            result += s->nodeCount();
+        }
+        return result;
+    }
+
     std::unique_ptr<Statement> clone() const override {
         std::vector<std::unique_ptr<Statement>> cloned;
         for (const auto& s : fStatements) {
@@ -33,7 +44,6 @@ struct SwitchCase : public Statement {
                                                          std::move(cloned)));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         String result;
         if (fValue) {
@@ -46,7 +56,6 @@ struct SwitchCase : public Statement {
         }
         return result;
     }
-#endif
 
     // null value implies "default" case
     std::unique_ptr<Expression> fValue;

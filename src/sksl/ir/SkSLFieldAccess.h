@@ -35,16 +35,18 @@ struct FieldAccess : public Expression {
         return fBase->hasProperty(property);
     }
 
+    int nodeCount() const override {
+        return 1 + fBase->nodeCount();
+    }
+
     std::unique_ptr<Expression> clone() const override {
         return std::unique_ptr<Expression>(new FieldAccess(fBase->clone(), fFieldIndex,
                                                            fOwnerKind));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return fBase->description() + "." + fBase->fType.fields()[fFieldIndex].fName;
     }
-#endif
 
     std::unique_ptr<Expression> fBase;
     const int fFieldIndex;

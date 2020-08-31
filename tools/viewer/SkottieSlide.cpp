@@ -13,6 +13,7 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkTime.h"
 #include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skresources/include/SkResources.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/timer/TimeUtils.h"
@@ -35,10 +36,10 @@ static void draw_stats_box(SkCanvas* canvas, const skottie::Animation::Builder::
 
     paint.setColor(SK_ColorBLACK);
 
-    const auto json_size = SkStringPrintf("Json size: %lu bytes",
+    const auto json_size = SkStringPrintf("Json size: %zu bytes",
                                           stats.fJsonSize);
     canvas->drawString(json_size, kR.x() + 10, kR.y() + kTextSize * 1, font, paint);
-    const auto animator_count = SkStringPrintf("Animator count: %lu",
+    const auto animator_count = SkStringPrintf("Animator count: %zu",
                                                stats.fAnimatorCount);
     canvas->drawString(animator_count, kR.x() + 10, kR.y() + kTextSize * 2, font, paint);
     const auto json_parse_time = SkStringPrintf("Json parse time: %.3f ms",
@@ -95,15 +96,27 @@ void SkottieSlide::load(SkScalar w, SkScalar h) {
     };
 
     auto logger = sk_make_sp<Logger>();
-    skottie::Animation::Builder builder;
 
+    uint32_t flags = 0;
+    if (fPreferGlyphPaths) {
+        flags |= skottie::Animation::Builder::kPreferEmbeddedFonts;
+    }
+    skottie::Animation::Builder builder(flags);
+
+    auto resource_provider =
+            skresources::DataURIResourceProviderProxy::Make(
+                skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
+                                                        /*predecode=*/true),
+                /*predecode=*/true);
+
+    static constexpr char kInterceptPrefix[] = "__";
+    auto precomp_interceptor =
+            sk_make_sp<skottie_utils::ExternalAnimationPrecompInterceptor>(resource_provider,
+                                                                           kInterceptPrefix);
     fAnimation      = builder
             .setLogger(logger)
-            .setResourceProvider(
-                skresources::DataURIResourceProviderProxy::Make(
-                    skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
-                                                              /*predecode=*/true),
-                    /*predecode=*/true))
+            .setResourceProvider(std::move(resource_provider))
+            .setPrecompInterceptor(std::move(precomp_interceptor))
             .makeFromFile(fPath.c_str());
     fAnimationStats = builder.getStats();
     fWinSize        = SkSize::Make(w, h);
@@ -213,9 +226,11 @@ bool SkottieSlide::onChar(SkUnichar c) {
     switch (c) {
     case 'I':
         fShowAnimationStats = !fShowAnimationStats;
-        break;
-    default:
-        break;
+        return true;
+    case 'G':
+        fPreferGlyphPaths = !fPreferGlyphPaths;
+        this->load(fWinSize.width(), fWinSize.height());
+        return true;
     }
 
     return INHERITED::onChar(c);

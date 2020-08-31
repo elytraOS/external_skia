@@ -7,11 +7,12 @@
 
 #include "tools/viewer/SkSLSlide.h"
 
+#include "include/core/SkCanvas.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "src/core/SkEnumerate.h"
 #include "tools/Resources.h"
-#include "tools/viewer/ImGuiLayer.h"
+#include "tools/viewer/Viewer.h"
 
 #include <algorithm>
 #include "imgui.h"
@@ -37,11 +38,13 @@ SkSLSlide::SkSLSlide() {
 
     fSkSL =
 
-        "in fragmentProcessor fp;\n"
+        "in shader child;\n"
         "\n"
         "void main(float2 p, inout half4 color) {\n"
-        "    color = sample(fp, p);\n"
+        "    color = sample(child, p);\n"
         "}\n";
+
+    fCodeIsDirty = true;
 }
 
 void SkSLSlide::load(SkScalar winWidth, SkScalar winHeight) {
@@ -49,6 +52,8 @@ void SkSLSlide::load(SkScalar winWidth, SkScalar winHeight) {
     SkColor colors[] = { SK_ColorRED, SK_ColorGREEN };
 
     sk_sp<SkShader> shader;
+
+    fShaders.push_back(std::make_pair("Null", nullptr));
 
     shader = SkGradientShader::MakeLinear(points, colors, nullptr, 2, SkTileMode::kClamp);
     fShaders.push_back(std::make_pair("Linear Gradient", shader));
@@ -65,8 +70,6 @@ void SkSLSlide::load(SkScalar winWidth, SkScalar winHeight) {
 
     shader = SkPerlinNoiseShader::MakeImprovedNoise(0.025f, 0.025f, 3, 0.0f);
     fShaders.push_back(std::make_pair("Perlin Noise", shader));
-
-    this->rebuild();
 }
 
 void SkSLSlide::unload() {
@@ -79,6 +82,7 @@ void SkSLSlide::unload() {
 bool SkSLSlide::rebuild() {
     auto [effect, errorText] = SkRuntimeEffect::Make(fSkSL);
     if (!effect) {
+        Viewer::ShaderErrorHandler()->compileError(fSkSL.c_str(), errorText.c_str());
         return false;
     }
 
@@ -88,13 +92,9 @@ bool SkSLSlide::rebuild() {
         memset(fInputs.get() + oldSize, 0, effect->inputSize() - oldSize);
     }
     fChildren.resize_back(effect->children().count());
-    for (auto& c : fChildren) {
-        if (!c) {
-            c = fShaders[0].second;
-        }
-    }
 
     fEffect = effect;
+    fCodeIsDirty = false;
     return true;
 }
 
@@ -106,8 +106,12 @@ void SkSLSlide::draw(SkCanvas* canvas) {
     // Edit box for shader code
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackResize;
     ImVec2 boxSize(-1.0f, ImGui::GetTextLineHeight() * 30);
-    if (ImGui::InputTextMultiline("Code", fSkSL.writable_str(), fSkSL.size() + 1,
-                                  boxSize, flags, InputTextCallback, &fSkSL)) {
+    if (ImGui::InputTextMultiline("Code", fSkSL.writable_str(), fSkSL.size() + 1, boxSize, flags,
+                                  InputTextCallback, &fSkSL)) {
+        fCodeIsDirty = true;
+    }
+
+    if (fCodeIsDirty || !fEffect) {
         this->rebuild();
     }
 
@@ -173,6 +177,9 @@ void SkSLSlide::draw(SkCanvas* canvas) {
         }
     }
 
+    static SkColor4f gPaintColor { 1.0f, 1.0f, 1.0f , 1.0f };
+    ImGui::ColorEdit4("Paint Color", gPaintColor.vec());
+
     ImGui::End();
 
     auto inputs = SkData::MakeWithoutCopy(fInputs.get(), fEffect->inputSize());
@@ -180,6 +187,7 @@ void SkSLSlide::draw(SkCanvas* canvas) {
                                       nullptr, false);
 
     SkPaint p;
+    p.setColor4f(gPaintColor);
     p.setShader(std::move(shader));
     canvas->drawRect({ 0, 0, 256, 256 }, p);
 }

@@ -10,7 +10,7 @@
  **************************************************************************************************/
 #include "GrSingleIntervalGradientColorizer.h"
 
-#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -28,13 +28,16 @@ public:
         (void)start;
         auto end = _outer.end;
         (void)end;
-        startVar =
-                args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf4_GrSLType, "start");
-        endVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf4_GrSLType, "end");
-        fragBuilder->codeAppendf("half t = %s.x;\n%s = (1.0 - t) * %s + t * %s;\n",
-                                 args.fInputColor, args.fOutputColor,
-                                 args.fUniformHandler->getUniformCStr(startVar),
-                                 args.fUniformHandler->getUniformCStr(endVar));
+        startVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                    kHalf4_GrSLType, "start");
+        endVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag, kHalf4_GrSLType,
+                                                  "end");
+        fragBuilder->codeAppendf(
+                R"SkSL(half t = %s.x;
+%s = (1.0 - t) * %s + t * %s;
+)SkSL",
+                args.fInputColor, args.fOutputColor, args.fUniformHandler->getUniformCStr(startVar),
+                args.fUniformHandler->getUniformCStr(endVar));
     }
 
 private:
@@ -76,7 +79,9 @@ GrSingleIntervalGradientColorizer::GrSingleIntervalGradientColorizer(
         const GrSingleIntervalGradientColorizer& src)
         : INHERITED(kGrSingleIntervalGradientColorizer_ClassID, src.optimizationFlags())
         , start(src.start)
-        , end(src.end) {}
+        , end(src.end) {
+    this->cloneAndRegisterAllChildProcessors(src);
+}
 std::unique_ptr<GrFragmentProcessor> GrSingleIntervalGradientColorizer::clone() const {
     return std::unique_ptr<GrFragmentProcessor>(new GrSingleIntervalGradientColorizer(*this));
 }

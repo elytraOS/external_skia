@@ -23,22 +23,24 @@ struct NullLiteral : public Expression {
     NullLiteral(int offset, const Type& type)
     : INHERITED(offset, kNullLiteral_Kind, type) {}
 
-#ifdef SK_DEBUG
     String description() const override {
         return "null";
     }
-#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         return true;
     }
 
     bool compareConstant(const Context& context, const Expression& other) const override {
         return true;
+    }
+
+    int nodeCount() const override {
+        return 1;
     }
 
     std::unique_ptr<Expression> clone() const override {

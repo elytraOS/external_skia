@@ -10,17 +10,21 @@
  **************************************************************************************************/
 #ifndef GrClampedGradientEffect_DEFINED
 #define GrClampedGradientEffect_DEFINED
-#include "include/core/SkTypes.h"
-#include "include/core/SkM44.h"
 
-#include "src/gpu/GrCoordTransform.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkTypes.h"
+
 #include "src/gpu/GrFragmentProcessor.h"
+
 class GrClampedGradientEffect : public GrFragmentProcessor {
 public:
     static std::unique_ptr<GrFragmentProcessor> Make(
             std::unique_ptr<GrFragmentProcessor> colorizer,
-            std::unique_ptr<GrFragmentProcessor> gradLayout, SkPMColor4f leftBorderColor,
-            SkPMColor4f rightBorderColor, bool makePremul, bool colorsAreOpaque) {
+            std::unique_ptr<GrFragmentProcessor> gradLayout,
+            SkPMColor4f leftBorderColor,
+            SkPMColor4f rightBorderColor,
+            bool makePremul,
+            bool colorsAreOpaque) {
         return std::unique_ptr<GrFragmentProcessor>(new GrClampedGradientEffect(
                 std::move(colorizer), std::move(gradLayout), leftBorderColor, rightBorderColor,
                 makePremul, colorsAreOpaque));
@@ -28,8 +32,6 @@ public:
     GrClampedGradientEffect(const GrClampedGradientEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "ClampedGradientEffect"; }
-    int colorizer_index = -1;
-    int gradLayout_index = -1;
     SkPMColor4f leftBorderColor;
     SkPMColor4f rightBorderColor;
     bool makePremul;
@@ -38,8 +40,10 @@ public:
 private:
     GrClampedGradientEffect(std::unique_ptr<GrFragmentProcessor> colorizer,
                             std::unique_ptr<GrFragmentProcessor> gradLayout,
-                            SkPMColor4f leftBorderColor, SkPMColor4f rightBorderColor,
-                            bool makePremul, bool colorsAreOpaque)
+                            SkPMColor4f leftBorderColor,
+                            SkPMColor4f rightBorderColor,
+                            bool makePremul,
+                            bool colorsAreOpaque)
             : INHERITED(kGrClampedGradientEffect_ClassID,
                         (OptimizationFlags)kCompatibleWithCoverageAsAlpha_OptimizationFlag |
                                 (colorsAreOpaque && gradLayout->preservesOpaqueInput()
@@ -50,11 +54,9 @@ private:
             , makePremul(makePremul)
             , colorsAreOpaque(colorsAreOpaque) {
         SkASSERT(colorizer);
-        colorizer_index = this->numChildProcessors();
-        this->registerChildProcessor(std::move(colorizer));
+        this->registerChild(std::move(colorizer), SkSL::SampleUsage::PassThrough());
         SkASSERT(gradLayout);
-        gradLayout_index = this->numChildProcessors();
-        this->registerChildProcessor(std::move(gradLayout));
+        this->registerChild(std::move(gradLayout), SkSL::SampleUsage::PassThrough());
     }
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;

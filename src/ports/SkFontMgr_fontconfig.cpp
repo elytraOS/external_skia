@@ -38,10 +38,6 @@ class SkData;
 #    define FC_POSTSCRIPT_NAME  "postscriptname"
 #endif
 
-#ifdef SK_DEBUG
-#    include "src/core/SkTLS.h"
-#endif
-
 /** Since FontConfig is poorly documented, this gives a high level overview:
  *
  *  FcConfig is a handle to a FontConfig configuration instance. Each 'configuration' is independent
@@ -68,30 +64,17 @@ static SkMutex& f_c_mutex() {
     return mutex;
 }
 
-#ifdef SK_DEBUG
-void* CreateThreadFcLocked() { return new bool(false); }
-void DeleteThreadFcLocked(void* v) { delete static_cast<bool*>(v); }
-#   define THREAD_FC_LOCKED \
-        static_cast<bool*>(SkTLS::Get(CreateThreadFcLocked, DeleteThreadFcLocked))
-#endif
-
 class FCLocker {
     // Assume FcGetVersion() has always been thread safe.
     static void lock() SK_NO_THREAD_SAFETY_ANALYSIS {
         if (FcGetVersion() < 21091) {
             f_c_mutex().acquire();
-        } else {
-            SkDEBUGCODE(bool* threadLocked = THREAD_FC_LOCKED);
-            SkASSERT(false == *threadLocked);
-            SkDEBUGCODE(*threadLocked = true);
         }
     }
     static void unlock() SK_NO_THREAD_SAFETY_ANALYSIS {
         AssertHeld();
         if (FcGetVersion() < 21091) {
             f_c_mutex().release();
-        } else {
-            SkDEBUGCODE(*THREAD_FC_LOCKED = false);
         }
     }
 
@@ -112,8 +95,6 @@ public:
     static void AssertHeld() { SkDEBUGCODE(
         if (FcGetVersion() < 21091) {
             f_c_mutex().assertHeld();
-        } else {
-            SkASSERT(true == *THREAD_FC_LOCKED);
         }
     ) }
 };
@@ -555,6 +536,16 @@ public:
                                              familyName,
                                              this->fontStyle(),
                                              this->isFixedPitch());
+    }
+
+    std::unique_ptr<SkFontData> onMakeFontData() const override {
+        int index;
+        std::unique_ptr<SkStreamAsset> stream(this->onOpenStream(&index));
+        if (!stream) {
+            return nullptr;
+        }
+        // TODO: FC_VARIABLE and FC_FONT_VARIATIONS
+        return std::make_unique<SkFontData>(std::move(stream), index, nullptr, 0);
     }
 
     ~SkTypeface_fontconfig() override {

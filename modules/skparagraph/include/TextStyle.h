@@ -50,7 +50,10 @@ constexpr TextDecoration AllTextDecorations[] = {
 
 enum TextDecorationStyle { kSolid, kDouble, kDotted, kDashed, kWavy };
 
+enum TextDecorationMode { kGaps, kThrough };
+
 enum StyleType {
+    kNone,
     kAllAttributes,
     kFont,
     kForeground,
@@ -63,12 +66,14 @@ enum StyleType {
 
 struct Decoration {
     TextDecoration fType;
+    TextDecorationMode fMode;
     SkColor fColor;
     TextDecorationStyle fStyle;
     SkScalar fThicknessMultiplier;
 
     bool operator==(const Decoration& other) const {
         return this->fType == other.fType &&
+               this->fMode == other.fMode &&
                this->fColor == other.fColor &&
                this->fStyle == other.fStyle &&
                this->fThicknessMultiplier == other.fThicknessMultiplier;
@@ -106,9 +111,8 @@ enum class PlaceholderAlignment {
 
 struct FontFeature {
     FontFeature(const SkString name, int value) : fName(name), fValue(value) { }
-    FontFeature(const FontFeature& other) : fName(other.fName), fValue(other.fValue) { }
-    bool operator==(const FontFeature& other) const {
-        return fName == other.fName && fValue == other.fValue;
+    bool operator==(const FontFeature& that) const {
+        return fName == that.fName && fValue == that.fValue;
     }
     SkString fName;
     int fValue;
@@ -130,7 +134,7 @@ struct PlaceholderStyle {
             , fBaseline(baseline)
             , fBaselineOffset(offset) {}
 
-    bool equals(const PlaceholderStyle& other) const;
+    bool equals(const PlaceholderStyle&) const;
 
     SkScalar fWidth;
     SkScalar fHeight;
@@ -181,12 +185,14 @@ public:
     // Decorations
     Decoration getDecoration() const { return fDecoration; }
     TextDecoration getDecorationType() const { return fDecoration.fType; }
+    TextDecorationMode getDecorationMode() const { return fDecoration.fMode; }
     SkColor getDecorationColor() const { return fDecoration.fColor; }
     TextDecorationStyle getDecorationStyle() const { return fDecoration.fStyle; }
     SkScalar getDecorationThicknessMultiplier() const {
         return fDecoration.fThicknessMultiplier;
     }
     void setDecoration(TextDecoration decoration) { fDecoration.fType = decoration; }
+    void setDecorationMode(TextDecorationMode mode) { fDecoration.fMode = mode; }
     void setDecorationStyle(TextDecorationStyle style) { fDecoration.fStyle = style; }
     void setDecorationColor(SkColor color) { fDecoration.fColor = color; }
     void setDecorationThicknessMultiplier(SkScalar m) { fDecoration.fThicknessMultiplier = m; }
@@ -276,7 +282,6 @@ private:
 typedef size_t TextIndex;
 typedef SkRange<size_t> TextRange;
 const SkRange<size_t> EMPTY_TEXT = EMPTY_RANGE;
-
 
 struct Block {
     Block() : fRange(EMPTY_RANGE), fStyle() { }

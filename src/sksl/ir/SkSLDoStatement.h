@@ -23,16 +23,18 @@ struct DoStatement : public Statement {
     , fStatement(std::move(statement))
     , fTest(std::move(test)) {}
 
+    int nodeCount() const override {
+        return 1 + fStatement->nodeCount() + fTest->nodeCount();
+    }
+
     std::unique_ptr<Statement> clone() const override {
         return std::unique_ptr<Statement>(new DoStatement(fOffset, fStatement->clone(),
                                                           fTest->clone()));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return "do " + fStatement->description() + " while (" + fTest->description() + ");";
     }
-#endif
 
     std::unique_ptr<Statement> fStatement;
     std::unique_ptr<Expression> fTest;

@@ -19,12 +19,12 @@ import android.widget.Button;
 import android.widget.GridLayout;
 
 import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.skia.skottie.SkottieView.SkottieViewBuilder;
 
 import static java.lang.Math.ceil;
 import static java.lang.Math.sqrt;
@@ -32,8 +32,6 @@ import static java.lang.Math.sqrt;
 public class SkottieActivity extends Activity implements View.OnClickListener {
 
     private final static long TIME_OUT_MS = 10000;
-
-    private SkottieApplication mApplication;
 
     private CountDownLatch mEnterAnimationFence = new CountDownLatch(1);
 
@@ -58,16 +56,17 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
         };
 
         for (int resId : rawAssets) {
-            SkottieView view = new SkottieView(this);
-            view.setSource(getResources().openRawResource(resId));
+            SkottieViewBuilder builder = new SkottieViewBuilder();
+            SkottieView view =  builder.build(this);
+            view.setSource(resId);
             mAnimations.add(view);
         }
 
         for (Uri uri : mAnimationFiles) {
             try {
-                InputStream inputStream = getContentResolver().openInputStream(uri);
-                SkottieView view = new SkottieView(this);
-                view.setSource(inputStream);
+                SkottieViewBuilder builder = new SkottieViewBuilder();
+                SkottieView view = builder.build(this);
+                view.setSource(this, uri);
                 mAnimations.add(view);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
@@ -186,11 +185,11 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
     }
 
     private void addLottie(Uri uri) throws FileNotFoundException {
-        InputStream inputStream = getContentResolver().openInputStream(uri);
         int animations = mAnimations.size();
         if (animations < mRowCount * mColumnCount) {
-            SkottieView view = new SkottieView(this);
-            view.setSource(inputStream);
+            SkottieViewBuilder builder = new SkottieViewBuilder();
+            SkottieView view = builder.build(this);
+            view.setSource(this, uri);
             int row = animations / mColumnCount, column = animations % mColumnCount;
             mAnimations.add(view);
             mAnimationFiles.add(uri);

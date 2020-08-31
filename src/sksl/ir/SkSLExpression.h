@@ -61,7 +61,7 @@ struct Expression : public IRNode {
      * Returns true if this expression is constant. compareConstant must be implemented for all
      * constants!
      */
-    virtual bool isConstant() const {
+    virtual bool isCompileTimeConstant() const {
         return false;
     }
 
@@ -88,6 +88,15 @@ struct Expression : public IRNode {
      */
     virtual double getConstantFloat() const {
         ABORT("not a constant float");
+    }
+
+    /**
+     * Returns true if, given fixed values for uniforms, this expression always evaluates to the
+     * same result with no side effects.
+     */
+    virtual bool isConstantOrUniform() const {
+        SkASSERT(!this->isCompileTimeConstant() || !this->hasSideEffects());
+        return this->isCompileTimeConstant();
     }
 
     virtual bool hasProperty(Property property) const = 0;

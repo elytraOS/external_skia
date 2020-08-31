@@ -23,6 +23,7 @@
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkMipmap.h"
 #include "src/core/SkPixelRefPriv.h"
 #include "src/core/SkPixmapPriv.h"
 #include "src/core/SkReadBuffer.h"
@@ -37,12 +38,12 @@ static bool reset_return_false(SkBitmap* bm) {
     return false;
 }
 
-SkBitmap::SkBitmap() : fFlags(0) {}
+SkBitmap::SkBitmap() {}
 
 SkBitmap::SkBitmap(const SkBitmap& src)
     : fPixelRef      (src.fPixelRef)
     , fPixmap        (src.fPixmap)
-    , fFlags         (src.fFlags)
+    , fMips          (src.fMips)
 {
     SkDEBUGCODE(src.validate();)
     SkDEBUGCODE(this->validate();)
@@ -51,11 +52,10 @@ SkBitmap::SkBitmap(const SkBitmap& src)
 SkBitmap::SkBitmap(SkBitmap&& other)
     : fPixelRef      (std::move(other.fPixelRef))
     , fPixmap        (std::move(other.fPixmap))
-    , fFlags                   (other.fFlags)
+    , fMips          (std::move(other.fMips))
 {
     SkASSERT(!other.fPixelRef);
     other.fPixmap.reset();
-    other.fFlags          = 0;
 }
 
 SkBitmap::~SkBitmap() {}
@@ -64,7 +64,7 @@ SkBitmap& SkBitmap::operator=(const SkBitmap& src) {
     if (this != &src) {
         fPixelRef       = src.fPixelRef;
         fPixmap         = src.fPixmap;
-        fFlags          = src.fFlags;
+        fMips           = src.fMips;
     }
     SkDEBUGCODE(this->validate();)
     return *this;
@@ -74,10 +74,9 @@ SkBitmap& SkBitmap::operator=(SkBitmap&& other) {
     if (this != &other) {
         fPixelRef       = std::move(other.fPixelRef);
         fPixmap         = std::move(other.fPixmap);
-        fFlags          = other.fFlags;
+        fMips           = std::move(other.fMips);
         SkASSERT(!other.fPixelRef);
         other.fPixmap.reset();
-        other.fFlags          = 0;
     }
     return *this;
 }
@@ -91,7 +90,7 @@ void SkBitmap::swap(SkBitmap& other) {
 void SkBitmap::reset() {
     fPixelRef = nullptr;  // Free pixels.
     fPixmap.reset();
-    fFlags = 0;
+    fMips.reset();
 }
 
 void SkBitmap::getBounds(SkRect* bounds) const {
@@ -381,18 +380,6 @@ void SkBitmap::setImmutable() {
     }
 }
 
-bool SkBitmap::isVolatile() const {
-    return (fFlags & kImageIsVolatile_Flag) != 0;
-}
-
-void SkBitmap::setIsVolatile(bool isVolatile) {
-    if (isVolatile) {
-        fFlags |= kImageIsVolatile_Flag;
-    } else {
-        fFlags &= ~kImageIsVolatile_Flag;
-    }
-}
-
 void* SkBitmap::getAddr(int x, int y) const {
     SkASSERT((unsigned)x < (unsigned)this->width());
     SkASSERT((unsigned)y < (unsigned)this->height());
@@ -452,7 +439,6 @@ bool SkBitmap::extractSubset(SkBitmap* result, const SkIRect& subset) const {
 
     SkBitmap dst;
     dst.setInfo(this->info().makeDimensions(r.size()), this->rowBytes());
-    dst.setIsVolatile(this->isVolatile());
 
     if (fPixelRef) {
         SkIPoint origin = this->pixelRefOrigin();
@@ -595,8 +581,6 @@ void SkBitmap::validate() const {
     this->info().validate();
 
     SkASSERT(this->info().validRowBytes(this->rowBytes()));
-    uint8_t allFlags = kImageIsVolatile_Flag;
-    SkASSERT((~allFlags & fFlags) == 0);
 
     if (fPixelRef && fPixelRef->pixels()) {
         SkASSERT(this->getPixels());

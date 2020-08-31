@@ -25,17 +25,15 @@ struct FloatLiteral : public Expression {
     : INHERITED(offset, kFloatLiteral_Kind, *type)
     , fValue(value) {}
 
-#ifdef SK_DEBUG
     String description() const override {
         return to_string(fValue);
     }
-#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         return true;
     }
 
@@ -53,6 +51,10 @@ struct FloatLiteral : public Expression {
 
     double getConstantFloat() const override {
         return fValue;
+    }
+
+    int nodeCount() const override {
+        return 1;
     }
 
     std::unique_ptr<Expression> clone() const override {

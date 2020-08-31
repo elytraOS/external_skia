@@ -33,13 +33,14 @@
 
 <h2> CanvasKit expands the functionality of a stock HTML canvas</h2>
 <canvas id=vertex1 width=300 height=300></canvas>
-<canvas id=vertex2 width=300 height=300></canvas>
 <canvas id=gradient1 width=300 height=300></canvas>
 <canvas id=patheffect width=300 height=300></canvas>
 <canvas id=paths width=200 height=200></canvas>
+<canvas id=pathperson width=300 height=300></canvas>
 <canvas id=ink width=300 height=300></canvas>
 <canvas id=surfaces width=300 height=300></canvas>
 <canvas id=atlas width=300 height=300></canvas>
+<canvas id=decode width=300 height=300></canvas>
 
 <h2> CanvasKit can allow for text shaping (e.g. breaking, kerning)</h2>
 <canvas id=shape1 width=600 height=600></canvas>
@@ -51,20 +52,24 @@
 <script type="text/javascript" charset="utf-8">
 
   var CanvasKit = null;
+  var cdn = 'https://storage.googleapis.com/skia-cdn/misc/';
 
-  var robotoData = null;
-  var notoserifData = null;
+  const ckLoaded = CanvasKitInit({locateFile: (file) => '/node_modules/canvaskit/bin/'+file});
 
-  var bonesImageData = null;
-  var mandrillData = null;
-  CanvasKitInit({
-    locateFile: (file) => '/node_modules/canvaskit/bin/'+file,
-  }).ready().then((CK) => {
+  const loadRoboto = fetch(cdn + 'Roboto-Regular.ttf').then((response) => response.arrayBuffer());
+  const loadNotoSerif = fetch(cdn + 'NotoSerif-Regular.ttf').then((response) => response.arrayBuffer());
+  const loadTestImage = fetch(cdn + 'test.png').then((response) => response.arrayBuffer());
+
+  // Examples which only require canvaskit
+  ckLoaded.then((CK) => {
     CanvasKit = CK;
-    DrawingExample(CanvasKit, robotoData);
     PathExample(CanvasKit);
     InkExample(CanvasKit);
-
+    PathPersonExample(CanvasKit);
+    VertexAPI1(CanvasKit);
+    GradiantAPI1(CanvasKit);
+    TextOnPathAPI1(CanvasKit);
+    SurfaceAPI1(CanvasKit);
     CanvasAPI1(CanvasKit);
     CanvasAPI2(CanvasKit);
     CanvasAPI3(CanvasKit);
@@ -73,48 +78,16 @@
     CanvasAPI6(CanvasKit);
     CanvasAPI7(CanvasKit);
     CanvasAPI8(CanvasKit);
-
-    VertexAPI1(CanvasKit);
-    VertexAPI2(CanvasKit, bonesImageData);
-
-    GradiantAPI1(CanvasKit);
-
-    TextShapingAPI1(CanvasKit, notoserifData);
-    TextShapingAPI2(CanvasKit, notoserifData);
-    TextOnPathAPI1(CanvasKit);
-
-    SurfaceAPI1(CanvasKit);
-
-    AtlasAPI1(CanvasKit, mandrillData);
   });
 
-  fetch('https://storage.googleapis.com/skia-cdn/misc/bones.jpg').then((resp) => {
-    resp.arrayBuffer().then((buffer) => {
-      bonesImageData = buffer;
-      VertexAPI2(CanvasKit, bonesImageData);
-    });
+  // Examples requiring external resources
+  Promise.all([ckLoaded, loadRoboto]).then((results) => {DrawingExample(...results)});
+  Promise.all([ckLoaded, loadNotoSerif]).then((results) => {
+    TextShapingAPI1(...results);
+    TextShapingAPI2(...results);
   });
-
-  fetch('./Roboto-Regular.woff').then((resp) => {
-    resp.arrayBuffer().then((buffer) => {
-      robotoData = buffer;
-      DrawingExample(CanvasKit, robotoData);
-    });
-  });
-
-  fetch('./NotoSerif-Regular.ttf').then((resp) => {
-    resp.arrayBuffer().then((buffer) => {
-      notoserifData = buffer;
-      TextShapingAPI1(CanvasKit, notoserifData);
-      TextShapingAPI2(CanvasKit, notoserifData);
-    });
-  });
-
-  // Mandrill test image
-  fetch('./test.png').then((response) => response.arrayBuffer()).then((buffer) => {
-    mandrillData = buffer;
-    AtlasAPI1(CanvasKit, mandrillData);
-  });
+  Promise.all([ckLoaded, loadTestImage]).then((results) => {AtlasAPI1(...results)});
+  Promise.all([ckLoaded, loadTestImage]).then((results) => {DecodeAPI(...results)});
 
   function DrawingExample(CanvasKit, robotoData) {
     if (!robotoData || !CanvasKit) {
@@ -147,7 +120,7 @@
       // Some animations see performance improvements by marking their
       // paths as volatile.
       path.setIsVolatile(true);
-      const dpe = CanvasKit.MakeSkDashPathEffect([15, 5, 5, 10], i/5);
+      const dpe = CanvasKit.SkPathEffect.MakeDash([15, 5, 5, 10], i/5);
       i++;
 
       paint.setPathEffect(dpe);
@@ -182,6 +155,38 @@
     // paint.delete();
     // textPaint.delete();
     // textFont.delete();
+  }
+
+  function PathPersonExample(CanvasKit) {
+    const surface = CanvasKit.MakeSWCanvasSurface('pathperson');
+    if (!surface) {
+      console.error('Could not make surface');
+      return;
+    }
+
+    function drawFrame(canvas) {
+      const paint = new CanvasKit.SkPaint();
+      paint.setStrokeWidth(1.0);
+      paint.setAntiAlias(true);
+      paint.setColor(CanvasKit.Color(0, 0, 0, 1.0));
+      paint.setStyle(CanvasKit.PaintStyle.Stroke);
+
+      const path = new CanvasKit.SkPath();
+      path.moveTo(10, 10);
+      path.lineTo(100, 10);
+      path.moveTo(10, 10);
+      path.lineTo(10, 200);
+      path.moveTo(10, 100);
+      path.lineTo(100,100);
+      path.moveTo(10, 200);
+      path.lineTo(100, 200);
+
+      canvas.drawPath(path, paint);
+      path.delete();
+      paint.delete();
+    }
+    // Intentionally just draw frame once
+    surface.drawOnce(drawFrame);
   }
 
   function PathExample(CanvasKit) {
@@ -328,14 +333,14 @@
     let skcanvas = CanvasKit.MakeCanvas(300, 300);
     let realCanvas = document.getElementById('api1_c');
 
-    let skPromise   = fetch('./test.png')
+    let skPromise   = fetch(cdn + 'test.png')
                         // if clients want to use a Blob, they are responsible
                         // for reading it themselves.
                         .then((response) => response.arrayBuffer())
                         .then((buffer) => {
                           skcanvas._img = skcanvas.decodeImage(buffer);
                         });
-    let realPromise = fetch('./test.png')
+    let realPromise = fetch(cdn + 'test.png')
                         .then((response) => response.blob())
                         .then((blob) => createImageBitmap(blob))
                         .then((bitmap) => {
@@ -711,14 +716,14 @@
     let skcanvas = CanvasKit.MakeCanvas(300, 300);
     let realCanvas = document.getElementById('api7_c');
 
-    let skPromise   = fetch('./test.png')
+    let skPromise   = fetch(cdn + 'test.png')
                         // if clients want to use a Blob, they are responsible
                         // for reading it themselves.
                         .then((response) => response.arrayBuffer())
                         .then((buffer) => {
                           skcanvas._img = skcanvas.decodeImage(buffer);
                         });
-    let realPromise = fetch('./test.png')
+    let realPromise = fetch(cdn + 'test.png')
                         .then((response) => response.blob())
                         .then((blob) => createImageBitmap(blob))
                         .then((bitmap) => {
@@ -881,7 +886,7 @@
     vertices = CanvasKit.MakeSkVertices(CanvasKit.VertexMode.TriangleFan,
                                             points, texs, colors);
 
-    let shader = CanvasKit.MakeLinearGradientShader([0, 0], [250, 0],
+    let shader = CanvasKit.SkShader.MakeLinearGradient([0, 0], [250, 0],
             colors, null, CanvasKit.TileMode.Clamp);
     paint.setShader(shader);
 
@@ -891,70 +896,6 @@
     shader.delete();
     paint.delete();
     surface.delete();
-  }
-
-  // bonesImageData is passed in as raw, encoded bytes.
-  function VertexAPI2(CanvasKit, bonesImageData) {
-    if (!CanvasKit || !bonesImageData) {
-      return;
-    }
-    const surface = CanvasKit.MakeCanvasSurface('vertex2');
-    if (!surface) {
-      console.error('Could not make surface');
-      return;
-    }
-    let paint = new CanvasKit.SkPaint();
-    let bonesImage = CanvasKit.MakeImageFromEncoded(bonesImageData);
-
-    let shader = bonesImage.makeShader(CanvasKit.TileMode.Clamp,
-                                       CanvasKit.TileMode.Clamp);
-
-    // comment this out to see just the triangles move.
-    paint.setShader(shader);
-
-    // points is the destination location on the canvas  We want the output
-    // to be a 280x280 box (to start).
-    let points   = [[ 0, 0 ],  [ 280, 0 ], [ 280, 280 ], [ 0, 280 ]];
-    // texs is the coordinates of the source in the texture
-    // (provided by the image shader). The image is 334x226 px big.
-    let texs     = [[ 0, 0 ],  [ 334, 0 ], [ 334, 226 ], [ 0, 226 ]];
-    let boneidxs = [[1,0,0,0], [2,0,0,0],  [3,0,0,0],    [2,3,0,0]];
-    let bonewts  = [[1,0,0,0], [1,0,0,0],  [1,0,0,0],    [.5,.5,0,0]];
-    let vertices = CanvasKit.MakeSkVertices(CanvasKit.VertexMode.TriangleFan,
-                                            points, texs, null, boneidxs, bonewts);
-
-    function drawFrame(canvas) {
-      let now = Date.now();
-      let bones = [
-        [[1,0, // world bone (move 10px down and to the right to center)
-          0,1,
-          10,10]],
-        [[1,0, // identity bone (bone for vertices that are static)
-          0,1,
-          0,0]],
-        [[1,0, // ossilate in x bone
-          0,1,
-          10*Math.sin(now/500),0]],
-        [[1,0, // ossilate in y bone
-          0,1,
-          0,30*Math.cos(now/500)]],
-      ];
-      let tVerts = vertices.applyBones(bones);
-      canvas.clear(CanvasKit.TRANSPARENT);
-      canvas.drawVertices(tVerts, CanvasKit.BlendMode.Src, paint);
-
-      tVerts.delete();
-      surface.requestAnimationFrame(drawFrame);
-    }
-    surface.requestAnimationFrame(drawFrame);
-    //tVerts.delete();
-    //vertices.delete();
-
-    // bonesImage && bonesImage.delete();
-    //shader && shader.delete();
-    //paint.delete();
-    //surface.delete();
-
   }
 
   function GradiantAPI1(CanvasKit) {
@@ -974,7 +915,7 @@
     let transform = [2, 0, 0,
                      0, 2, 0,
                      0, 0, 1]
-    let shader = CanvasKit.MakeRadialGradientShader([150,150], 130, colors,
+    let shader = CanvasKit.SkShader.MakeRadialGradient([150,150], 130, colors,
                               pos, CanvasKit.TileMode.Mirror, transform);
 
     paint.setShader(shader);
@@ -1164,6 +1105,7 @@
       height: 50,
       alphaType: CanvasKit.AlphaType.Premul,
       colorType: CanvasKit.ColorType.RGBA_8888,
+      colorSpace: CanvasKit.SkColorSpace.SRGB,
     });
 
     if (!subSurface) {
@@ -1240,8 +1182,8 @@
     dsts.push(0, .8, 200, 100);
 
     const colors = new CanvasKit.SkColorBuilder();
-    colors.push(CanvasKit.Color(85, 170, 10, 0.5)); // light green
-    colors.push(CanvasKit.Color(51, 51, 191, 0.5)); // light blue
+    colors.push(CanvasKit.ColorAsInt(85, 170, 10, 128)); // light green
+    colors.push(CanvasKit.ColorAsInt(51, 51, 191, 128)); // light blue
 
     let i = 0;
 
@@ -1272,5 +1214,24 @@
     }
     surface.requestAnimationFrame(drawFrame);
 
+  }
+
+  async function DecodeAPI(CanvasKit, imgData) {
+    if (!CanvasKit || !imgData) {
+      return;
+    }
+    const surface = CanvasKit.MakeCanvasSurface('decode');
+    if (!surface) {
+      console.error('Could not make surface');
+      return;
+    }
+    const blob = new Blob([ imgData ]);
+    // ImageBitmap is not supported in Safari
+    const imageBitmap = await createImageBitmap(blob);
+    const img = await CanvasKit.MakeImageFromCanvasImageSource(imageBitmap);
+
+    surface.drawOnce((canvas) => {
+      canvas.drawImage(img, 0, 0, null);
+    });
   }
 </script>

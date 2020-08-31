@@ -7,6 +7,8 @@
 
 #include "src/sksl/SkSLHCodeGenerator.h"
 
+#include "include/private/SkSLSampleUsage.h"
+#include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLParser.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLEnum.h"
@@ -237,19 +239,6 @@ void HCodeGenerator::writeConstructor() {
     }
     this->writef(")");
     this->writeSection(INITIALIZERS_SECTION, "\n    , ");
-    const auto transforms = fSectionAndParameterHelper.getSections(COORD_TRANSFORM_SECTION);
-    for (size_t i = 0; i < transforms.size(); ++i) {
-        const Section& s = *transforms[i];
-        String field = CoordTransformName(s.fArgument.c_str(), i);
-        if (s.fArgument.size()) {
-            this->writef("\n    , %s(%s, %s.proxy(), %s.origin())", field.c_str(), s.fText.c_str(),
-                         FieldName(s.fArgument.c_str()).c_str(),
-                         FieldName(s.fArgument.c_str()).c_str());
-        }
-        else {
-            this->writef("\n    , %s(%s)", field.c_str(), s.fText.c_str());
-        }
-    }
     for (const auto& param : fSectionAndParameterHelper.getParameters()) {
         String nameString(param->fName);
         const char* name = nameString.c_str();
@@ -271,52 +260,51 @@ void HCodeGenerator::writeConstructor() {
     }
     this->writef(" {\n");
     this->writeSection(CONSTRUCTOR_CODE_SECTION);
+
+    if (Analysis::ReferencesSampleCoords(fProgram)) {
+        this->writef("        this->setUsesSampleCoordsDirectly();\n");
+    }
+
     int samplerCount = 0;
-    for (const auto& param : fSectionAndParameterHelper.getParameters()) {
+    for (const Variable* param : fSectionAndParameterHelper.getParameters()) {
         if (param->fType.kind() == Type::kSampler_Kind) {
             ++samplerCount;
         } else if (param->fType.nonnullable() == *fContext.fFragmentProcessor_Type) {
-            if (param->fType.kind() == Type::kNullable_Kind) {
-                this->writef("        if (%s) {\n", String(param->fName).c_str());
-            } else {
+            if (param->fType.kind() != Type::kNullable_Kind) {
                 this->writef("        SkASSERT(%s);", String(param->fName).c_str());
             }
-            this->writef("            %s_index = this->numChildProcessors();",
-                         FieldName(String(param->fName).c_str()).c_str());
-            if (fSectionAndParameterHelper.hasCoordOverrides(*param)) {
-                this->writef("            %s->setSampledWithExplicitCoords(true);",
-                             String(param->fName).c_str());
+
+            SampleUsage usage = Analysis::GetSampleUsage(fProgram, *param);
+
+            std::string perspExpression;
+            if (usage.hasUniformMatrix()) {
+                for (const Variable* p : fSectionAndParameterHelper.getParameters()) {
+                    if ((p->fModifiers.fFlags & Modifiers::kIn_Flag) &&
+                        usage.fExpression == String(p->fName)) {
+                        perspExpression = usage.fExpression + ".hasPerspective()";
+                        break;
+                    }
+                }
             }
-            this->writef("            this->registerChildProcessor(std::move(%s));",
-                         String(param->fName).c_str());
-            if (param->fType.kind() == Type::kNullable_Kind) {
-                this->writef("       }");
-            }
+            std::string usageArg = usage.constructor(std::move(perspExpression));
+
+            this->writef("        this->registerChild(std::move(%s), %s);",
+                         String(param->fName).c_str(),
+                         usageArg.c_str());
         }
     }
     if (samplerCount) {
         this->writef("        this->setTextureSamplerCnt(%d);", samplerCount);
-    }
-    for (size_t i = 0; i < transforms.size(); ++i) {
-        const Section& s = *transforms[i];
-        String field = CoordTransformName(s.fArgument.c_str(), i);
-        this->writef("        this->addCoordTransform(&%s);\n", field.c_str());
     }
     this->writef("    }\n");
 }
 
 void HCodeGenerator::writeFields() {
     this->writeSection(FIELDS_SECTION);
-    const auto transforms = fSectionAndParameterHelper.getSections(COORD_TRANSFORM_SECTION);
-    for (size_t i = 0; i < transforms.size(); ++i) {
-        const Section& s = *transforms[i];
-        this->writef("    GrCoordTransform %s;\n",
-                     CoordTransformName(s.fArgument.c_str(), i).c_str());
-    }
     for (const auto& param : fSectionAndParameterHelper.getParameters()) {
         String name = FieldName(String(param->fName).c_str());
         if (param->fType.nonnullable() == *fContext.fFragmentProcessor_Type) {
-            this->writef("    int %s_index = -1;\n", name.c_str());
+            // Don't need to write any fields, FPs are held as children
         } else {
             this->writef("    %s %s;\n", FieldType(fContext, param->fType,
                                                    param->fModifiers.fLayout).c_str(),
@@ -331,9 +319,9 @@ String HCodeGenerator::GetHeader(const Program& program, ErrorReporter& errors) 
     for (;;) {
         Token header = parser.nextRawToken();
         switch (header.fKind) {
-            case Token::WHITESPACE:
+            case Token::Kind::TK_WHITESPACE:
                 break;
-            case Token::BLOCK_COMMENT:
+            case Token::Kind::TK_BLOCK_COMMENT:
                 return String(program.fSource->c_str() + header.fOffset, header.fLength);
             default:
                 return "";
@@ -345,15 +333,17 @@ bool HCodeGenerator::generateCode() {
     this->writef("%s\n", GetHeader(fProgram, fErrors).c_str());
     this->writef(kFragmentProcessorHeader, fFullName.c_str());
     this->writef("#ifndef %s_DEFINED\n"
-                 "#define %s_DEFINED\n",
+                 "#define %s_DEFINED\n"
+                 "\n",
                  fFullName.c_str(),
                  fFullName.c_str());
-    this->writef("#include \"include/core/SkTypes.h\"\n");
-    this->writef("#include \"include/core/SkM44.h\"\n");
+    this->writef("#include \"include/core/SkM44.h\"\n"
+                 "#include \"include/core/SkTypes.h\"\n"
+                 "\n");
     this->writeSection(HEADER_SECTION);
     this->writef("\n"
-                 "#include \"src/gpu/GrCoordTransform.h\"\n"
-                 "#include \"src/gpu/GrFragmentProcessor.h\"\n");
+                 "#include \"src/gpu/GrFragmentProcessor.h\"\n"
+                 "\n");
     this->writef("class %s : public GrFragmentProcessor {\n"
                  "public:\n",
                  fFullName.c_str());

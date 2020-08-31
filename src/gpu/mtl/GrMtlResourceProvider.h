@@ -41,6 +41,10 @@ public:
     // Destroy any cached resources. To be called before releasing the MtlDevice.
     void destroyResources();
 
+#if GR_TEST_UTILS
+    void resetShaderCacheForTesting() const { fPipelineStateCache->release(); }
+#endif
+
 private:
 #ifdef SK_DEBUG
 #define GR_PIPELINE_STATE_CACHE_STATS
@@ -77,7 +81,7 @@ private:
     class BufferSuballocator : public SkRefCnt {
     public:
         BufferSuballocator(id<MTLDevice> device, size_t size);
-        ~BufferSuballocator() {
+        ~BufferSuballocator() override {
             fBuffer = nil;
             fTotalSize = 0;
         }

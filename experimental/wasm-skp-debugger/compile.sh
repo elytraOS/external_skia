@@ -46,7 +46,7 @@ python tools/embed_resources.py \
     --align 4
 
 GN_GPU_FLAGS="\"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
-WASM_GPU="-lEGL -lGLESv2 -DSK_SUPPORT_GPU=1 \
+WASM_GPU="-lEGL -lGLESv2 -DSK_SUPPORT_GPU=1 -DSK_GL \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/gpu.js"
 
 # Turn off exiting while we check for ninja (which may not be on PATH)
@@ -86,9 +86,12 @@ echo "Compiling bitcode"
   skia_use_fontconfig=false \
   skia_use_freetype=true \
   skia_use_libheif=false \
-  skia_use_libjpeg_turbo=true \
-  skia_use_libpng=true \
-  skia_use_libwebp=true \
+  skia_use_libjpeg_turbo_decode=true \
+  skia_use_libjpeg_turbo_encode=false \
+  skia_use_libpng_decode=true \
+  skia_use_libpng_encode=false \
+  skia_use_libwebp_decode=true \
+  skia_use_libwebp_encode=false \
   skia_use_wuffs=true \
   skia_use_lua=false \
   skia_use_piex=false \
@@ -104,7 +107,9 @@ echo "Compiling bitcode"
   skia_enable_skshaper=false \
   skia_enable_ccpr=false \
   skia_enable_nvpr=false \
-  skia_enable_fontmgr_empty=false \
+  skia_enable_fontmgr_custom_directory=false \
+  skia_enable_fontmgr_custom_embedded=true \
+  skia_enable_fontmgr_custom_empty=false \
   skia_enable_pdf=false"
 
 # Build all the libs, we'll link the appropriate ones down below
@@ -126,8 +131,8 @@ ${EMCXX} \
     -std=c++17 \
     $WASM_GPU \
     --pre-js $BASE_DIR/helper.js \
-    --post-js $BASE_DIR/ready.js \
     --bind \
+    --no-entry \
     $BASE_DIR/fonts/NotoMono-Regular.ttf.cpp \
     $BASE_DIR/debugger_bindings.cpp \
     $BUILD_DIR/libdebugcanvas.a \
@@ -138,7 +143,7 @@ ${EMCXX} \
     -s MODULARIZE=1 \
     -s NO_EXIT_RUNTIME=1 \
     -s STRICT=1 \
-    -s TOTAL_MEMORY=128MB \
+    -s INITIAL_MEMORY=128MB \
     -s WARN_UNALIGNED=1 \
     -s WASM=1 \
     -s USE_WEBGL2=1 \

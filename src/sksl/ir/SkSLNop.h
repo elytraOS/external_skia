@@ -24,11 +24,13 @@ struct Nop : public Statement {
         return true;
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return String(";");
     }
-#endif
+
+    int nodeCount() const override {
+        return 0;
+    }
 
     std::unique_ptr<Statement> clone() const override {
         return std::unique_ptr<Statement>(new Nop());

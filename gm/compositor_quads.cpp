@@ -39,6 +39,7 @@
 #include "include/private/SkTArray.h"
 #include "src/core/SkLineClipper.h"
 #include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
 
 #include <array>
@@ -187,7 +188,8 @@ static void draw_clipping_boundaries(SkCanvas* canvas, const SkMatrix& local) {
 }
 
 static void draw_text(SkCanvas* canvas, const char* text) {
-    canvas->drawString(text, 0, 0, SkFont(nullptr, 12), SkPaint());
+    SkFont font(ToolUtils::create_portable_typeface(), 12);
+    canvas->drawString(text, 0, 0, font, SkPaint());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -197,8 +199,6 @@ static void draw_text(SkCanvas* canvas, const char* text) {
 
 class ClipTileRenderer : public SkRefCntBase {
 public:
-    virtual ~ClipTileRenderer() {}
-
     // Draw the base rect, possibly clipped by 'clip' if that is not null. The edges to antialias
     // are specified in 'edgeAA' (to make manipulation easier than an unsigned bitfield). 'tileID'
     // represents the location of rect within the tile grid, 'quadID' is the unique ID of the clip

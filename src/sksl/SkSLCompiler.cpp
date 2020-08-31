@@ -126,10 +126,6 @@ Compiler::Compiler(Flags flags)
     ADD_TYPE(Half2);
     ADD_TYPE(Half3);
     ADD_TYPE(Half4);
-    ADD_TYPE(Double);
-    ADD_TYPE(Double2);
-    ADD_TYPE(Double3);
-    ADD_TYPE(Double4);
     ADD_TYPE(Int);
     ADD_TYPE(Int2);
     ADD_TYPE(Int3);
@@ -176,18 +172,8 @@ Compiler::Compiler(Flags flags)
     ADD_TYPE(Half4x2);
     ADD_TYPE(Half4x3);
     ADD_TYPE(Half4x4);
-    ADD_TYPE(Double2x2);
-    ADD_TYPE(Double2x3);
-    ADD_TYPE(Double2x4);
-    ADD_TYPE(Double3x2);
-    ADD_TYPE(Double3x3);
-    ADD_TYPE(Double3x4);
-    ADD_TYPE(Double4x2);
-    ADD_TYPE(Double4x3);
-    ADD_TYPE(Double4x4);
     ADD_TYPE(GenType);
     ADD_TYPE(GenHType);
-    ADD_TYPE(GenDType);
     ADD_TYPE(GenIType);
     ADD_TYPE(GenUType);
     ADD_TYPE(GenBType);
@@ -198,7 +184,6 @@ Compiler::Compiler(Flags flags)
     ADD_TYPE(GVec3);
     ADD_TYPE(GVec4);
     ADD_TYPE(HVec);
-    ADD_TYPE(DVec);
     ADD_TYPE(IVec);
     ADD_TYPE(UVec);
     ADD_TYPE(SVec);
@@ -253,6 +238,9 @@ Compiler::Compiler(Flags flags)
     ADD_TYPE(Sampler);
     ADD_TYPE(Texture2D);
 
+    StringFragment fpAliasName("shader");
+    fTypes->addWithoutOwnership(fpAliasName, fContext->fFragmentProcessor_Type.get());
+
     StringFragment skCapsName("sk_Caps");
     Variable* skCaps = new Variable(-1, Modifiers(), skCapsName,
                                     *fContext->fSkCaps_Type, Variable::kGlobal_Storage);
@@ -283,13 +271,11 @@ Compiler::Compiler(Flags flags)
     this->processIncludeFile(Program::kPipelineStage_Kind, SKSL_PIPELINE_INCLUDE,
                              strlen(SKSL_PIPELINE_INCLUDE), fGpuSymbolTable, &fPipelineInclude,
                              &fPipelineSymbolTable);
+    std::vector<std::unique_ptr<ProgramElement>> interpIntrinsics;
     this->processIncludeFile(Program::kGeneric_Kind, SKSL_INTERP_INCLUDE,
                              strlen(SKSL_INTERP_INCLUDE), symbols, &fInterpreterInclude,
                              &fInterpreterSymbolTable);
-    grab_intrinsics(&fInterpreterInclude, &fInterpreterIntrinsics);
-    // need to hang on to the source so that FunctionDefinition.fSource pointers in this file
-    // remain valid
-    fInterpreterIncludeSource = std::move(fIRGenerator->fFile);
+    grab_intrinsics(&interpIntrinsics, &fInterpreterIntrinsics);
 }
 
 Compiler::~Compiler() {
@@ -387,7 +373,7 @@ void Compiler::addDefinitions(const BasicBlock::Node& node,
             switch (expr->fKind) {
                 case Expression::kBinary_Kind: {
                     BinaryExpression* b = (BinaryExpression*) expr;
-                    if (b->fOperator == Token::EQ) {
+                    if (b->fOperator == Token::Kind::TK_EQ) {
                         this->addDefinition(b->fLeft.get(), &b->fRight, definitions);
                     } else if (Compiler::IsAssignment(b->fOperator)) {
                         this->addDefinition(
@@ -412,7 +398,8 @@ void Compiler::addDefinitions(const BasicBlock::Node& node,
                 }
                 case Expression::kPrefix_Kind: {
                     const PrefixExpression* p = (PrefixExpression*) expr;
-                    if (p->fOperator == Token::MINUSMINUS || p->fOperator == Token::PLUSPLUS) {
+                    if (p->fOperator == Token::Kind::TK_MINUSMINUS ||
+                        p->fOperator == Token::Kind::TK_PLUSPLUS) {
                         this->addDefinition(
                                       p->fOperand.get(),
                                       (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
@@ -422,7 +409,8 @@ void Compiler::addDefinitions(const BasicBlock::Node& node,
                 }
                 case Expression::kPostfix_Kind: {
                     const PostfixExpression* p = (PostfixExpression*) expr;
-                    if (p->fOperator == Token::MINUSMINUS || p->fOperator == Token::PLUSPLUS) {
+                    if (p->fOperator == Token::Kind::TK_MINUSMINUS ||
+                        p->fOperator == Token::Kind::TK_PLUSPLUS) {
                         this->addDefinition(
                                       p->fOperand.get(),
                                       (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
@@ -438,6 +426,7 @@ void Compiler::addDefinitions(const BasicBlock::Node& node,
                                       (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                       definitions);
                     }
+                    break;
                 }
                 default:
                     break;
@@ -606,7 +595,7 @@ bool is_constant(const Expression& expr, double value) {
             Constructor& c = (Constructor&) expr;
             bool isFloat = c.fType.columns() > 1 ? c.fType.componentType().isFloat()
                                                  : c.fType.isFloat();
-            if (c.fType.kind() == Type::kVector_Kind && c.isConstant()) {
+            if (c.fType.kind() == Type::kVector_Kind && c.isCompileTimeConstant()) {
                 for (int i = 0; i < c.fType.columns(); ++i) {
                     if (isFloat) {
                         if (c.getFVecComponent(i) != value) {
@@ -639,7 +628,7 @@ void delete_left(BasicBlock* b,
     BinaryExpression& bin = (BinaryExpression&) **target;
     SkASSERT(!bin.fLeft->hasSideEffects());
     bool result;
-    if (bin.fOperator == Token::EQ) {
+    if (bin.fOperator == Token::Kind::TK_EQ) {
         result = b->tryRemoveLValueBefore(iter, bin.fLeft.get());
     } else {
         result = b->tryRemoveExpressionBefore(iter, bin.fLeft.get());
@@ -841,7 +830,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 break;
             }
             switch (bin->fOperator) {
-                case Token::STAR:
+                case Token::Kind::TK_STAR:
                     if (is_constant(*bin->fLeft, 1)) {
                         if (bin->fLeft->fType.kind() == Type::kVector_Kind &&
                             bin->fRight->fType.kind() == Type::kScalar_Kind) {
@@ -897,7 +886,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     break;
-                case Token::PLUS:
+                case Token::Kind::TK_PLUS:
                     if (is_constant(*bin->fLeft, 0)) {
                         if (bin->fLeft->fType.kind() == Type::kVector_Kind &&
                             bin->fRight->fType.kind() == Type::kScalar_Kind) {
@@ -922,7 +911,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     break;
-                case Token::MINUS:
+                case Token::Kind::TK_MINUS:
                     if (is_constant(*bin->fRight, 0)) {
                         if (bin->fLeft->fType.kind() == Type::kScalar_Kind &&
                             bin->fRight->fType.kind() == Type::kVector_Kind) {
@@ -936,7 +925,7 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     break;
-                case Token::SLASH:
+                case Token::Kind::TK_SLASH:
                     if (is_constant(*bin->fRight, 1)) {
                         if (bin->fLeft->fType.kind() == Type::kScalar_Kind &&
                             bin->fRight->fType.kind() == Type::kVector_Kind) {
@@ -964,25 +953,25 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     }
                     break;
-                case Token::PLUSEQ:
+                case Token::Kind::TK_PLUSEQ:
                     if (is_constant(*bin->fRight, 0)) {
                         clear_write(*bin->fLeft);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
-                case Token::MINUSEQ:
+                case Token::Kind::TK_MINUSEQ:
                     if (is_constant(*bin->fRight, 0)) {
                         clear_write(*bin->fLeft);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
-                case Token::STAREQ:
+                case Token::Kind::TK_STAREQ:
                     if (is_constant(*bin->fRight, 1)) {
                         clear_write(*bin->fLeft);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
                     }
                     break;
-                case Token::SLASHEQ:
+                case Token::Kind::TK_SLASHEQ:
                     if (is_constant(*bin->fRight, 1)) {
                         clear_write(*bin->fLeft);
                         delete_right(&b, iter, outUpdated, outNeedsRescan);
@@ -1033,35 +1022,44 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     return;
                 }
                 SkASSERT((*iter)->fKind == BasicBlock::Node::kExpression_Kind);
-                break;
             }
+            break;
         }
         default:
             break;
     }
 }
 
-// returns true if this statement could potentially execute a break at the current level (we ignore
-// nested loops and switches, since any breaks inside of them will merely break the loop / switch)
-static bool contains_conditional_break(Statement& s, bool inConditional) {
+// Implementation-detail recursive helper function for `contains_conditional_break`.
+static bool contains_conditional_break_impl(Statement& s, bool inConditional) {
     switch (s.fKind) {
         case Statement::kBlock_Kind:
-            for (const auto& sub : ((Block&) s).fStatements) {
-                if (contains_conditional_break(*sub, inConditional)) {
+            for (const std::unique_ptr<Statement>& sub : static_cast<Block&>(s).fStatements) {
+                if (contains_conditional_break_impl(*sub, inConditional)) {
                     return true;
                 }
             }
             return false;
+
         case Statement::kBreak_Kind:
             return inConditional;
+
         case Statement::kIf_Kind: {
-            const IfStatement& i = (IfStatement&) s;
-            return contains_conditional_break(*i.fIfTrue, true) ||
-                   (i.fIfFalse && contains_conditional_break(*i.fIfFalse, true));
+            const IfStatement& i = static_cast<IfStatement&>(s);
+            return contains_conditional_break_impl(*i.fIfTrue, /*inConditional=*/true) ||
+                   (i.fIfFalse &&
+                    contains_conditional_break_impl(*i.fIfFalse, /*inConditional=*/true));
         }
+
         default:
             return false;
     }
+}
+
+// Returns true if this statement could potentially execute a break at the current level. We ignore
+// nested loops and switches, since any breaks inside of them will merely break the loop / switch.
+static bool contains_conditional_break(Statement& s) {
+    return contains_conditional_break_impl(s, /*inConditional=*/false);
 }
 
 // returns true if this statement definitely executes a break at the current level (we ignore
@@ -1069,16 +1067,47 @@ static bool contains_conditional_break(Statement& s, bool inConditional) {
 static bool contains_unconditional_break(Statement& s) {
     switch (s.fKind) {
         case Statement::kBlock_Kind:
-            for (const auto& sub : ((Block&) s).fStatements) {
+            for (const std::unique_ptr<Statement>& sub : static_cast<Block&>(s).fStatements) {
                 if (contains_unconditional_break(*sub)) {
                     return true;
                 }
             }
             return false;
+
         case Statement::kBreak_Kind:
             return true;
+
         default:
             return false;
+    }
+}
+
+static void move_all_but_break(std::unique_ptr<Statement>& stmt,
+                               std::vector<std::unique_ptr<Statement>>* target) {
+    switch (stmt->fKind) {
+        case Statement::kBlock_Kind: {
+            // Recurse into the block.
+            Block& block = static_cast<Block&>(*stmt);
+
+            std::vector<std::unique_ptr<Statement>> blockStmts;
+            blockStmts.reserve(block.fStatements.size());
+            for (std::unique_ptr<Statement>& statementInBlock : block.fStatements) {
+                move_all_but_break(statementInBlock, &blockStmts);
+            }
+
+            target->push_back(std::make_unique<Block>(block.fOffset, std::move(blockStmts),
+                                                      block.fSymbols, block.fIsScope));
+            break;
+        }
+
+        case Statement::kBreak_Kind:
+            // Do not append a break to the target.
+            break;
+
+        default:
+            // Append normal statements to the target.
+            target->push_back(std::move(stmt));
+            break;
     }
 }
 
@@ -1087,34 +1116,73 @@ static bool contains_unconditional_break(Statement& s) {
 // broken by this call and must then be discarded).
 // Returns null (and leaves the switch unmodified) if no such simple reduction is possible, such as
 // when break statements appear inside conditionals.
-static std::unique_ptr<Statement> block_for_case(SwitchStatement* s, SwitchCase* c) {
-    bool capturing = false;
-    std::vector<std::unique_ptr<Statement>*> statementPtrs;
-    for (const auto& current : s->fCases) {
-        if (current.get() == c) {
-            capturing = true;
+static std::unique_ptr<Statement> block_for_case(SwitchStatement* switchStatement,
+                                                 SwitchCase* caseToCapture) {
+    // We have to be careful to not move any of the pointers until after we're sure we're going to
+    // succeed, so before we make any changes at all, we check the switch-cases to decide on a plan
+    // of action. First, find the switch-case we are interested in.
+    auto iter = switchStatement->fCases.begin();
+    for (; iter != switchStatement->fCases.end(); ++iter) {
+        if (iter->get() == caseToCapture) {
+            break;
         }
-        if (capturing) {
-            for (auto& stmt : current->fStatements) {
-                if (contains_conditional_break(*stmt, s->fKind == Statement::kIf_Kind)) {
-                    return nullptr;
-                }
-                if (contains_unconditional_break(*stmt)) {
-                    capturing = false;
-                    break;
-                }
-                statementPtrs.push_back(&stmt);
+    }
+
+    // Next, walk forward through the rest of the switch. If we find a conditional break, we're
+    // stuck and can't simplify at all. If we find an unconditional break, we have a range of
+    // statements that we can use for simplification.
+    auto startIter = iter;
+    Statement* unconditionalBreakStmt = nullptr;
+    for (; iter != switchStatement->fCases.end(); ++iter) {
+        for (std::unique_ptr<Statement>& stmt : (*iter)->fStatements) {
+            if (contains_conditional_break(*stmt)) {
+                // We can't reduce switch-cases to a block when they have conditional breaks.
+                return nullptr;
             }
-            if (!capturing) {
+
+            if (contains_unconditional_break(*stmt)) {
+                // We found an unconditional break. We can use this block, but we need to strip
+                // out the break statement.
+                unconditionalBreakStmt = stmt.get();
                 break;
             }
         }
+
+        if (unconditionalBreakStmt != nullptr) {
+            break;
+        }
     }
-    std::vector<std::unique_ptr<Statement>> statements;
-    for (const auto& s : statementPtrs) {
-        statements.push_back(std::move(*s));
+
+    // We fell off the bottom of the switch or encountered a break. We know the range of statements
+    // that we need to move over, and we know it's safe to do so.
+    std::vector<std::unique_ptr<Statement>> caseStmts;
+
+    // We can move over most of the statements as-is.
+    while (startIter != iter) {
+        for (std::unique_ptr<Statement>& stmt : (*startIter)->fStatements) {
+            caseStmts.push_back(std::move(stmt));
+        }
+        ++startIter;
     }
-    return std::unique_ptr<Statement>(new Block(-1, std::move(statements), s->fSymbols));
+
+    // If we found an unconditional break at the end, we need to move what we can while avoiding
+    // that break.
+    if (unconditionalBreakStmt != nullptr) {
+        for (std::unique_ptr<Statement>& stmt : (*startIter)->fStatements) {
+            if (stmt.get() == unconditionalBreakStmt) {
+                move_all_but_break(stmt, &caseStmts);
+                unconditionalBreakStmt = nullptr;
+                break;
+            }
+
+            caseStmts.push_back(std::move(stmt));
+        }
+    }
+
+    SkASSERT(unconditionalBreakStmt == nullptr);  // Verify that we fixed the unconditional break.
+
+    // Return our newly-synthesized block.
+    return std::make_unique<Block>(/*offset=*/-1, std::move(caseStmts), switchStatement->fSymbols);
 }
 
 void Compiler::simplifyStatement(DefinitionMap& definitions,
@@ -1183,7 +1251,7 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
         }
         case Statement::kSwitch_Kind: {
             SwitchStatement& s = (SwitchStatement&) *stmt;
-            if (s.fValue->isConstant()) {
+            if (s.fValue->isCompileTimeConstant()) {
                 // switch is constant, replace it with the case that matches
                 bool found = false;
                 SwitchCase* defaultCase = nullptr;
@@ -1266,6 +1334,14 @@ void Compiler::scanCFG(FunctionDefinition& f) {
                     break;
                 case BasicBlock::Node::kExpression_Kind:
                     offset = (*cfg.fBlocks[i].fNodes[0].expression())->fOffset;
+                    if ((*cfg.fBlocks[i].fNodes[0].expression())->fKind ==
+                        Expression::kBoolLiteral_Kind) {
+                        // Function inlining can generate do { ... } while(false) loops which always
+                        // break, so the boolean condition is considered unreachable. Since not
+                        // being able to reach a literal is a non-issue in the first place, we
+                        // don't report an error in this case.
+                        continue;
+                    }
                     break;
             }
             this->error(offset, String("unreachable"));
@@ -1287,7 +1363,22 @@ void Compiler::scanCFG(FunctionDefinition& f) {
         }
 
         updated = false;
+        bool first = true;
         for (BasicBlock& b : cfg.fBlocks) {
+            if (!first && b.fEntrances.empty()) {
+                // Block was reachable before optimization, but has since become unreachable. In
+                // addition to being dead code, it's broken - since control flow can't reach it, no
+                // prior variable definitions can reach it, and therefore variables might look to
+                // have not been properly assigned. Kill it.
+                for (BasicBlock::Node& node : b.fNodes) {
+                    if (node.fKind == BasicBlock::Node::kStatement_Kind &&
+                        (*node.statement())->fKind != Statement::kNop_Kind) {
+                        node.setStatement(std::unique_ptr<Statement>(new Nop()));
+                    }
+                }
+                continue;
+            }
+            first = false;
             DefinitionMap definitions = b.fBefore;
 
             for (auto iter = b.fNodes.begin(); iter != b.fNodes.end() && !needsRescan; ++iter) {
@@ -1450,6 +1541,20 @@ bool Compiler::optimize(Program& program) {
         for (auto& element : program) {
             if (element.fKind == ProgramElement::kFunction_Kind) {
                 this->scanCFG((FunctionDefinition&) element);
+            }
+        }
+        // we wait until after analysis to remove dead functions so that we still report errors
+        // even in unused code
+        if (program.fSettings.fRemoveDeadFunctions) {
+            for (auto iter = program.fElements.begin(); iter != program.fElements.end(); ) {
+                if ((*iter)->fKind == ProgramElement::kFunction_Kind) {
+                    const FunctionDefinition& f = (const FunctionDefinition&) **iter;
+                    if (!f.fDeclaration.fCallCount && f.fDeclaration.fName != "main") {
+                        iter = program.fElements.erase(iter);
+                        continue;
+                    }
+                }
+                ++iter;
             }
         }
         if (program.fKind != Program::kFragmentProcessor_Kind) {
@@ -1639,8 +1744,10 @@ std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
     }
     fSource = program.fSource.get();
     std::unique_ptr<ByteCode> result(new ByteCode());
-    ByteCodeGenerator cg(&program, this, result.get());
-    if (cg.generateCode()) {
+    ByteCodeGenerator cg(fContext.get(), &program, this, result.get());
+    bool success = cg.generateCode();
+    fSource = nullptr;
+    if (success) {
         return result;
     }
 #else
@@ -1651,66 +1758,66 @@ std::unique_ptr<ByteCode> Compiler::toByteCode(Program& program) {
 
 const char* Compiler::OperatorName(Token::Kind kind) {
     switch (kind) {
-        case Token::PLUS:         return "+";
-        case Token::MINUS:        return "-";
-        case Token::STAR:         return "*";
-        case Token::SLASH:        return "/";
-        case Token::PERCENT:      return "%";
-        case Token::SHL:          return "<<";
-        case Token::SHR:          return ">>";
-        case Token::LOGICALNOT:   return "!";
-        case Token::LOGICALAND:   return "&&";
-        case Token::LOGICALOR:    return "||";
-        case Token::LOGICALXOR:   return "^^";
-        case Token::BITWISENOT:   return "~";
-        case Token::BITWISEAND:   return "&";
-        case Token::BITWISEOR:    return "|";
-        case Token::BITWISEXOR:   return "^";
-        case Token::EQ:           return "=";
-        case Token::EQEQ:         return "==";
-        case Token::NEQ:          return "!=";
-        case Token::LT:           return "<";
-        case Token::GT:           return ">";
-        case Token::LTEQ:         return "<=";
-        case Token::GTEQ:         return ">=";
-        case Token::PLUSEQ:       return "+=";
-        case Token::MINUSEQ:      return "-=";
-        case Token::STAREQ:       return "*=";
-        case Token::SLASHEQ:      return "/=";
-        case Token::PERCENTEQ:    return "%=";
-        case Token::SHLEQ:        return "<<=";
-        case Token::SHREQ:        return ">>=";
-        case Token::LOGICALANDEQ: return "&&=";
-        case Token::LOGICALOREQ:  return "||=";
-        case Token::LOGICALXOREQ: return "^^=";
-        case Token::BITWISEANDEQ: return "&=";
-        case Token::BITWISEOREQ:  return "|=";
-        case Token::BITWISEXOREQ: return "^=";
-        case Token::PLUSPLUS:     return "++";
-        case Token::MINUSMINUS:   return "--";
-        case Token::COMMA:        return ",";
+        case Token::Kind::TK_PLUS:         return "+";
+        case Token::Kind::TK_MINUS:        return "-";
+        case Token::Kind::TK_STAR:         return "*";
+        case Token::Kind::TK_SLASH:        return "/";
+        case Token::Kind::TK_PERCENT:      return "%";
+        case Token::Kind::TK_SHL:          return "<<";
+        case Token::Kind::TK_SHR:          return ">>";
+        case Token::Kind::TK_LOGICALNOT:   return "!";
+        case Token::Kind::TK_LOGICALAND:   return "&&";
+        case Token::Kind::TK_LOGICALOR:    return "||";
+        case Token::Kind::TK_LOGICALXOR:   return "^^";
+        case Token::Kind::TK_BITWISENOT:   return "~";
+        case Token::Kind::TK_BITWISEAND:   return "&";
+        case Token::Kind::TK_BITWISEOR:    return "|";
+        case Token::Kind::TK_BITWISEXOR:   return "^";
+        case Token::Kind::TK_EQ:           return "=";
+        case Token::Kind::TK_EQEQ:         return "==";
+        case Token::Kind::TK_NEQ:          return "!=";
+        case Token::Kind::TK_LT:           return "<";
+        case Token::Kind::TK_GT:           return ">";
+        case Token::Kind::TK_LTEQ:         return "<=";
+        case Token::Kind::TK_GTEQ:         return ">=";
+        case Token::Kind::TK_PLUSEQ:       return "+=";
+        case Token::Kind::TK_MINUSEQ:      return "-=";
+        case Token::Kind::TK_STAREQ:       return "*=";
+        case Token::Kind::TK_SLASHEQ:      return "/=";
+        case Token::Kind::TK_PERCENTEQ:    return "%=";
+        case Token::Kind::TK_SHLEQ:        return "<<=";
+        case Token::Kind::TK_SHREQ:        return ">>=";
+        case Token::Kind::TK_LOGICALANDEQ: return "&&=";
+        case Token::Kind::TK_LOGICALOREQ:  return "||=";
+        case Token::Kind::TK_LOGICALXOREQ: return "^^=";
+        case Token::Kind::TK_BITWISEANDEQ: return "&=";
+        case Token::Kind::TK_BITWISEOREQ:  return "|=";
+        case Token::Kind::TK_BITWISEXOREQ: return "^=";
+        case Token::Kind::TK_PLUSPLUS:     return "++";
+        case Token::Kind::TK_MINUSMINUS:   return "--";
+        case Token::Kind::TK_COMMA:        return ",";
         default:
-            ABORT("unsupported operator: %d\n", kind);
+            ABORT("unsupported operator: %d\n", (int) kind);
     }
 }
 
 
 bool Compiler::IsAssignment(Token::Kind op) {
     switch (op) {
-        case Token::EQ:           // fall through
-        case Token::PLUSEQ:       // fall through
-        case Token::MINUSEQ:      // fall through
-        case Token::STAREQ:       // fall through
-        case Token::SLASHEQ:      // fall through
-        case Token::PERCENTEQ:    // fall through
-        case Token::SHLEQ:        // fall through
-        case Token::SHREQ:        // fall through
-        case Token::BITWISEOREQ:  // fall through
-        case Token::BITWISEXOREQ: // fall through
-        case Token::BITWISEANDEQ: // fall through
-        case Token::LOGICALOREQ:  // fall through
-        case Token::LOGICALXOREQ: // fall through
-        case Token::LOGICALANDEQ:
+        case Token::Kind::TK_EQ:           // fall through
+        case Token::Kind::TK_PLUSEQ:       // fall through
+        case Token::Kind::TK_MINUSEQ:      // fall through
+        case Token::Kind::TK_STAREQ:       // fall through
+        case Token::Kind::TK_SLASHEQ:      // fall through
+        case Token::Kind::TK_PERCENTEQ:    // fall through
+        case Token::Kind::TK_SHLEQ:        // fall through
+        case Token::Kind::TK_SHREQ:        // fall through
+        case Token::Kind::TK_BITWISEOREQ:  // fall through
+        case Token::Kind::TK_BITWISEXOREQ: // fall through
+        case Token::Kind::TK_BITWISEANDEQ: // fall through
+        case Token::Kind::TK_LOGICALOREQ:  // fall through
+        case Token::Kind::TK_LOGICALXOREQ: // fall through
+        case Token::Kind::TK_LOGICALANDEQ:
             return true;
         default:
             return false;

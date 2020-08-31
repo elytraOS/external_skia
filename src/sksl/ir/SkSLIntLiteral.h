@@ -27,17 +27,15 @@ struct IntLiteral : public Expression {
     : INHERITED(offset, kIntLiteral_Kind, *type)
     , fValue(value) {}
 
-#ifdef SK_DEBUG
     String description() const override {
         return to_string(fValue);
     }
-#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         return true;
     }
 
@@ -56,6 +54,10 @@ struct IntLiteral : public Expression {
 
     int64_t getConstantInt() const override {
         return fValue;
+    }
+
+    int nodeCount() const override {
+        return 1;
     }
 
     std::unique_ptr<Expression> clone() const override {

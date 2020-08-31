@@ -155,21 +155,13 @@ DEF_TEST(Codec_frames, r) {
             { 0, kNoFrame, kNoFrame, kNoFrame, 4, 4 },
             { kOpaque, kOpaque, kUnpremul, kOpaque, kUnpremul, kUnpremul },
             { 525, 500, 525, 437, 609, 729, 444 },
-#ifdef SK_LEGACY_WEBP_LOOP_COUNT
-            7,
-#else
             6,
-#endif
             { kKeep, kKeep, kKeep, kKeep, kKeep, kKeep, kKeep } },
         { "images/required.webp", 7,
             { 0, 1, 1, kNoFrame, 4, 4 },
             { kOpaque, kUnpremul, kUnpremul, kOpaque, kOpaque, kOpaque },
             { 100, 100, 100, 100, 100, 100, 100 },
-#ifdef SK_LEGACY_WEBP_LOOP_COUNT
-            1,
-#else
             0,
-#endif
             { kKeep, kRestoreBG, kKeep, kKeep, kKeep, kRestoreBG, kKeep } },
     };
 
@@ -201,27 +193,27 @@ DEF_TEST(Codec_frames, r) {
 
         const int expected = rec.fFrameCount;
         if (rec.fRequiredFrames.size() + 1 != static_cast<size_t>(expected)) {
-            ERRORF(r, "'%s' has wrong number entries in fRequiredFrames; expected: %i\tactual: %i",
+            ERRORF(r, "'%s' has wrong number entries in fRequiredFrames; expected: %i\tactual: %zu",
                    rec.fName, expected - 1, rec.fRequiredFrames.size());
             continue;
         }
 
         if (expected > 1) {
             if (rec.fDurations.size() != static_cast<size_t>(expected)) {
-                ERRORF(r, "'%s' has wrong number entries in fDurations; expected: %i\tactual: %i",
+                ERRORF(r, "'%s' has wrong number entries in fDurations; expected: %i\tactual: %zu",
                        rec.fName, expected, rec.fDurations.size());
                 continue;
             }
 
             if (rec.fAlphas.size() + 1 != static_cast<size_t>(expected)) {
-                ERRORF(r, "'%s' has wrong number entries in fAlphas; expected: %i\tactual: %i",
+                ERRORF(r, "'%s' has wrong number entries in fAlphas; expected: %i\tactual: %zu",
                        rec.fName, expected - 1, rec.fAlphas.size());
                 continue;
             }
 
             if (rec.fDisposalMethods.size() != static_cast<size_t>(expected)) {
                 ERRORF(r, "'%s' has wrong number entries in fDisposalMethods; "
-                       "expected %i\tactual: %i",
+                       "expected %i\tactual: %zu",
                        rec.fName, expected, rec.fDisposalMethods.size());
                 continue;
             }

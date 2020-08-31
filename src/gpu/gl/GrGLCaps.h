@@ -114,9 +114,7 @@ public:
              const GrGLInterface* glInterface);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
-    SkImage::CompressionType compressionType(const GrBackendFormat&) const override;
 
-    bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat&) const override;
     bool isFormatTexturable(const GrBackendFormat&) const override;
     bool isFormatTexturable(GrGLFormat) const;
 
@@ -311,12 +309,8 @@ public:
     /// Is there support for ES2 compatability?
     bool ES2CompatibilitySupport() const { return fES2CompatibilitySupport; }
 
-    /// Is there support for glDraw*Instanced?
-    bool drawInstancedSupport() const { return fDrawInstancedSupport; }
-
-    /// Is there support for glDraw*Indirect? Note that the baseInstance fields of indirect draw
-    /// commands cannot be used unless we have base instance support.
-    bool drawIndirectSupport() const { return fDrawIndirectSupport; }
+    /// Is there support for GL_ANGLE_base_vertex_base_instance?
+    bool ANGLEMultiDrawSupport() const { return fANGLEMultiDrawSupport; }
 
     /// Is there support for glMultiDraw*Indirect? Note that the baseInstance fields of indirect
     /// draw commands cannot be used unless we have base instance support.
@@ -325,8 +319,9 @@ public:
     /// Is there support for glDrawRangeElements?
     bool drawRangeElementsSupport() const { return fDrawRangeElementsSupport; }
 
-    /// Are the baseInstance fields supported in indirect draw commands?
-    bool baseInstanceSupport() const { return fBaseInstanceSupport; }
+    /// Are the glDraw*Base(VertexBase)Instance methods, and baseInstance fields in indirect draw
+    //commands supported?
+    bool baseVertexBaseInstanceSupport() const { return fBaseVertexBaseInstanceSupport; }
 
     /// Use indices or vertices in CPU arrays rather than VBOs for dynamic content.
     bool useNonVBOVertexAndIndexDynamicData() const { return fUseNonVBOVertexAndIndexDynamicData; }
@@ -346,7 +341,7 @@ public:
     /// Are textures with GL_TEXTURE_RECTANGLE type supported.
     bool rectangleTextureSupport() const { return fRectangleTextureSupport; }
 
-    bool mipMapLevelAndLodControlSupport() const { return fMipMapLevelAndLodControlSupport; }
+    bool mipmapLevelAndLodControlSupport() const { return fMipmapLevelAndLodControlSupport; }
 
     bool doManualMipmapping() const { return fDoManualMipmapping; }
 
@@ -403,6 +398,11 @@ public:
     // PowerVRGX6250 drops every pixel if we modify the sample mask while color writes are disabled.
     bool neverDisableColorWrites() const { return fNeverDisableColorWrites; }
 
+    // Texture parameters must be used to enable MIP mapping even when a sampler object is used.
+    bool mustSetAnyTexParameterToEnableMipmapping() const {
+        return fMustSetAnyTexParameterToEnableMipmapping;
+    }
+
     // Returns the observed maximum number of instances the driver can handle in a single draw call
     // without crashing, or 'pendingInstanceCount' if this workaround is not necessary.
     // NOTE: the return value may be larger than pendingInstanceCount.
@@ -438,13 +438,12 @@ public:
     /* Is there support for enabling/disabling sRGB writes for sRGB-capable color buffers? */
     bool srgbWriteControl() const { return fSRGBWriteControl; }
 
-    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&,
-                                                  bool isAlphaChannel) const override;
+    /** Skip checks for GL errors, shader compilation success, program link success. */
+    bool skipErrorChecks() const { return fSkipErrorChecks; }
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
-    GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override;
-    GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
@@ -498,11 +497,13 @@ private:
     bool onSurfaceSupportsWritePixels(const GrSurface*) const override;
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
-    GrBackendFormat onGetDefaultBackendFormat(GrColorType, GrRenderable) const override;
+    GrBackendFormat onGetDefaultBackendFormat(GrColorType) const override;
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                  GrColorType) const override;
+
+    GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     GrGLStandard fStandard = kNone_GrGLStandard;
 
@@ -522,11 +523,10 @@ private:
     bool fVertexArrayObjectSupport : 1;
     bool fDebugSupport : 1;
     bool fES2CompatibilitySupport : 1;
-    bool fDrawInstancedSupport : 1;
-    bool fDrawIndirectSupport : 1;
     bool fDrawRangeElementsSupport : 1;
+    bool fANGLEMultiDrawSupport : 1;
     bool fMultiDrawIndirectSupport : 1;
-    bool fBaseInstanceSupport : 1;
+    bool fBaseVertexBaseInstanceSupport : 1;
     bool fUseNonVBOVertexAndIndexDynamicData : 1;
     bool fIsCoreProfile : 1;
     bool fBindFragDataLocationSupport : 1;
@@ -534,7 +534,7 @@ private:
     bool fPartialFBOReadIsSlow : 1;
     bool fBindUniformLocationSupport : 1;
     bool fRectangleTextureSupport : 1;
-    bool fMipMapLevelAndLodControlSupport : 1;
+    bool fMipmapLevelAndLodControlSupport : 1;
     bool fRGBAToBGRAReadbackConversionsAreSlow : 1;
     bool fUseBufferDataNullHint                : 1;
     bool fClearTextureSupport : 1;
@@ -544,6 +544,7 @@ private:
     bool fTiledRenderingSupport : 1;
     bool fFBFetchRequiresEnablePerSample : 1;
     bool fSRGBWriteControl : 1;
+    bool fSkipErrorChecks : 1;
 
     // Driver workarounds
     bool fDoManualMipmapping : 1;
@@ -555,6 +556,7 @@ private:
     bool fDetachStencilFromMSAABuffersBeforeReadPixels : 1;
     bool fDontSetBaseOrMaxLevelForExternalTextures : 1;
     bool fNeverDisableColorWrites : 1;
+    bool fMustSetAnyTexParameterToEnableMipmapping : 1;
     int fMaxInstancesPerDrawWithoutCrashing = 0;
 
     uint32_t fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
@@ -584,7 +586,7 @@ private:
         uint32_t fFlags = 0;
 
         GrSwizzle fReadSwizzle;
-        GrSwizzle fOutputSwizzle;
+        GrSwizzle fWriteSwizzle;
 
         struct ExternalIOFormats {
             GrColorType fColorType = GrColorType::kUnknown;

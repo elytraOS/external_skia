@@ -49,9 +49,10 @@ protected:
     }
 
     bool operator==(const GrResourceKey& that) const {
-        return this->hash() == that.hash() && 0 == memcmp(&fKey[kHash_MetaDataIdx + 1],
-                                                          &that.fKey[kHash_MetaDataIdx + 1],
-                                                          this->internalSize() - sizeof(uint32_t));
+        // Both keys should be sized to at least contain the meta data. The metadata contains each
+        // key's length. So the second memcmp should only run if the keys have the same length.
+        return 0 == memcmp(fKey.get(), that.fKey.get(), kMetaDataCnt*sizeof(uint32_t)) &&
+               0 == memcmp(&fKey[kMetaDataCnt], &that.fKey[kMetaDataCnt], this->dataSize());
     }
 
     GrResourceKey& operator=(const GrResourceKey& that) {
@@ -61,7 +62,7 @@ protected:
             } else {
                 size_t bytes = that.size();
                 SkASSERT(SkIsAlign4(bytes));
-                fKey.reset(SkToInt(bytes / sizeof(uint32_t)));
+                fKey.reset(bytes / sizeof(uint32_t));
                 memcpy(fKey.get(), that.fKey.get(), bytes);
                 this->validate();
             }
@@ -102,10 +103,10 @@ protected:
     class Builder {
     public:
         Builder(GrResourceKey* key, uint32_t domain, int data32Count) : fKey(key) {
-            SkASSERT(data32Count >= 0);
+            size_t count = SkToSizeT(data32Count);
             SkASSERT(domain != kInvalidDomain);
-            key->fKey.reset(kMetaDataCnt + data32Count);
-            int size = (data32Count + kMetaDataCnt) * sizeof(uint32_t);
+            key->fKey.reset(kMetaDataCnt + count);
+            size_t size = (count + kMetaDataCnt) * sizeof(uint32_t);
             SkASSERT(SkToU16(size) == size);
             SkASSERT(SkToU16(domain) == domain);
             key->fKey[kDomainAndSize_MetaDataIdx] = domain | (size << 16);
@@ -127,7 +128,7 @@ protected:
             SkASSERT(fKey);
             SkDEBUGCODE(size_t dataCount = fKey->internalSize() / sizeof(uint32_t) - kMetaDataCnt;)
             SkASSERT(SkToU32(dataIdx) < dataCount);
-            return fKey->fKey[kMetaDataCnt + dataIdx];
+            return fKey->fKey[(int)kMetaDataCnt + dataIdx];
         }
 
     private:

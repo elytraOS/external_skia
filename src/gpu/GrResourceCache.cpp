@@ -7,12 +7,10 @@
 
 #include "src/gpu/GrResourceCache.h"
 #include <atomic>
-#include "include/gpu/GrContext.h"
-#include "include/gpu/GrTexture.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/private/GrSingleOwner.h"
 #include "include/private/SkTo.h"
 #include "include/utils/SkRandom.h"
-#include "src/core/SkExchange.h"
 #include "src/core/SkMessageBus.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkScopeExit.h"
@@ -21,6 +19,7 @@
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxyCacheAccess.h"
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/SkGr.h"
@@ -29,8 +28,7 @@ DECLARE_SKMESSAGEBUS_MESSAGE(GrUniqueKeyInvalidatedMessage);
 
 DECLARE_SKMESSAGEBUS_MESSAGE(GrTextureFreedMessage);
 
-#define ASSERT_SINGLE_OWNER \
-    SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fSingleOwner);)
+#define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(fSingleOwner)
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -78,14 +76,14 @@ inline GrResourceCache::TextureAwaitingUnref::TextureAwaitingUnref(GrTexture* te
         : fTexture(texture), fNumUnrefs(1) {}
 
 inline GrResourceCache::TextureAwaitingUnref::TextureAwaitingUnref(TextureAwaitingUnref&& that) {
-    fTexture = skstd::exchange(that.fTexture, nullptr);
-    fNumUnrefs = skstd::exchange(that.fNumUnrefs, 0);
+    fTexture = std::exchange(that.fTexture, nullptr);
+    fNumUnrefs = std::exchange(that.fNumUnrefs, 0);
 }
 
 inline GrResourceCache::TextureAwaitingUnref& GrResourceCache::TextureAwaitingUnref::operator=(
         TextureAwaitingUnref&& that) {
-    fTexture = skstd::exchange(that.fTexture, nullptr);
-    fNumUnrefs = skstd::exchange(that.fNumUnrefs, 0);
+    fTexture = std::exchange(that.fTexture, nullptr);
+    fNumUnrefs = std::exchange(that.fNumUnrefs, 0);
     return *this;
 }
 
@@ -691,7 +689,7 @@ uint32_t GrResourceCache::getNextTimestamp() {
                 fPurgeableQueue.pop();
             }
 
-            SkTQSort(fNonpurgeableResources.begin(), fNonpurgeableResources.end() - 1,
+            SkTQSort(fNonpurgeableResources.begin(), fNonpurgeableResources.end(),
                      CompareTimestamp);
 
             // Pick resources out of the purgeable and non-purgeable arrays based on lowest
@@ -863,16 +861,13 @@ void GrResourceCache::validate() const {
     };
 
     {
-        ScratchMap::ConstIter iter(&fScratchMap);
-
         int count = 0;
-        for ( ; !iter.done(); ++iter) {
-            const GrGpuResource* resource = *iter;
-            SkASSERT(resource->resourcePriv().getScratchKey().isValid());
-            SkASSERT(!resource->getUniqueKey().isValid());
+        fScratchMap.foreach([&](const GrGpuResource& resource) {
+            SkASSERT(resource.resourcePriv().getScratchKey().isValid());
+            SkASSERT(!resource.getUniqueKey().isValid());
             count++;
-        }
-        SkASSERT(count == fScratchMap.count()); // ensure the iterator is working correctly
+        });
+        SkASSERT(count == fScratchMap.count());
     }
 
     Stats stats(this);

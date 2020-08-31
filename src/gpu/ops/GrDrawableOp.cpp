@@ -8,7 +8,7 @@
 #include "src/gpu/ops/GrDrawableOp.h"
 
 #include "include/core/SkDrawable.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrOpsRenderPass.h"
@@ -25,7 +25,7 @@ GrDrawableOp::GrDrawableOp(std::unique_ptr<SkDrawable::GpuDrawHandler> drawable,
                            const SkRect& bounds)
         : INHERITED(ClassID())
         , fDrawable(std::move(drawable)) {
-        this->setBounds(bounds, HasAABloat::kNo, IsHairline::kNo);
+    this->setBounds(bounds, HasAABloat::kNo, IsHairline::kNo);
 }
 
 void GrDrawableOp::onExecute(GrOpFlushState* state, const SkRect& chainBounds) {

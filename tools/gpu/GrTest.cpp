@@ -8,8 +8,7 @@
 #include "include/core/SkString.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrTexture.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkMathPriv.h"
 #include "src/gpu/GrClip.h"
@@ -26,6 +25,7 @@
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrSurfaceContextPriv.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/ccpr/GrCCPathCache.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
@@ -43,37 +43,33 @@ void GrResourceCache::changeTimestamp(uint32_t newTimestamp) { fTimestamp = newT
 #ifdef SK_DEBUG
 int GrResourceCache::countUniqueKeysWithTag(const char* tag) const {
     int count = 0;
-    UniqueHash::ConstIter iter(&fUniqueHash);
-    while (!iter.done()) {
-        if (0 == strcmp(tag, (*iter).getUniqueKey().tag())) {
+    fUniqueHash.foreach([&](const GrGpuResource& resource){
+        if (0 == strcmp(tag, resource.getUniqueKey().tag())) {
             ++count;
         }
-        ++iter;
-    }
+    });
     return count;
 }
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ASSERT_SINGLE_OWNER \
-    SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fRenderTargetContext->singleOwner());)
-
+#define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(fRenderTargetContext->singleOwner())
 
 uint32_t GrRenderTargetContextPriv::testingOnly_getOpsTaskID() {
     return fRenderTargetContext->getOpsTask()->uniqueID();
 }
 
 void GrRenderTargetContextPriv::testingOnly_addDrawOp(std::unique_ptr<GrDrawOp> op) {
-    this->testingOnly_addDrawOp(GrNoClip(), std::move(op));
+    this->testingOnly_addDrawOp(nullptr, std::move(op), {});
 }
 
 void GrRenderTargetContextPriv::testingOnly_addDrawOp(
-        const GrClip& clip,
+        const GrClip* clip,
         std::unique_ptr<GrDrawOp> op,
         const std::function<GrRenderTargetContext::WillAddOpFn>& willAddFn) {
     ASSERT_SINGLE_OWNER
-    if (fRenderTargetContext->fContext->priv().abandoned()) {
+    if (fRenderTargetContext->fContext->abandoned()) {
         fRenderTargetContext->fContext->priv().opMemoryPool()->release(std::move(op));
         return;
     }
@@ -169,7 +165,7 @@ DRAW_OP_TEST_EXTERN(ShadowRRectOp);
 DRAW_OP_TEST_EXTERN(SmallPathOp);
 DRAW_OP_TEST_EXTERN(RegionOp);
 DRAW_OP_TEST_EXTERN(RRectOp);
-DRAW_OP_TEST_EXTERN(TesselatingPathOp);
+DRAW_OP_TEST_EXTERN(TriangulatingPathOp);
 DRAW_OP_TEST_EXTERN(TextureOp);
 
 void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext, GrPaint&& paint) {
@@ -196,7 +192,7 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
             DRAW_OP_TEST_ENTRY(SmallPathOp),
             DRAW_OP_TEST_ENTRY(RegionOp),
             DRAW_OP_TEST_ENTRY(RRectOp),
-            DRAW_OP_TEST_ENTRY(TesselatingPathOp),
+            DRAW_OP_TEST_ENTRY(TriangulatingPathOp),
             DRAW_OP_TEST_ENTRY(TextureOp),
     };
 
@@ -204,6 +200,10 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
     uint32_t index = random->nextULessThan(static_cast<uint32_t>(kTotal));
     auto op = gFactories[index](
             std::move(paint), random, context, renderTargetContext->numSamples());
-    SkASSERT(op);
-    renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
+
+    // Creating a GrAtlasTextOp my not produce an op if for example, it is totally outside the
+    // render target context.
+    if (op) {
+        renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
+    }
 }

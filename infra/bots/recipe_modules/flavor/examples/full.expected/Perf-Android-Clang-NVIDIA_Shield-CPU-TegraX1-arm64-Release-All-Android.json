@@ -142,6 +142,22 @@
   },
   {
     "cmd": [
+      "/opt/infra-android/tools/adb",
+      "push",
+      "[START_DIR]/build/nanobench",
+      "/data/local/tmp/"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "push nanobench"
+  },
+  {
+    "cmd": [
       "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
@@ -1033,35 +1049,19 @@
   },
   {
     "cmd": [
-      "/opt/infra-android/tools/adb",
-      "push",
-      "[START_DIR]/build/nanobench",
-      "/data/local/tmp/"
-    ],
-    "cwd": "[START_DIR]/skia",
-    "env": {
-      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
-      "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
-    },
-    "infra_step": true,
-    "name": "push nanobench"
-  },
-  {
-    "cmd": [
       "vpython",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
       "/path/to/tmp/json",
       "copy",
-      "set -x; /data/local/tmp/nanobench --some-flag; echo $? >/data/local/tmp/rc",
+      "set -x; LD_LIBRARY_PATH=/data/local/tmp/ /data/local/tmp/nanobench --some-flag; echo $? >/data/local/tmp/rc",
       "[START_DIR]/tmp/nanobench.sh"
     ],
     "infra_step": true,
     "name": "write nanobench.sh",
     "~followup_annotations": [
-      "@@@STEP_LOG_LINE@nanobench.sh@set -x; /data/local/tmp/nanobench --some-flag; echo $? >/data/local/tmp/rc@@@",
+      "@@@STEP_LOG_LINE@nanobench.sh@set -x; LD_LIBRARY_PATH=/data/local/tmp/ /data/local/tmp/nanobench --some-flag; echo $? >/data/local/tmp/rc@@@",
       "@@@STEP_LOG_END@nanobench.sh@@@"
     ]
   },

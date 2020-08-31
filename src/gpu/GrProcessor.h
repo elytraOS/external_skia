@@ -18,7 +18,6 @@
 #include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrTextureProxy.h"
 
-class GrContext;
 class GrResourceProvider;
 
 /**
@@ -60,15 +59,16 @@ private:
 class GrProcessor {
 public:
     enum ClassID {
+        kNull_ClassID,  // Reserved ID for missing (null) processors
+
         kBigKeyProcessor_ClassID,
+        kBlendFragmentProcessor_ClassID,
         kBlockInputFragmentProcessor_ClassID,
         kButtCapStrokedCircleGeometryProcessor_ClassID,
         kCircleGeometryProcessor_ClassID,
         kCircularRRectEffect_ClassID,
         kClockwiseTestProcessor_ClassID,
         kColorTableEffect_ClassID,
-        kComposeOneFragmentProcessor_ClassID,
-        kComposeTwoFragmentProcessor_ClassID,
         kCoverageSetOpXP_ClassID,
         kCubicStrokeProcessor_ClassID,
         kCustomXP_ClassID,
@@ -82,6 +82,7 @@ public:
         kEllipticalRRectEffect_ClassID,
         kGP_ClassID,
         kVertexColorSpaceBenchGP_ClassID,
+        kGrArithmeticProcessor_ClassID,
         kGrAARectEffect_ClassID,
         kGrAlphaThresholdFragmentProcessor_ClassID,
         kGrBicubicEffect_ClassID,
@@ -96,28 +97,30 @@ public:
         kGrColorMatrixFragmentProcessor_ClassID,
         kGrColorSpaceXformEffect_ClassID,
         kGrComposeLerpEffect_ClassID,
-        kGrComposeLerpRedEffect_ClassID,
         kGrConfigConversionEffect_ClassID,
         kGrConicEffect_ClassID,
         kGrConstColorProcessor_ClassID,
         kGrConvexPolyEffect_ClassID,
-        kGrDeviceSpaceTextureDecalFragmentProcessor_ClassID,
+        kGrDeviceSpaceEffect_ClassID,
         kGrDiffuseLightingEffect_ClassID,
         kGrDisplacementMapEffect_ClassID,
         kGrDistanceFieldA8TextGeoProc_ClassID,
         kGrDistanceFieldLCDTextGeoProc_ClassID,
         kGrDistanceFieldPathGeoProc_ClassID,
+        kGrDitherEffect_ClassID,
         kGrDualIntervalGradientColorizer_ClassID,
         kGrEllipseEffect_ClassID,
         kGrFillRRectOp_Processor_ClassID,
         kGrGaussianConvolutionFragmentProcessor_ClassID,
         kGrGSCoverageProcessor_ClassID,
+        kGrHighContrastFilterEffect_ClassID,
         kGrHSLToRGBFilterEffect_ClassID,
         kGrImprovedPerlinNoiseEffect_ClassID,
         kGrLinearGradientLayout_ClassID,
         kGrLumaColorFilterEffect_ClassID,
         kGrMagnifierEffect_ClassID,
         kGrMatrixConvolutionEffect_ClassID,
+        kGrMatrixEffect_ClassID,
         kGrMeshTestProcessor_ClassID,
         kGrMorphologyEffect_ClassID,
         kGrMixerEffect_ClassID,
@@ -125,7 +128,6 @@ public:
         kGrPathProcessor_ClassID,
         kGrPerlinNoise2Effect_ClassID,
         kGrPipelineDynamicStateTestProcessor_ClassID,
-        kGrPremulInputFragmentProcessor_ClassID,
         kGrQuadEffect_ClassID,
         kGrRadialGradientLayout_ClassID,
         kGrRectBlurEffect_ClassID,
@@ -135,7 +137,6 @@ public:
         kGrSingleIntervalGradientColorizer_ClassID,
         kGrSkSLFP_ClassID,
         kGrSpecularLightingEffect_ClassID,
-        kGrSRGBEffect_ClassID,
         kGrSampleMaskProcessor_ClassID,
         kGrSweepGradientLayout_ClassID,
         kGrTextureEffect_ClassID,
@@ -163,21 +164,24 @@ public:
         kTessellate_GrFillBoundingBoxShader_ClassID,
         kTessellate_GrFillCubicHullShader_ClassID,
         kTessellate_GrFillTriangleShader_ClassID,
-        kTessellate_GrStencilCubicShader_ClassID,
+        kTessellate_GrMiddleOutCubicShader_ClassID,
         kTessellate_GrStencilTriangleShader_ClassID,
-        kTessellate_GrStencilWedgeShader_ClassID,
+        kTessellate_GrTessellateCubicShader_ClassID,
+        kTessellate_GrTessellateStrokeShader_ClassID,
+        kTessellate_GrTessellateWedgeShader_ClassID,
         kTestFP_ClassID,
         kTestRectOp_ClassID,
         kFlatNormalsFP_ClassID,
         kMappedNormalsFP_ClassID,
         kLightingFP_ClassID,
         kLinearStrokeProcessor_ClassID,
+        kVerticesGP_ClassID,
     };
 
     virtual ~GrProcessor() = default;
 
-    /** Human-meaningful string to identify this prcoessor; may be embedded in generated shader
-        code. */
+    /** Human-meaningful string to identify this processor; may be embedded in generated shader
+        code and must be a legal SkSL identifier prefix. */
     virtual const char* name() const = 0;
 
     /** Human-readable dump of all information */

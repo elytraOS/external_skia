@@ -14,10 +14,11 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrTexture.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/gl/GrGLTypes.h"
 #include "include/private/GrGLTypesPriv.h"
 #include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/gl/GrGLCaps.h"
 #include "src/gpu/gl/GrGLTexture.h"
@@ -46,10 +47,10 @@ static bool params_valid(const GrGLTextureParameters& parameters, const GrGLCaps
 }
 
 DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
+    auto context = ctxInfo.directContext();
 
     GrBackendTexture backendTex = context->createBackendTexture(
-            1, 1, kRGBA_8888_SkColorType, GrMipMapped::kNo, GrRenderable::kNo, GrProtected::kNo);
+            1, 1, kRGBA_8888_SkColorType, GrMipmapped::kNo, GrRenderable::kNo, GrProtected::kNo);
     REPORTER_ASSERT(reporter, backendTex.isValid());
 
     GrGLTextureInfo info;
@@ -83,7 +84,7 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
             SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kPremul_SkAlphaType), 1, nullptr);
     REPORTER_ASSERT(reporter, surf);
     surf->getCanvas()->drawImage(wrappedImage, 0, 0);
-    surf->flush();
+    surf->flushAndSubmit();
 
     auto caps = static_cast<const GrGLCaps*>(context->priv().caps());
     // Now the texture should be in a known state.
@@ -95,7 +96,7 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
 
     REPORTER_ASSERT(reporter, surf);
     surf->getCanvas()->drawImage(wrappedImage, 0, 0);
-    surf->flush();
+    surf->flushAndSubmit();
     REPORTER_ASSERT(reporter, params_valid(*parameters, caps));
 
     // Test invalidating from the copy.
@@ -126,9 +127,8 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, GrBackendTexture::TestingOnly_Equals(invalidTexture, invalidTexture));
 
     wrappedImage.reset();
-    GrFlushInfo flushInfo;
-    flushInfo.fFlags = kSyncCpu_GrFlushFlag;
-    context->flush(flushInfo);
+    context->flush();
+    context->submit(true);
     context->deleteBackendTexture(backendTex);
 }
 #endif

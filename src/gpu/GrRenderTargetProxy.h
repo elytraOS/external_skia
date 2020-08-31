@@ -60,7 +60,7 @@ public:
     bool wrapsVkSecondaryCB() const { return fWrapsVkSecondaryCB == WrapsVkSecondaryCB::kYes; }
 
     void markMSAADirty(const SkIRect& dirtyRect, GrSurfaceOrigin origin) {
-        SkASSERT(SkIRect::MakeSize(this->dimensions()).contains(dirtyRect));
+        SkASSERT(SkIRect::MakeSize(this->backingStoreDimensions()).contains(dirtyRect));
         SkASSERT(this->requiresManualMSAAResolve());
         auto nativeRect = GrNativeRect::MakeRelativeTo(
                 origin, this->backingStoreDimensions().height(), dirtyRect);
@@ -95,7 +95,6 @@ protected:
                         const GrBackendFormat&,
                         SkISize,
                         int sampleCount,
-                        const GrSwizzle& textureSwizzle,
                         SkBackingFit,
                         SkBudgeted,
                         GrProtected,
@@ -118,7 +117,6 @@ protected:
                         const GrBackendFormat&,
                         SkISize,
                         int sampleCount,
-                        const GrSwizzle& textureSwizzle,
                         SkBackingFit,
                         SkBudgeted,
                         GrProtected,
@@ -128,7 +126,6 @@ protected:
 
     // Wrapped version
     GrRenderTargetProxy(sk_sp<GrSurface>,
-                        const GrSwizzle& textureSwizzle,
                         UseAllocator,
                         WrapsVkSecondaryCB = WrapsVkSecondaryCB::kNo);
 
@@ -145,6 +142,8 @@ private:
 
     size_t onUninstantiatedGpuMemorySize(const GrCaps&) const override;
     SkDEBUGCODE(void onValidateSurface(const GrSurface*) override;)
+
+            LazySurfaceDesc callbackDesc() const override;
 
     // WARNING: Be careful when adding or removing fields here. ASAN is likely to trigger warnings
     // when instantiating GrTextureRenderTargetProxy. The std::function in GrSurfaceProxy makes

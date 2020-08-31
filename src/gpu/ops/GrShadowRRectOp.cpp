@@ -7,12 +7,13 @@
 
 #include "src/gpu/ops/GrShadowRRectOp.h"
 
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkRRectPriv.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrDrawOpTest.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/effects/GrShadowGeoProc.h"
@@ -539,13 +540,27 @@ private:
 
     }
 
-    void onPrepareDraws(Target* target) override {
-        // Setup geometry processor
-        GrGeometryProcessor* gp = GrRRectShadowGeoProc::Make(target->allocator(),
-                                                             fFalloffView);
+    GrProgramInfo* programInfo() override { return fProgramInfo; }
 
-        int instanceCount = fGeoData.count();
+    void onCreateProgramInfo(const GrCaps* caps,
+                             SkArenaAlloc* arena,
+                             const GrSurfaceProxyView* writeView,
+                             GrAppliedClip&& appliedClip,
+                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+        GrGeometryProcessor* gp = GrRRectShadowGeoProc::Make(arena, fFalloffView);
         SkASSERT(sizeof(CircleVertex) == gp->vertexStride());
+
+        fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps, arena, writeView,
+                                                                   std::move(appliedClip),
+                                                                   dstProxyView, gp,
+                                                                   GrProcessorSet::MakeEmptySet(),
+                                                                   GrPrimitiveType::kTriangles,
+                                                                   GrPipeline::InputFlags::kNone,
+                                                                   &GrUserStencilSettings::kUnused);
+    }
+
+    void onPrepareDraws(Target* target) override {
+        int instanceCount = fGeoData.count();
 
         sk_sp<const GrBuffer> vertexBuffer;
         int firstVertex;
@@ -593,22 +608,24 @@ private:
             }
         }
 
-        auto fixedDynamicState = target->makeFixedDynamicState(1);
-        fixedDynamicState->fPrimitiveProcessorTextures[0] = fFalloffView.proxy();
-
-        GrMesh* mesh = target->allocMesh();
-        mesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
-                         GrPrimitiveRestart::kNo);
-        mesh->setVertexData(std::move(vertexBuffer), firstVertex);
-        target->recordDraw(gp, mesh, 1, fixedDynamicState, nullptr, GrPrimitiveType::kTriangles);
+        fMesh = target->allocMesh();
+        fMesh->setIndexed(std::move(indexBuffer), fIndexCount, firstIndex, 0, fVertCount - 1,
+                          GrPrimitiveRestart::kNo, std::move(vertexBuffer), firstVertex);
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
-                                                                 GrProcessorSet::MakeEmptySet(),
-                                                                 GrPipeline::InputFlags::kNone);
+        if (!fProgramInfo) {
+            this->createProgramInfo(flushState);
+        }
 
-        flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
+        if (!fProgramInfo || !fMesh) {
+            return;
+        }
+
+        flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
+        flushState->bindTextures(fProgramInfo->primProc(), *fFalloffView.proxy(),
+                                 fProgramInfo->pipeline());
+        flushState->drawMesh(*fMesh);
     }
 
     CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
@@ -621,13 +638,19 @@ private:
     }
 
     void visitProxies(const VisitProxyFunc& func) const override {
-        func(fFalloffView.proxy(), GrMipMapped(false));
+        func(fFalloffView.proxy(), GrMipmapped(false));
+        if (fProgramInfo) {
+            fProgramInfo->visitFPProxies(func);
+        }
     }
 
     SkSTArray<1, Geometry, true> fGeoData;
     int fVertCount;
     int fIndexCount;
     GrSurfaceProxyView fFalloffView;
+
+    GrSimpleMesh*      fMesh = nullptr;
+    GrProgramInfo*     fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
 };
@@ -646,8 +669,7 @@ static GrSurfaceProxyView create_falloff_texture(GrRecordingContext* context) {
 
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
 
-    if (sk_sp<GrTextureProxy> falloffTexture =
-                proxyProvider->findOrCreateProxyByUniqueKey(key, GrColorType::kAlpha_8)) {
+    if (sk_sp<GrTextureProxy> falloffTexture = proxyProvider->findOrCreateProxyByUniqueKey(key)) {
         GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(falloffTexture->backendFormat(),
                                                                    GrColorType::kAlpha_8);
         return {std::move(falloffTexture), kTopLeft_GrSurfaceOrigin, swizzle};
@@ -667,8 +689,8 @@ static GrSurfaceProxyView create_falloff_texture(GrRecordingContext* context) {
     }
     bitmap.setImmutable();
 
-    GrBitmapTextureMaker maker(context, bitmap);
-    auto[view, grCT] = maker.view(GrMipMapped::kNo);
+    GrBitmapTextureMaker maker(context, bitmap, GrImageTexGenPolicy::kNew_Uncached_Budgeted);
+    auto view = maker.view(GrMipmapped::kNo);
     SkASSERT(view.origin() == kTopLeft_GrSurfaceOrigin);
 
     if (view) {

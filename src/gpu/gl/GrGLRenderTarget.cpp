@@ -6,7 +6,7 @@
  */
 
 #include "include/core/SkTraceMemoryDump.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrRenderTargetPriv.h"
@@ -102,7 +102,7 @@ GrBackendFormat GrGLRenderTarget::backendFormat() const {
 size_t GrGLRenderTarget::onGpuMemorySize() const {
     const GrCaps& caps = *this->getGpu()->caps();
     return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
-                                  fNumSamplesOwnedPerPixel, GrMipMapped::kNo);
+                                  fNumSamplesOwnedPerPixel, GrMipmapped::kNo);
 }
 
 bool GrGLRenderTarget::completeStencilAttachment() {
@@ -117,7 +117,7 @@ bool GrGLRenderTarget::completeStencilAttachment() {
                                                       GR_GL_DEPTH_ATTACHMENT,
                                                       GR_GL_RENDERBUFFER, 0));
 #ifdef SK_DEBUG
-        if (kChromium_GrGLDriver != gpu->glContext().driver()) {
+        if (!gpu->glCaps().skipErrorChecks()) {
             // This check can cause problems in Chromium if the context has been asynchronously
             // abandoned (see skbug.com/5200)
             GrGLenum status;
@@ -147,7 +147,7 @@ bool GrGLRenderTarget::completeStencilAttachment() {
 
 
 #ifdef SK_DEBUG
-        if (kChromium_GrGLDriver != gpu->glContext().driver()) {
+        if (!gpu->glCaps().skipErrorChecks()) {
             // This check can cause problems in Chromium if the context has been asynchronously
             // abandoned (see skbug.com/5200)
             GrGLenum status;
@@ -220,7 +220,7 @@ void GrGLRenderTarget::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) 
     if (fMSColorRenderbufferID) {
         const GrCaps& caps = *this->getGpu()->caps();
         size_t size = GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
-                                             this->msaaSamples(), GrMipMapped::kNo);
+                                             this->msaaSamples(), GrMipmapped::kNo);
 
         // Due to this resource having both a texture and a renderbuffer component, dump as
         // skia/gpu_resources/resource_#/renderbuffer

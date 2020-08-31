@@ -24,7 +24,6 @@
 #include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #endif
@@ -104,14 +103,7 @@ sk_sp<SkFlattenable> SkBlurImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
     SkScalar sigmaX = buffer.readScalar();
     SkScalar sigmaY = buffer.readScalar();
-    SkTileMode tileMode;
-    if (buffer.isVersionLT(SkPicturePriv::kTileModeInBlurImageFilter_Version)) {
-        tileMode = SkTileMode::kDecal;
-    } else if (buffer.isVersionLT(SkPicturePriv::kCleanupImageFilterEnums_Version)) {
-        tileMode = to_sktilemode(buffer.read32LE(SkBlurImageFilter::kLast_TileMode));
-    } else {
-        tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
-    }
+    SkTileMode tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
 
     static_assert(SkBlurImageFilter::kLast_TileMode == 2, "CreateProc");
 

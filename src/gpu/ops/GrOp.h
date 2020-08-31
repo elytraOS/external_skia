@@ -11,8 +11,8 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkString.h"
-#include "include/gpu/GrGpuResource.h"
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "src/gpu/GrGpuResource.h"
 #include "src/gpu/GrNonAtomicRef.h"
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/GrXferProcessor.h"
@@ -70,7 +70,7 @@ public:
 
     virtual const char* name() const = 0;
 
-    using VisitProxyFunc = std::function<void(GrSurfaceProxy*, GrMipMapped)>;
+    using VisitProxyFunc = std::function<void(GrSurfaceProxy*, GrMipmapped)>;
 
     virtual void visitProxies(const VisitProxyFunc&) const {
         // This default implementation assumes the op has no proxies
@@ -297,9 +297,9 @@ private:
 
     // TODO: the parameters to onPrePrepare mirror GrOpFlushState::OpArgs - fuse the two?
     virtual void onPrePrepare(GrRecordingContext*,
-                              const GrSurfaceProxyView*,
+                              const GrSurfaceProxyView* writeView,
                               GrAppliedClip*,
-                              const GrXferProcessor::DstProxyView&) {}
+                              const GrXferProcessor::DstProxyView&) = 0;
     virtual void onPrepare(GrOpFlushState*) = 0;
     // If this op is chained then chainBounds is the union of the bounds of all ops in the chain.
     // Otherwise, this op's bounds.

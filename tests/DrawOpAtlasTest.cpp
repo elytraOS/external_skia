@@ -17,7 +17,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/private/GrTypesPriv.h"
 #include "src/core/SkIPoint16.h"
 #include "src/gpu/GrCaps.h"
@@ -31,10 +31,10 @@
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/ops/GrAtlasTextOp.h"
 #include "src/gpu/ops/GrDrawOp.h"
 #include "src/gpu/ops/GrOp.h"
 #include "src/gpu/text/GrAtlasManager.h"
-#include "src/gpu/text/GrTextContext.h"
 #include "tests/Test.h"
 #include "tools/gpu/GrContextFactory.h"
 
@@ -74,7 +74,7 @@ void GrDrawOpAtlas::setMaxPages_TestingOnly(uint32_t maxPages) {
 
 class DummyEvict : public GrDrawOpAtlas::EvictionCallback {
 public:
-    void evict(GrDrawOpAtlas::PlotLocator plotLocator) override {
+    void evict(GrDrawOpAtlas::PlotLocator) override {
         SkASSERT(0); // The unit test shouldn't exercise this code path
     }
 };
@@ -114,7 +114,7 @@ private:
 static bool fill_plot(GrDrawOpAtlas* atlas,
                       GrResourceProvider* resourceProvider,
                       GrDeferredUploadTarget* target,
-                      GrDrawOpAtlas::PlotLocator* plotLocator,
+                      GrDrawOpAtlas::AtlasLocator* atlasLocator,
                       int alpha) {
     SkImageInfo ii = SkImageInfo::MakeA8(kPlotSize, kPlotSize);
 
@@ -122,10 +122,9 @@ static bool fill_plot(GrDrawOpAtlas* atlas,
     data.allocPixels(ii);
     data.eraseARGB(alpha, 0, 0, 0);
 
-    SkIPoint16 loc;
     GrDrawOpAtlas::ErrorCode code;
-    code = atlas->addToAtlas(resourceProvider, plotLocator, target, kPlotSize, kPlotSize,
-                              data.getAddr(0, 0), &loc);
+    code = atlas->addToAtlas(resourceProvider, target, kPlotSize, kPlotSize,
+                             data.getAddr(0, 0), atlasLocator);
     return GrDrawOpAtlas::ErrorCode::kSucceeded == code;
 }
 
@@ -133,7 +132,7 @@ static bool fill_plot(GrDrawOpAtlas* atlas,
 // This is a basic DrawOpAtlas test. It simply verifies that multitexture atlases correctly
 // add and remove pages. Note that this is simulating flush-time behavior.
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(BasicDrawOpAtlas, reporter, ctxInfo) {
-    auto context = ctxInfo.grContext();
+    auto context = ctxInfo.directContext();
     auto proxyProvider = context->priv().proxyProvider();
     auto resourceProvider = context->priv().resourceProvider();
     auto drawingManager = context->priv().drawingManager();
@@ -160,10 +159,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(BasicDrawOpAtlas, reporter, ctxInfo) {
     check(reporter, atlas.get(), 0, 4, 0);
 
     // Fill up the first level
-    GrDrawOpAtlas::PlotLocator plotLocators[kNumPlots * kNumPlots];
+    GrDrawOpAtlas::AtlasLocator atlasLocators[kNumPlots * kNumPlots];
     for (int i = 0; i < kNumPlots * kNumPlots; ++i) {
         bool result = fill_plot(
-                atlas.get(), resourceProvider, &uploadTarget, &plotLocators[i], i * 32);
+                atlas.get(), resourceProvider, &uploadTarget, &atlasLocators[i], i * 32);
         REPORTER_ASSERT(reporter, result);
         check(reporter, atlas.get(), 1, 4, 1);
     }
@@ -172,14 +171,14 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(BasicDrawOpAtlas, reporter, ctxInfo) {
     check(reporter, atlas.get(), 1, 4, 1);
 
     // Force allocation of a second level
-    GrDrawOpAtlas::PlotLocator plotLocator;
-    bool result = fill_plot(atlas.get(), resourceProvider, &uploadTarget, &plotLocator, 4 * 32);
+    GrDrawOpAtlas::AtlasLocator atlasLocator;
+    bool result = fill_plot(atlas.get(), resourceProvider, &uploadTarget, &atlasLocator, 4 * 32);
     REPORTER_ASSERT(reporter, result);
     check(reporter, atlas.get(), 2, 4, 2);
 
     // Simulate a lot of draws using only the first plot. The last texture should be compacted.
     for (int i = 0; i < 512; ++i) {
-        atlas->setLastUseToken(plotLocators[0], uploadTarget.tokenTracker()->nextDrawToken());
+        atlas->setLastUseToken(atlasLocators[0], uploadTarget.tokenTracker()->nextDrawToken());
         uploadTarget.issueDrawToken();
         uploadTarget.flushToken();
         atlas->compact(uploadTarget.tokenTracker()->nextTokenToFlush());
@@ -192,12 +191,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(BasicDrawOpAtlas, reporter, ctxInfo) {
 // when allocating an atlas page.
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation, reporter, ctxInfo) {
 
-    auto context = ctxInfo.grContext();
+    auto context = ctxInfo.directContext();
 
     auto gpu = context->priv().getGpu();
     auto resourceProvider = context->priv().resourceProvider();
-    auto drawingManager = context->priv().drawingManager();
-    auto textContext = drawingManager->getTextContext();
     auto opMemoryPool = context->priv().opMemoryPool();
 
     auto rtc = GrRenderTargetContext::Make(
@@ -210,9 +207,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation, reporter, ctxInfo) 
     font.setEdging(SkFont::Edging::kAlias);
 
     const char* text = "a";
+    SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
 
-    std::unique_ptr<GrDrawOp> op = textContext->createOp_TestingOnly(
-            context, textContext, rtc.get(), paint, font, SkMatrix::I(), text, 16, 16);
+    std::unique_ptr<GrDrawOp> op =
+            GrAtlasTextOp::CreateOpTestingOnly(
+                    rtc.get(), paint, font, matrixProvider, text, 16, 16);
+    if (!op) {
+        return;
+    }
+
     bool hasMixedSampledCoverage = false;
     op->finalize(*context->priv().caps(), nullptr, hasMixedSampledCoverage, GrClampType::kAuto);
 
@@ -220,7 +223,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation, reporter, ctxInfo) 
 
     GrOpFlushState flushState(gpu, resourceProvider, uploadTarget.writeableTokenTracker());
 
-    GrSurfaceProxyView surfaceView = rtc->outputSurfaceView();
+    GrSurfaceProxyView surfaceView = rtc->writeSurfaceView();
     GrOpFlushState::OpArgs opArgs(op.get(),
                                   &surfaceView,
                                   nullptr,

@@ -8,7 +8,6 @@
 #include "src/gpu/effects/GrCustomXfermode.h"
 
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrProcessor.h"
@@ -62,7 +61,7 @@ static bool can_use_hw_blend_equation(GrBlendEquation equation,
     if (GrProcessorAnalysisCoverage::kLCD == coverage) {
         return false; // LCD coverage must be applied after the blend equation.
     }
-    if (caps.isAdvancedBlendEquationBlacklisted(equation)) {
+    if (caps.isAdvancedBlendEquationDisabled(equation)) {
         return false;
     }
     return true;

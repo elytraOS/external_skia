@@ -8,7 +8,10 @@
 #ifndef GrRecordingContextPriv_DEFINED
 #define GrRecordingContextPriv_DEFINED
 
-#include "include/private/GrRecordingContext.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "src/gpu/text/GrSDFTOptions.h"
+
+class SkDeferredDisplayList;
 
 /** Class that exposes methods to GrRecordingContext that are only intended for use internal to
     Skia. This class is purely a privileged window into GrRecordingContext. It should never have
@@ -27,13 +30,10 @@ public:
 
     GrImageContext* asImageContext() { return fContext->asImageContext(); }
     GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
-    GrContext* asDirectContext() { return fContext->asDirectContext(); }
 
     // from GrImageContext
     GrProxyProvider* proxyProvider() { return fContext->proxyProvider(); }
     const GrProxyProvider* proxyProvider() const { return fContext->proxyProvider(); }
-
-    bool abandoned() const { return fContext->abandoned(); }
 
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* singleOwner() const { return fContext->singleOwner(); } )
@@ -55,8 +55,9 @@ public:
         fContext->detachProgramData(dst);
     }
 
-    GrStrikeCache* getGrStrikeCache() { return fContext->getGrStrikeCache(); }
     GrTextBlobCache* getTextBlobCache() { return fContext->getTextBlobCache(); }
+
+    void moveRenderTasksToDDL(SkDeferredDisplayList*);
 
     /**
      * Registers an object for flush-related callbacks. (See GrOnFlushCallbackObject.)
@@ -98,6 +99,19 @@ public:
 #endif
         SkDebugf(msg);
     }
+
+    GrRecordingContext::Stats* stats() {
+        return &fContext->fStats;
+    }
+
+    GrSDFTOptions SDFTOptions() const {
+        return {this->options().fMinDistanceFieldFontSize, this->options().fGlyphsAsPathsFontSize};
+    }
+
+    /**
+     * Create a GrRecordingContext without a resource cache
+     */
+    static sk_sp<GrRecordingContext> MakeDDL(sk_sp<GrContextThreadSafeProxy>);
 
 private:
     explicit GrRecordingContextPriv(GrRecordingContext* context) : fContext(context) {}

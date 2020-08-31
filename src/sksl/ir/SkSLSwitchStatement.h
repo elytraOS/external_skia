@@ -28,6 +28,14 @@ struct SwitchStatement : public Statement {
     , fSymbols(std::move(symbols))
     , fCases(std::move(cases)) {}
 
+    int nodeCount() const override {
+        int result = 1 + fValue->nodeCount();
+        for (const auto& c : fCases) {
+            result += c->nodeCount();
+        }
+        return result;
+    }
+
     std::unique_ptr<Statement> clone() const override {
         std::vector<std::unique_ptr<SwitchCase>> cloned;
         for (const auto& s : fCases) {
@@ -37,7 +45,6 @@ struct SwitchStatement : public Statement {
                                                               std::move(cloned), fSymbols));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         String result;
         if (fIsStatic) {
@@ -50,7 +57,6 @@ struct SwitchStatement : public Statement {
         result += "}";
         return result;
     }
-#endif
 
     bool fIsStatic;
     std::unique_ptr<Expression> fValue;

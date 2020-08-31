@@ -1,0 +1,19 @@
+name: "skia"
+description: "Skia Graphics Library"
+third_party {
+  url {
+    type: HOMEPAGE
+    value: "https://www.skia.org/"
+  }
+  url {
+    type: GIT
+    value: "https://skia.googlesource.com/skia"
+  }
+  version: "53453f76b5d0de7cd98af871977dae654947cd44"
+  license_type: RECIPROCAL
+  last_upgrade_date {
+    year: 2020
+    month: 7
+    day: 26
+  }
+}

@@ -18,10 +18,9 @@ class SkMetaData;
 
 class Slide : public SkRefCnt {
 public:
-    virtual ~Slide() {}
-
     virtual SkISize getDimensions() const = 0;
 
+    virtual void gpuTeardown() { }
     virtual void draw(SkCanvas* canvas) = 0;
     virtual bool animate(double nanos) { return false; }
     virtual void load(SkScalar winWidth, SkScalar winHeight) {}

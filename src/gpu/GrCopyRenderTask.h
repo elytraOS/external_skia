@@ -12,21 +12,21 @@
 
 class GrCopyRenderTask final : public GrRenderTask {
 public:
-    static sk_sp<GrRenderTask> Make(GrSurfaceProxyView srcView,
+    static sk_sp<GrRenderTask> Make(GrDrawingManager*,
+                                    GrSurfaceProxyView srcView,
                                     const SkIRect& srcRect,
                                     GrSurfaceProxyView dstView,
                                     const SkIPoint& dstPoint,
                                     const GrCaps*);
 
 private:
-    GrCopyRenderTask(GrSurfaceProxyView srcView,
+    GrCopyRenderTask(GrDrawingManager*,
+                     GrSurfaceProxyView srcView,
                      const SkIRect& srcRect,
                      GrSurfaceProxyView dstView,
                      const SkIPoint& dstPoint);
 
     bool onIsUsed(GrSurfaceProxy* proxy) const override {
-        // This case should be handled by GrRenderTask.
-        SkASSERT(proxy != fTargetView.proxy());
         return proxy == fSrcView.proxy();
     }
     // If instantiation failed, at flush time we simply will skip doing the copy.
@@ -40,8 +40,9 @@ private:
     bool onExecute(GrOpFlushState*) override;
 
 #ifdef SK_DEBUG
+    const char* name() const final { return "Copy"; }
     void visitProxies_debugOnly(const GrOp::VisitProxyFunc& fn) const override {
-        fn(fSrcView.proxy(), GrMipMapped::kNo);
+        fn(fSrcView.proxy(), GrMipmapped::kNo);
     }
 #endif
 

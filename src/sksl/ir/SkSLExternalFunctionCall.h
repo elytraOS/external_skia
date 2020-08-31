@@ -36,6 +36,14 @@ struct ExternalFunctionCall : public Expression {
         return false;
     }
 
+    int nodeCount() const override {
+        int result = 1;
+        for (const auto& a : fArguments) {
+            result += a->nodeCount();
+        }
+        return result;
+    }
+
     std::unique_ptr<Expression> clone() const override {
         std::vector<std::unique_ptr<Expression>> cloned;
         for (const auto& arg : fArguments) {
@@ -47,7 +55,6 @@ struct ExternalFunctionCall : public Expression {
                                                                     std::move(cloned)));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         String result = String(fFunction->fName) + "(";
         String separator;
@@ -59,7 +66,6 @@ struct ExternalFunctionCall : public Expression {
         result += ")";
         return result;
     }
-#endif
 
     ExternalValue* fFunction;
     std::vector<std::unique_ptr<Expression>> fArguments;

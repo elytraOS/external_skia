@@ -3,9 +3,17 @@
 #define ParagraphStyle_DEFINED
 
 #include "include/core/SkFontStyle.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
 #include "modules/skparagraph/include/DartTypes.h"
 #include "modules/skparagraph/include/TextStyle.h"
-#include <string>  // std::u16string
+
+#include <stddef.h>
+#include <algorithm>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace skia {
 namespace textlayout {
@@ -91,6 +99,10 @@ struct ParagraphStyle {
     SkScalar getHeight() const { return fHeight; }
     void setHeight(SkScalar height) { fHeight = height; }
 
+
+    TextHeightBehavior getTextHeightBehavior() const { return fTextHeightBehavior; }
+    void setTextHeightBehavior(TextHeightBehavior v) { fTextHeightBehavior = v; }
+
     bool unlimited_lines() const {
         return fLinesLimit == std::numeric_limits<size_t>::max();
     }
@@ -107,6 +119,7 @@ private:
     size_t fLinesLimit;
     SkString fEllipsis;
     SkScalar fHeight;
+    TextHeightBehavior fTextHeightBehavior;
     bool fHintingIsOn;
 };
 }  // namespace textlayout

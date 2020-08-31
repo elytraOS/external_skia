@@ -26,16 +26,19 @@ struct FunctionDefinition : public ProgramElement {
     , fDeclaration(declaration)
     , fBody(std::move(body)) {}
 
+    bool canBeInlined() const {
+        static const int INLINE_THRESHOLD = 50; // chosen arbitrarily, feel free to adjust
+        return fBody->nodeCount() < INLINE_THRESHOLD;
+    }
+
     std::unique_ptr<ProgramElement> clone() const override {
         return std::unique_ptr<ProgramElement>(new FunctionDefinition(fOffset, fDeclaration,
                                                                       fBody->clone()));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return fDeclaration.description() + " " + fBody->description();
     }
-#endif
 
     const FunctionDeclaration& fDeclaration;
     std::unique_ptr<Statement> fBody;

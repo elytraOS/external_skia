@@ -23,16 +23,18 @@ struct WhileStatement : public Statement {
     , fTest(std::move(test))
     , fStatement(std::move(statement)) {}
 
+    int nodeCount() const override {
+        return 1 + fTest->nodeCount() + fStatement->nodeCount();
+    }
+
     std::unique_ptr<Statement> clone() const override {
         return std::unique_ptr<Statement>(new WhileStatement(fOffset, fTest->clone(),
                                                              fStatement->clone()));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return "while (" + fTest->description() + ") " + fStatement->description();
     }
-#endif
 
     std::unique_ptr<Expression> fTest;
     std::unique_ptr<Statement> fStatement;

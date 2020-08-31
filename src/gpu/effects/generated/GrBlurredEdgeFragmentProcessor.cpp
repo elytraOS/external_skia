@@ -10,7 +10,7 @@
  **************************************************************************************************/
 #include "GrBlurredEdgeFragmentProcessor.h"
 
-#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -26,12 +26,21 @@ public:
         (void)_outer;
         auto mode = _outer.mode;
         (void)mode;
+        SkString _sample308 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
-                "half factor = 1.0 - %s.w;\n@switch (%d) {\n    case 0:\n        factor = "
-                "exp((-factor * factor) * 4.0) - 0.017999999225139618;\n        break;\n    case "
-                "1:\n        factor = smoothstep(1.0, 0.0, factor);\n        break;\n}\n%s = "
-                "half4(factor);\n",
-                args.fInputColor, (int)_outer.mode, args.fOutputColor);
+                R"SkSL(half inputAlpha = %s.w;
+half factor = 1.0 - inputAlpha;
+@switch (%d) {
+    case 0:
+        factor = exp((-factor * factor) * 4.0) - 0.017999999225139618;
+        break;
+    case 1:
+        factor = smoothstep(1.0, 0.0, factor);
+        break;
+}
+%s = half4(factor);
+)SkSL",
+                _sample308.c_str(), (int)_outer.mode, args.fOutputColor);
     }
 
 private:
@@ -54,7 +63,9 @@ bool GrBlurredEdgeFragmentProcessor::onIsEqual(const GrFragmentProcessor& other)
 GrBlurredEdgeFragmentProcessor::GrBlurredEdgeFragmentProcessor(
         const GrBlurredEdgeFragmentProcessor& src)
         : INHERITED(kGrBlurredEdgeFragmentProcessor_ClassID, src.optimizationFlags())
-        , mode(src.mode) {}
+        , mode(src.mode) {
+    this->cloneAndRegisterAllChildProcessors(src);
+}
 std::unique_ptr<GrFragmentProcessor> GrBlurredEdgeFragmentProcessor::clone() const {
     return std::unique_ptr<GrFragmentProcessor>(new GrBlurredEdgeFragmentProcessor(*this));
 }

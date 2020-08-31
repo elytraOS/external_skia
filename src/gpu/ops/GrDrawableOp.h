@@ -41,6 +41,12 @@ private:
                                       const GrCaps& caps) override {
         return CombineResult::kCannotCombine;
     }
+
+    void onPrePrepare(GrRecordingContext*,
+                      const GrSurfaceProxyView* writeView,
+                      GrAppliedClip*,
+                      const GrXferProcessor::DstProxyView&) override {}
+
     void onPrepare(GrOpFlushState*) override {}
 
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;

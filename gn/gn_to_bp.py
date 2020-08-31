@@ -7,6 +7,8 @@
 
 # Generate Android.bp for Skia from GN configuration.
 
+from __future__ import print_function
+
 import os
 import pprint
 import string
@@ -58,18 +60,6 @@ cc_library_static {
         arm64: {
             srcs: [
                 $arm64_srcs
-            ],
-        },
-
-        mips: {
-            srcs: [
-                $none_srcs
-            ],
-        },
-
-        mips64: {
-            srcs: [
-                $none_srcs
             ],
         },
 
@@ -179,7 +169,6 @@ cc_defaults {
 cc_defaults {
     name: "skia_deps",
     shared_libs: [
-        "libandroidicu",
         "libdng_sdk",
         "libexpat",
         "libft2",
@@ -240,10 +229,15 @@ cc_defaults {
         "skia_deps",
         "skia_pgo_no_profile_use"
     ],
+    shared_libs: [
+        "libandroidicu",
+        "libharfbuzz_ng",
+    ],
     static_libs: [
         "libskia",
     ],
     cflags: [
+        "-DSK_SHAPER_HARFBUZZ_AVAILABLE",
         "-Wno-implicit-fallthrough",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
@@ -294,29 +288,31 @@ cc_test {
 # We'll run GN to get the main source lists and include directories for Skia.
 def generate_args(target_os, enable_gpu):
   d = {
-    'is_official_build':                  'true',
+    'is_official_build':                    'true',
 
     # gn_to_bp_utils' GetArchSources will take care of architecture-specific
     # files.
-    'target_cpu':                         '"none"',
+    'target_cpu':                           '"none"',
 
+    'skia_enable_android_utils':            'true',
     # Use the custom FontMgr, as the framework will handle fonts.
-    'skia_enable_fontmgr_custom':         'false',
-    'skia_enable_fontmgr_custom_empty':   'true',
-    'skia_enable_fontmgr_android':        'false',
-    'skia_enable_fontmgr_win':            'false',
-    'skia_enable_fontmgr_win_gdi':        'false',
-    'skia_use_fonthost_mac':              'false',
+    'skia_enable_fontmgr_custom_directory': 'false',
+    'skia_enable_fontmgr_custom_embedded':  'false',
+    'skia_enable_fontmgr_custom_empty':     'true',
+    'skia_enable_fontmgr_android':          'false',
+    'skia_enable_fontmgr_win':              'false',
+    'skia_enable_fontmgr_win_gdi':          'false',
+    'skia_use_fonthost_mac':                'false',
 
     # enable features used in skia_nanobench
-    'skia_enable_sksl_interpreter':       'true',
-    'skia_tools_require_resources':       'true',
+    'skia_enable_sksl_interpreter':         'true',
+    'skia_tools_require_resources':         'true',
 
-    'skia_use_freetype':                  'true',
-    'skia_use_fontconfig':                'false',
-    'skia_use_fixed_gamma_text':          'true',
-    'skia_include_multiframe_procs':      'false',
-    'skia_libgifcodec_path':              '"third_party/libgifcodec"',
+    'skia_use_freetype':                    'true',
+    'skia_use_fontconfig':                  'false',
+    'skia_use_fixed_gamma_text':            'true',
+    'skia_include_multiframe_procs':        'false',
+    'skia_libgifcodec_path':                '"third_party/libgifcodec"',
   }
   d['target_os'] = target_os
   if target_os == '"android"':
@@ -442,13 +438,13 @@ def disallow_platforms(config, desired):
         s += ' || '
         if i % 2 == 1:
           s += '\\\n    '
-    print >>f, s
-    print >>f, '    #error "Only SK_BUILD_FOR_%s should be defined!"' % desired
-    print >>f, '#endif'
+    print(s, file=f)
+    print('    #error "Only SK_BUILD_FOR_%s should be defined!"' % desired, file=f)
+    print('#endif', file=f)
 
 def append_to_file(config, s):
   with open(config, 'a') as f:
-    print >>f, s
+    print(s, file=f)
 
 android_config = 'android/include/config/SkUserConfig.h'
 gn_to_bp_utils.WriteUserConfig(android_config, android_defines)
@@ -483,7 +479,7 @@ def bpfmt(indent, lst, sort=True):
 
 # OK!  We have everything to fill in Android.bp...
 with open('Android.bp', 'w') as Android_bp:
-  print >>Android_bp, bp.substitute({
+  print(bp.substitute({
     'export_includes': bpfmt(8, export_includes),
     'local_includes':  bpfmt(8, local_includes),
     'srcs':            bpfmt(8, srcs),
@@ -494,13 +490,13 @@ with open('Android.bp', 'w') as Android_bp:
     'arm_neon_srcs': bpfmt(20, strip_headers(defs['neon'])),
     'arm64_srcs':    bpfmt(16, strip_headers(defs['arm64'] +
                                              defs['crc32'])),
-    'none_srcs':     bpfmt(16, strip_headers(defs['none'])),
     'x86_srcs':      bpfmt(16, strip_headers(defs['sse2'] +
                                              defs['ssse3'] +
                                              defs['sse41'] +
                                              defs['sse42'] +
                                              defs['avx'  ] +
-                                             defs['hsw'  ])),
+                                             defs['hsw'  ] +
+                                             defs['skx'  ])),
 
     'dm_includes'       : bpfmt(8, dm_includes),
     'dm_srcs'           : bpfmt(8, dm_srcs),
@@ -512,4 +508,4 @@ with open('Android.bp', 'w') as Android_bp:
     'linux_srcs':    bpfmt(10, linux_srcs),
     'mac_srcs':      bpfmt(10, mac_srcs),
     'win_srcs':      bpfmt(10, win_srcs),
-  })
+  }), file=Android_bp)

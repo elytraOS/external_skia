@@ -8,7 +8,6 @@
 #ifndef GrBicubicTextureEffect_DEFINED
 #define GrBicubicTextureEffect_DEFINED
 
-#include "src/gpu/effects/GrTextureDomain.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 
 class GrInvariantOutput;
@@ -18,6 +17,11 @@ public:
     enum {
         kFilterTexelPad = 2, // Given a src rect in texels to be filtered, this number of
                              // surrounding texels are needed by the kernel in x and y.
+    };
+
+    enum class Kernel {
+        kMitchell,
+        kCatmullRom,
     };
 
     enum class Direction {
@@ -36,26 +40,28 @@ public:
     }
 
     /**
-     * Create a Mitchell filter effect with specified texture matrix with clamp wrap mode.
+     * Create a bicubic filter effect with specified texture matrix with clamp wrap mode.
      */
     static std::unique_ptr<GrFragmentProcessor> Make(GrSurfaceProxyView view,
                                                      SkAlphaType,
                                                      const SkMatrix&,
-                                                     Direction direction);
+                                                     Kernel,
+                                                     Direction);
 
     /**
-     * Create a Mitchell filter effect for a texture with arbitrary wrap modes.
+     * Create a bicubic filter effect for a texture with arbitrary wrap modes.
      */
     static std::unique_ptr<GrFragmentProcessor> Make(GrSurfaceProxyView view,
                                                      SkAlphaType,
                                                      const SkMatrix&,
                                                      const GrSamplerState::WrapMode wrapX,
                                                      const GrSamplerState::WrapMode wrapY,
+                                                     Kernel,
                                                      Direction,
                                                      const GrCaps&);
 
     /**
-     * Create a Mitchell filter effect for a subset of a texture, specified by a texture coordinate
+     * Create a bicubic filter effect for a subset of a texture, specified by a texture coordinate
      * rectangle subset. The WrapModes apply to the subset.
      */
     static std::unique_ptr<GrFragmentProcessor> MakeSubset(GrSurfaceProxyView view,
@@ -64,17 +70,34 @@ public:
                                                            const GrSamplerState::WrapMode wrapX,
                                                            const GrSamplerState::WrapMode wrapY,
                                                            const SkRect& subset,
+                                                           Kernel,
                                                            Direction,
                                                            const GrCaps&);
+
     /**
-     * Determines whether the bicubic effect should be used based on the transformation from the
-     * local coords to the device. Returns true if the bicubic effect should be used. filterMode
-     * is set to appropriate filtering mode to use regardless of the return result (e.g. when this
-     * returns false it may indicate that the best fallback is to use kMipMap, kBilerp, or
-     * kNearest).
+     * Same as above but provides a known 'domain' that bounds the coords at which bicubic sampling
+     * occurs. Note that this is a bound on the coords after transformed by the matrix parameter.
      */
-    static bool ShouldUseBicubic(const SkMatrix& localCoordsToDevice,
-                                 GrSamplerState::Filter* filterMode);
+    static std::unique_ptr<GrFragmentProcessor> MakeSubset(GrSurfaceProxyView view,
+                                                           SkAlphaType,
+                                                           const SkMatrix&,
+                                                           const GrSamplerState::WrapMode wrapX,
+                                                           const GrSamplerState::WrapMode wrapY,
+                                                           const SkRect& subset,
+                                                           const SkRect& domain,
+                                                           Kernel,
+                                                           Direction,
+                                                           const GrCaps&);
+
+    /**
+     * Make a bicubic filter of a another fragment processor. The bicubic filter assumes that the
+     * discrete samples of the provided processor are at half-integer coords.
+     */
+    static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor>,
+                                                     SkAlphaType,
+                                                     const SkMatrix&,
+                                                     Kernel,
+                                                     Direction);
 
 private:
     class Impl;
@@ -84,7 +107,11 @@ private:
         kPremul,    // clamps a to 0..1 and rgb to 0..a
     };
 
-    GrBicubicEffect(std::unique_ptr<GrFragmentProcessor> fp, Direction direction, Clamp clamp);
+    GrBicubicEffect(std::unique_ptr<GrFragmentProcessor>,
+                    Kernel,
+                    Direction,
+                    Clamp);
+
     explicit GrBicubicEffect(const GrBicubicEffect&);
 
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
@@ -93,7 +120,9 @@ private:
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
-    GrCoordTransform fCoordTransform;
+    SkPMColor4f constantOutputForConstantInput(const SkPMColor4f&) const override;
+
+    Kernel fKernel;
     Direction fDirection;
     Clamp fClamp;
 

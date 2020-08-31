@@ -10,7 +10,7 @@
  **************************************************************************************************/
 #include "GrDualIntervalGradientColorizer.h"
 
-#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -34,20 +34,28 @@ public:
         (void)bias23;
         auto threshold = _outer.threshold;
         (void)threshold;
-        scale01Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                      "scale01");
-        bias01Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                     "bias01");
-        scale23Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                      "scale23");
-        bias23Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
-                                                     "bias23");
-        thresholdVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf_GrSLType,
-                                                        "threshold");
+        scale01Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                      kFloat4_GrSLType, "scale01");
+        bias01Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                     kFloat4_GrSLType, "bias01");
+        scale23Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                      kFloat4_GrSLType, "scale23");
+        bias23Var = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                     kFloat4_GrSLType, "bias23");
+        thresholdVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
+                                                        kHalf_GrSLType, "threshold");
         fragBuilder->codeAppendf(
-                "half t = %s.x;\nfloat4 scale, bias;\nif (t < %s) {\n    scale = %s;\n    bias = "
-                "%s;\n} else {\n    scale = %s;\n    bias = %s;\n}\n%s = half4(float(t) * scale + "
-                "bias);\n",
+                R"SkSL(half t = %s.x;
+float4 scale, bias;
+if (t < %s) {
+    scale = %s;
+    bias = %s;
+} else {
+    scale = %s;
+    bias = %s;
+}
+%s = half4(float(t) * scale + bias);
+)SkSL",
                 args.fInputColor, args.fUniformHandler->getUniformCStr(thresholdVar),
                 args.fUniformHandler->getUniformCStr(scale01Var),
                 args.fUniformHandler->getUniformCStr(bias01Var),
@@ -121,7 +129,9 @@ GrDualIntervalGradientColorizer::GrDualIntervalGradientColorizer(
         , bias01(src.bias01)
         , scale23(src.scale23)
         , bias23(src.bias23)
-        , threshold(src.threshold) {}
+        , threshold(src.threshold) {
+    this->cloneAndRegisterAllChildProcessors(src);
+}
 std::unique_ptr<GrFragmentProcessor> GrDualIntervalGradientColorizer::clone() const {
     return std::unique_ptr<GrFragmentProcessor>(new GrDualIntervalGradientColorizer(*this));
 }

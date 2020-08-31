@@ -20,15 +20,17 @@
 #include "src/core/SkImageFilterCache.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkImagePriv.h"
+#include "src/core/SkMipmap.h"
 #include "src/core/SkNextID.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/image/SkImage_Base.h"
 #include "src/image/SkReadPixelsRec.h"
+#include "src/image/SkRescaleAndReadPixels.h"
 #include "src/shaders/SkImageShader.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
-#include "include/gpu/GrTexture.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/image/SkImage_Gpu.h"
 #endif
 #include "include/gpu/GrBackendSurface.h"
@@ -51,6 +53,44 @@ bool SkImage::peekPixels(SkPixmap* pm) const {
 bool SkImage::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes, int srcX,
                          int srcY, CachingHint chint) const {
     return as_IB(this)->onReadPixels(dstInfo, dstPixels, dstRowBytes, srcX, srcY, chint);
+}
+
+void SkImage::asyncRescaleAndReadPixels(const SkImageInfo& info,
+                                        const SkIRect& srcRect,
+                                        RescaleGamma rescaleGamma,
+                                        SkFilterQuality rescaleQuality,
+                                        ReadPixelsCallback callback,
+                                        ReadPixelsContext context) {
+    if (!SkIRect::MakeWH(this->width(), this->height()).contains(srcRect) ||
+        !SkImageInfoIsValid(info)) {
+        callback(context, nullptr);
+        return;
+    }
+    as_IB(this)->onAsyncRescaleAndReadPixels(
+            info, srcRect, rescaleGamma, rescaleQuality, callback, context);
+}
+
+void SkImage::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
+                                              sk_sp<SkColorSpace> dstColorSpace,
+                                              const SkIRect& srcRect,
+                                              const SkISize& dstSize,
+                                              RescaleGamma rescaleGamma,
+                                              SkFilterQuality rescaleQuality,
+                                              ReadPixelsCallback callback,
+                                              ReadPixelsContext context) {
+    if (!SkIRect::MakeWH(this->width(), this->height()).contains(srcRect) || dstSize.isZero() ||
+        (dstSize.width() & 0b1) || (dstSize.height() & 0b1)) {
+        callback(context, nullptr);
+        return;
+    }
+    as_IB(this)->onAsyncRescaleAndReadPixelsYUV420(yuvColorSpace,
+                                                   std::move(dstColorSpace),
+                                                   srcRect,
+                                                   dstSize,
+                                                   rescaleGamma,
+                                                   rescaleQuality,
+                                                   callback,
+                                                   context);
 }
 
 bool SkImage::scalePixels(const SkPixmap& dst, SkFilterQuality quality, CachingHint chint) const {
@@ -85,7 +125,27 @@ sk_sp<SkColorSpace> SkImage::refColorSpace() const { return fInfo.refColorSpace(
 
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkMatrix* localMatrix) const {
-    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, localMatrix);
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, localMatrix,
+                               SkImageShader::kInheritFromPaint);
+}
+
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
+                                    const SkFilterOptions& options,
+                                    const SkMatrix* localMatrix) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
+                               options, localMatrix);
+}
+
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
+                                    const SkMatrix* localMatrix, SkFilterQuality filtering) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, localMatrix,
+                               SkImageShader::FilterEnum(filtering));
+}
+
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy, CubicResampler cubic,
+                                           const SkMatrix* localMatrix) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, cubic,
+                               localMatrix);
 }
 
 sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
@@ -118,7 +178,7 @@ sk_sp<SkImage> SkImage::MakeFromEncoded(sk_sp<SkData> encoded, const SkIRect* su
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset) const {
+sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset, GrDirectContext* direct) const {
     if (subset.isEmpty()) {
         return nullptr;
     }
@@ -128,24 +188,23 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset) const {
         return nullptr;
     }
 
+#if SK_SUPPORT_GPU
+    auto myContext = as_IB(this)->context();
+    // This check is also performed in the subclass, but we do it here for the short-circuit below.
+    if (myContext && !myContext->priv().matches(direct)) {
+        return nullptr;
+    }
+#endif
+
     // optimization : return self if the subset == our bounds
     if (bounds == subset) {
         return sk_ref_sp(const_cast<SkImage*>(this));
     }
 
-    // CONTEXT TODO: propagate the context parameter to the top-level API
-#if SK_SUPPORT_GPU
-    return as_IB(this)->onMakeSubset(as_IB(this)->context(), subset);
-#else
-    return as_IB(this)->onMakeSubset(nullptr, subset);
-#endif
+    return as_IB(this)->onMakeSubset(subset, direct);
 }
 
 #if SK_SUPPORT_GPU
-
-GrTexture* SkImage::getTexture() const {
-    return as_IB(this)->onGetTexture();
-}
 
 bool SkImage::isTextureBacked() const { return as_IB(this)->onIsTextureBacked(); }
 
@@ -154,22 +213,33 @@ GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
     return as_IB(this)->onGetBackendTexture(flushPendingGrContextIO, origin);
 }
 
-bool SkImage::isValid(GrContext* context) const {
-    if (context && context->abandoned()) {
+bool SkImage::isValid(GrRecordingContext* rContext) const {
+    if (rContext && rContext->abandoned()) {
         return false;
     }
-    return as_IB(this)->onIsValid(context);
+    return as_IB(this)->onIsValid(rContext);
 }
 
+GrSemaphoresSubmitted SkImage::flush(GrDirectContext* dContext, const GrFlushInfo& flushInfo) {
+    return as_IB(this)->onFlush(dContext, flushInfo);
+}
+
+void SkImage::flushAndSubmit(GrDirectContext* dContext) {
+    this->flush(dContext, {});
+    dContext->submit();
+}
+
+#ifdef SK_IMAGE_FLUSH_LEGACY_API
 GrSemaphoresSubmitted SkImage::flush(GrContext* context, const GrFlushInfo& flushInfo) {
-    return as_IB(this)->onFlush(context, flushInfo);
+    return this->flush(GrAsDirectContext(context), flushInfo);
 }
 
-void SkImage::flush(GrContext* context) { as_IB(this)->onFlush(context, {}); }
+void SkImage::flushAndSubmit(GrContext* context) {
+    this->flushAndSubmit(GrAsDirectContext(context));
+}
+#endif
 
 #else
-
-GrTexture* SkImage::getTexture() const { return nullptr; }
 
 bool SkImage::isTextureBacked() const { return false; }
 
@@ -178,18 +248,26 @@ GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
     return GrBackendTexture(); // invalid
 }
 
-bool SkImage::isValid(GrContext* context) const {
-    if (context) {
+bool SkImage::isValid(GrRecordingContext* rContext) const {
+    if (rContext) {
         return false;
     }
-    return as_IB(this)->onIsValid(context);
+    return as_IB(this)->onIsValid(nullptr);
 }
 
+GrSemaphoresSubmitted SkImage::flush(GrDirectContext*, const GrFlushInfo&) {
+    return GrSemaphoresSubmitted::kNo;
+}
+
+void SkImage::flushAndSubmit(GrDirectContext*) {}
+
+#ifdef SK_IMAGE_FLUSH_LEGACY_API
 GrSemaphoresSubmitted SkImage::flush(GrContext*, const GrFlushInfo&) {
     return GrSemaphoresSubmitted::kNo;
 }
 
-void SkImage::flush(GrContext*) {}
+void SkImage::flushAndSubmit(GrContext*) {}
+#endif
 
 #endif
 
@@ -202,6 +280,44 @@ SkImage_Base::~SkImage_Base() {
     if (fAddedToRasterCache.load()) {
         SkNotifyBitmapGenIDIsStale(this->uniqueID());
     }
+}
+
+void SkImage_Base::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
+                                               const SkIRect& origSrcRect,
+                                               RescaleGamma rescaleGamma,
+                                               SkFilterQuality rescaleQuality,
+                                               ReadPixelsCallback callback,
+                                               ReadPixelsContext context) {
+    SkBitmap src;
+    SkPixmap peek;
+    SkIRect srcRect;
+    if (this->peekPixels(&peek)) {
+        src.installPixels(peek);
+        srcRect = origSrcRect;
+    } else {
+        src.setInfo(this->imageInfo().makeDimensions(origSrcRect.size()));
+        src.allocPixels();
+        if (!this->readPixels(src.pixmap(), origSrcRect.x(), origSrcRect.y())) {
+            callback(context, nullptr);
+            return;
+        }
+        srcRect = SkIRect::MakeSize(src.dimensions());
+    }
+    return SkRescaleAndReadPixels(
+            src, info, srcRect, rescaleGamma, rescaleQuality, callback, context);
+}
+
+void SkImage_Base::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
+                                                     sk_sp<SkColorSpace> dstColorSpace,
+                                                     const SkIRect& srcRect,
+                                                     const SkISize& dstSize,
+                                                     RescaleGamma,
+                                                     SkFilterQuality,
+                                                     ReadPixelsCallback callback,
+                                                     ReadPixelsContext context) {
+    // TODO: Call non-YUV asyncRescaleAndReadPixels and then make our callback convert to YUV and
+    // call client's callback.
+    callback(context, nullptr);
 }
 
 GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
@@ -227,8 +343,10 @@ bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode ) const {
     return as_IB(this)->onAsLegacyBitmap(bitmap);
 }
 
-sk_sp<SkCachedData> SkImage_Base::getPlanes(SkYUVASizeInfo*, SkYUVAIndex[4],
-                                            SkYUVColorSpace*, const void*[4]) {
+sk_sp<SkCachedData> SkImage_Base::getPlanes(SkYUVASizeInfo*,
+                                            SkYUVAIndex[4],
+                                            SkYUVColorSpace*,
+                                            const void* [4]) const {
     return nullptr;
 }
 
@@ -256,26 +374,24 @@ sk_sp<SkImage> SkImage::MakeFromPicture(sk_sp<SkPicture> picture, const SkISize&
                                                                std::move(colorSpace)));
 }
 
-sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
-                                       const SkIRect& clipBounds, SkIRect* outSubset,
-                                       SkIPoint* offset) const {
-    GrContext* context = as_IB(this)->context();
+sk_sp<SkImage> SkImage::makeWithFilter(GrRecordingContext* rContext, const SkImageFilter* filter,
+                                       const SkIRect& subset, const SkIRect& clipBounds,
+                                       SkIRect* outSubset, SkIPoint* offset) const {
 
-    return this->makeWithFilter(context, filter, subset, clipBounds, outSubset, offset);
-}
-
-sk_sp<SkImage> SkImage::makeWithFilter(GrContext* grContext,
-                                       const SkImageFilter* filter, const SkIRect& subset,
-                                       const SkIRect& clipBounds, SkIRect* outSubset,
-                                       SkIPoint* offset) const {
     if (!filter || !outSubset || !offset || !this->bounds().contains(subset)) {
         return nullptr;
     }
-    sk_sp<SkSpecialImage> srcSpecialImage =
+    sk_sp<SkSpecialImage> srcSpecialImage;
 #if SK_SUPPORT_GPU
-        SkSpecialImage::MakeFromImage(grContext, subset, sk_ref_sp(const_cast<SkImage*>(this)));
+    auto myContext = as_IB(this)->context();
+    if (myContext && !myContext->priv().matches(rContext)) {
+        return nullptr;
+    }
+    srcSpecialImage = SkSpecialImage::MakeFromImage(rContext, subset,
+                                                    sk_ref_sp(const_cast<SkImage*>(this)));
 #else
-        SkSpecialImage::MakeFromImage(nullptr, subset, sk_ref_sp(const_cast<SkImage*>(this)));
+    srcSpecialImage = SkSpecialImage::MakeFromImage(nullptr, subset,
+                                                    sk_ref_sp(const_cast<SkImage*>(this)));
 #endif
     if (!srcSpecialImage) {
         return nullptr;
@@ -288,7 +404,7 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrContext* grContext,
     // subset's top left corner. But the clip bounds and any crop rects on the filters are in the
     // original coordinate system, so configure the CTM to correct crop rects and explicitly adjust
     // the clip bounds (since it is assumed to already be in image space).
-    SkImageFilter_Base::Context context(SkMatrix::MakeTrans(-subset.x(), -subset.y()),
+    SkImageFilter_Base::Context context(SkMatrix::Translate(-subset.x(), -subset.y()),
                                         clipBounds.makeOffset(-subset.topLeft()),
                                         cache.get(), fInfo.colorType(), fInfo.colorSpace(),
                                         srcSpecialImage.get());
@@ -320,42 +436,47 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrContext* grContext,
     return result->asImage();
 }
 
+#ifdef SK_IMAGE_MAKE_WITH_FILTER_LEGACY_API
+sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
+                                       const SkIRect& clipBounds, SkIRect* outSubset,
+                                       SkIPoint* offset) const {
+    GrRecordingContext* rContext = nullptr;
+#if SK_SUPPORT_GPU
+    rContext = as_IB(this)->context();
+#endif
+    return this->makeWithFilter(rContext, filter, subset, clipBounds, outSubset, offset);
+}
+#endif
+
 bool SkImage::isLazyGenerated() const {
     return as_IB(this)->onIsLazyGenerated();
 }
 
 bool SkImage::isAlphaOnly() const { return SkColorTypeIsAlphaOnly(fInfo.colorType()); }
 
-sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target) const {
-    if (!target) {
-        return nullptr;
-    }
-
-    // No need to create a new image if:
-    // (1) The color spaces are equal.
-    // (2) The color type is kAlpha8.
-    SkColorSpace* colorSpace = this->colorSpace();
-    if (!colorSpace) {
-        colorSpace = sk_srgb_singleton();
-    }
-    if (SkColorSpace::Equals(colorSpace, target.get()) || this->isAlphaOnly()) {
-        return sk_ref_sp(const_cast<SkImage*>(this));
-    }
-
-    // CONTEXT TODO: propagate the context parameter to the top-level API
-#if SK_SUPPORT_GPU
-    return as_IB(this)->onMakeColorTypeAndColorSpace(as_IB(this)->context(),
-#else
-    return as_IB(this)->onMakeColorTypeAndColorSpace(nullptr,
-#endif
-                                                     this->colorType(), std::move(target));
+sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target, GrDirectContext* direct) const {
+    return this->makeColorTypeAndColorSpace(this->colorType(), std::move(target), direct);
 }
 
 sk_sp<SkImage> SkImage::makeColorTypeAndColorSpace(SkColorType targetColorType,
-                                                   sk_sp<SkColorSpace> targetColorSpace) const {
+                                                   sk_sp<SkColorSpace> targetColorSpace,
+                                                   GrDirectContext* direct) const {
     if (kUnknown_SkColorType == targetColorType || !targetColorSpace) {
         return nullptr;
     }
+
+#if SK_SUPPORT_GPU
+    auto myContext = as_IB(this)->context();
+#ifdef SK_IMAGE_MAKE_COLOR_TYPE_AND_SPACE_USE_SOURCE_CONTEXT
+    if (!direct) {
+        direct = GrAsDirectContext(myContext);
+    }
+#endif
+    // This check is also performed in the subclass, but we do it here for the short-circuit below.
+    if (myContext && !myContext->priv().matches(direct)) {
+        return nullptr;
+    }
+#endif
 
     SkColorType colorType = this->colorType();
     SkColorSpace* colorSpace = this->colorSpace();
@@ -367,13 +488,8 @@ sk_sp<SkImage> SkImage::makeColorTypeAndColorSpace(SkColorType targetColorType,
         return sk_ref_sp(const_cast<SkImage*>(this));
     }
 
-    // CONTEXT TODO: propagate the context parameter to the top-level API
-#if SK_SUPPORT_GPU
-    return as_IB(this)->onMakeColorTypeAndColorSpace(as_IB(this)->context(),
-#else
-    return as_IB(this)->onMakeColorTypeAndColorSpace(nullptr,
-#endif
-                                                     targetColorType, std::move(targetColorSpace));
+    return as_IB(this)->onMakeColorTypeAndColorSpace(targetColorType,
+                                                     std::move(targetColorSpace), direct);
 }
 
 sk_sp<SkImage> SkImage::reinterpretColorSpace(sk_sp<SkColorSpace> target) const {
@@ -427,7 +543,7 @@ sk_sp<SkImage> SkImage::makeRasterImage(CachingHint chint) const {
 
 #if !SK_SUPPORT_GPU
 
-sk_sp<SkImage> SkImage::DecodeToTexture(GrContext*, const void*, size_t, const SkIRect*) {
+sk_sp<SkImage> SkImage::DecodeToTexture(GrDirectContext*, const void*, size_t, const SkIRect*) {
     return nullptr;
 }
 
@@ -486,13 +602,6 @@ sk_sp<SkImage> SkImage::MakeFromYUVATexturesCopyWithExternalBackend(
     return nullptr;
 }
 
-sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace space,
-                                                const GrBackendTexture[3],
-                                                GrSurfaceOrigin origin,
-                                                sk_sp<SkColorSpace> imageColorSpace) {
-    return nullptr;
-}
-
 sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopyWithExternalBackend(
         GrContext* context, SkYUVColorSpace yuvColorSpace, const GrBackendTexture yuvTextures[3],
         GrSurfaceOrigin surfaceOrigin, const GrBackendTexture& backendTexture,
@@ -507,9 +616,15 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopy(GrContext* ctx, SkYUVColorSpace
     return nullptr;
 }
 
-sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, GrMipMapped mipMapped) const {
+#ifndef SK_IMAGE_MAKE_TEXTURE_IMAGE_ALLOW_GR_CONTEXT
+sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext*, GrMipmapped, SkBudgeted) const {
     return nullptr;
 }
+#else
+sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, GrMipmapped, SkBudgeted) const {
+    return nullptr;
+}
+#endif
 
 sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
                                                            GrContext* context,
@@ -527,19 +642,58 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool SkImage_pinAsTexture(const SkImage* image, GrContext* ctx) {
+bool SkImage_pinAsTexture(const SkImage* image, GrRecordingContext* rContext) {
     SkASSERT(image);
-    SkASSERT(ctx);
-    return as_IB(image)->onPinAsTexture(ctx);
+    SkASSERT(rContext);
+    return as_IB(image)->onPinAsTexture(rContext);
 }
 
-void SkImage_unpinAsTexture(const SkImage* image, GrContext* ctx) {
+void SkImage_unpinAsTexture(const SkImage* image, GrRecordingContext* rContext) {
     SkASSERT(image);
-    SkASSERT(ctx);
-    as_IB(image)->onUnpinAsTexture(ctx);
+    SkASSERT(rContext);
+    as_IB(image)->onUnpinAsTexture(rContext);
 }
 
 SkIRect SkImage_getSubset(const SkImage* image) {
     SkASSERT(image);
     return as_IB(image)->onGetSubset();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+SkMipmapBuilder::SkMipmapBuilder(const SkImageInfo& info) {
+    fMM = sk_sp<SkMipmap>(SkMipmap::Build({info, nullptr, 0}, nullptr, false));
+}
+
+SkMipmapBuilder::~SkMipmapBuilder() {}
+
+int SkMipmapBuilder::countLevels() const {
+    return fMM ? fMM->countLevels() : 0;
+}
+
+SkPixmap SkMipmapBuilder::level(int index) const {
+    SkPixmap pm;
+
+    SkMipmap::Level level;
+    if (fMM && fMM->getLevel(index, &level)) {
+        pm = level.fPixmap;
+    }
+    return pm;
+}
+
+sk_sp<SkMipmap> SkMipmapBuilder::detach() {
+    return std::move(fMM);
+}
+
+bool SkImage::hasMipmaps() const {
+    return as_IB(this)->onPeekMips() != nullptr;
+}
+
+sk_sp<SkImage> SkImage::withMipmaps(sk_sp<SkMipmap> mips) const {
+    if (mips == nullptr || mips->validForRootLevel(this->imageInfo())) {
+        if (auto result = as_IB(this)->onMakeWithMipmaps(std::move(mips))) {
+            return result;
+        }
+    }
+    return sk_ref_sp((const_cast<SkImage*>(this)));
 }

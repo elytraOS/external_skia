@@ -59,6 +59,14 @@ struct Constructor : public Expression {
         return false;
     }
 
+    int nodeCount() const override {
+        int result = 1;
+        for (const auto& a : fArguments) {
+            result += a->nodeCount();
+        }
+        return result;
+    }
+
     std::unique_ptr<Expression> clone() const override {
         std::vector<std::unique_ptr<Expression>> cloned;
         for (const auto& arg : fArguments) {
@@ -67,7 +75,6 @@ struct Constructor : public Expression {
         return std::unique_ptr<Expression>(new Constructor(fOffset, fType, std::move(cloned)));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         String result = fType.description() + "(";
         String separator;
@@ -79,11 +86,19 @@ struct Constructor : public Expression {
         result += ")";
         return result;
     }
-#endif
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         for (size_t i = 0; i < fArguments.size(); i++) {
-            if (!fArguments[i]->isConstant()) {
+            if (!fArguments[i]->isCompileTimeConstant()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool isConstantOrUniform() const override {
+        for (size_t i = 0; i < fArguments.size(); i++) {
+            if (!fArguments[i]->isConstantOrUniform()) {
                 return false;
             }
         }
@@ -177,7 +192,7 @@ struct Constructor : public Expression {
     }
 
     SKSL_FLOAT getMatComponent(int col, int row) const override {
-        SkASSERT(this->isConstant());
+        SkASSERT(this->isCompileTimeConstant());
         SkASSERT(fType.kind() == Type::kMatrix_Kind);
         SkASSERT(col < fType.columns() && row < fType.rows());
         if (fArguments.size() == 1) {

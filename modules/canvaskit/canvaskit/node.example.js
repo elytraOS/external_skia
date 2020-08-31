@@ -4,7 +4,7 @@ const path = require('path');
 
 CanvasKitInit({
   locateFile: (file) => __dirname + '/bin/'+file,
-}).ready().then((CanvasKit) => {
+}).then((CanvasKit) => {
   let canvas = CanvasKit.MakeCanvas(300, 300);
 
   let img = fs.readFileSync(path.join(__dirname, 'test.png'));
@@ -62,7 +62,7 @@ function fancyAPI(CanvasKit) {
   const textFont = new CanvasKit.SkFont(roboto, 30);
 
   const skpath = starPath(CanvasKit);
-  const dpe = CanvasKit.MakeSkDashPathEffect([15, 5, 5, 10], 1);
+  const dpe = CanvasKit.SkPathEffect.MakeDash([15, 5, 5, 10], 1);
 
   paint.setPathEffect(dpe);
   paint.setStyle(CanvasKit.PaintStyle.Stroke);

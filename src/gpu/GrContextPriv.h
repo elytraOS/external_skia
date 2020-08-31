@@ -8,14 +8,14 @@
 #ifndef GrContextPriv_DEFINED
 #define GrContextPriv_DEFINED
 
-#include "include/gpu/GrContext.h"
-#include "src/gpu/GrSurfaceContext.h"
-#include "src/gpu/text/GrAtlasManager.h"
+#include "include/gpu/GrDirectContext.h"
 
+class GrAtlasManager;
 class GrBackendFormat;
 class GrBackendRenderTarget;
 class GrOpMemoryPool;
 class GrOnFlushCallbackObject;
+class GrRenderTargetProxy;
 class GrSemaphore;
 class GrSurfaceProxy;
 
@@ -40,13 +40,10 @@ public:
 
     GrImageContext* asImageContext() { return fContext->asImageContext(); }
     GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
-    GrContext* asDirectContext() { return fContext->asDirectContext(); }
 
     // from GrImageContext
     GrProxyProvider* proxyProvider() { return fContext->proxyProvider(); }
     const GrProxyProvider* proxyProvider() const { return fContext->proxyProvider(); }
-
-    bool abandoned() const { return fContext->abandoned(); }
 
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* singleOwner() const { return fContext->singleOwner(); } )
@@ -58,7 +55,7 @@ public:
     SkArenaAlloc* recordTimeAllocator() { return fContext->arenas().recordTimeAllocator(); }
     GrRecordingContext::Arenas arenas() { return fContext->arenas(); }
 
-    GrStrikeCache* getGrStrikeCache() { return fContext->getGrStrikeCache(); }
+    GrStrikeCache* getGrStrikeCache() { return fContext->fStrikeCache.get(); }
     GrTextBlobCache* getTextBlobCache() { return fContext->getTextBlobCache(); }
 
     /**
@@ -70,11 +67,6 @@ public:
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
     GrAuditTrail* auditTrail() { return fContext->auditTrail(); }
-
-    /**
-     * Create a GrContext without a resource cache
-     */
-    static sk_sp<GrContext> MakeDDL(const sk_sp<GrContextThreadSafeProxy>&);
 
     /**
      * Finalizes all pending reads and writes to the surfaces and also performs an MSAA resolves
@@ -120,10 +112,9 @@ public:
         return fContext->onGetAtlasManager();
     }
 
-    void moveRenderTasksToDDL(SkDeferredDisplayList*);
-    void copyRenderTasksFromDDL(const SkDeferredDisplayList*, GrRenderTargetProxy* newDest);
+    void copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest);
 
-    void compile(const GrProgramDesc&, const GrProgramInfo&);
+    bool compile(const GrProgramDesc&, const GrProgramInfo&);
 
     GrContextOptions::PersistentCache* getPersistentCache() { return fContext->fPersistentCache; }
     GrContextOptions::ShaderErrorHandler* getShaderErrorHandler() const {
@@ -136,7 +127,7 @@ public:
 
 #if GR_TEST_UTILS
     /** Reset GPU stats */
-    void resetGpuStats() const ;
+    void resetGpuStats() const;
 
     /** Prints cache stats to the string if GR_CACHE_STATS == 1. */
     void dumpCacheStats(SkString*) const;
@@ -148,9 +139,11 @@ public:
     void dumpGpuStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
     void printGpuStats() const;
 
-    /** Specify the TextBlob cache limit. If the current cache exceeds this limit it will purge.
-        this is for testing only */
-    void testingOnly_setTextBlobCacheLimit(size_t bytes);
+    /** These are only active if GR_GPU_STATS == 1. */
+    void resetContextStats() const;
+    void dumpContextStats(SkString*) const;
+    void dumpContextStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
+    void printContextStats() const;
 
     /** Get pointer to atlas texture for given mask format. Note that this wraps an
         actively mutating texture in an SkImage. This could yield unexpected results

@@ -11,7 +11,6 @@
 
 #include "bench/AndroidCodecBench.h"
 #include "bench/Benchmark.h"
-#include "bench/BitmapRegionDecoderBench.h"
 #include "bench/CodecBench.h"
 #include "bench/CodecBenchPriv.h"
 #include "bench/GMBench.h"
@@ -20,7 +19,7 @@
 #include "bench/SKPAnimationBench.h"
 #include "bench/SKPBench.h"
 #include "bench/SkGlyphCacheBench.h"
-#include "include/android/SkBitmapRegionDecoder.h"
+#include "bench/SkSLBench.h"
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
 #include "include/core/SkCanvas.h"
@@ -52,6 +51,12 @@
 #include "experimental/svg/model/SkSVGDOM.h"
 #endif  // SK_XML
 
+#ifdef SK_ENABLE_ANDROID_UTILS
+#include "bench/BitmapRegionDecoderBench.h"
+#include "client_utils/android/BitmapRegionDecoder.h"
+#endif
+
+#include <cinttypes>
 #include <stdlib.h>
 #include <thread>
 
@@ -64,6 +69,7 @@ extern bool gSkVMJITViaDylib;
 
 #endif
 
+#include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/SkGr.h"
@@ -179,7 +185,7 @@ static DEFINE_bool(purgeBetweenBenches, false,
 static double now_ms() { return SkTime::GetNSecs() * 1e-6; }
 
 static SkString humanize(double ms) {
-    if (FLAGS_verbose) return SkStringPrintf("%llu", (uint64_t)(ms*1e6));
+    if (FLAGS_verbose) return SkStringPrintf("%" PRIu64, (uint64_t)(ms*1e6));
     return HumanizeMs(ms);
 }
 #define HUMANIZE(ms) humanize(ms).c_str()
@@ -211,6 +217,13 @@ struct GPUTarget : public Target {
     ContextInfo contextInfo;
     std::unique_ptr<GrContextFactory> factory;
 
+    ~GPUTarget() override {
+        // For Vulkan we need to release all our refs to the GrContext before destroy the vulkan
+        // context which happens at the end of this destructor. Thus we need to release the surface
+        // here which holds a ref to the GrContext.
+        surface.reset();
+    }
+
     void setup() override {
         this->contextInfo.testContext()->makeCurrent();
         // Make sure we're done with whatever came before.
@@ -218,7 +231,7 @@ struct GPUTarget : public Target {
     }
     void endTiming() override {
         if (this->contextInfo.testContext()) {
-            this->contextInfo.testContext()->waitOnSyncOrSwap();
+            this->contextInfo.testContext()->flushAndWaitOnSync(contextInfo.directContext());
         }
     }
     void fence() override { this->contextInfo.testContext()->finish(); }
@@ -252,10 +265,11 @@ struct GPUTarget : public Target {
         return true;
     }
     void fillOptions(NanoJSONResultsWriter& log) override {
+#ifdef SK_GL
         const GrGLubyte* version;
         if (this->contextInfo.backend() == GrBackendApi::kOpenGL) {
             const GrGLInterface* gl =
-                    static_cast<GrGLGpu*>(this->contextInfo.grContext()->priv().getGpu())
+                    static_cast<GrGLGpu*>(this->contextInfo.directContext()->priv().getGpu())
                             ->glInterface();
             GR_GL_CALL_RET(gl, version, GetString(GR_GL_VERSION));
             log.appendString("GL_VERSION", (const char*)(version));
@@ -269,11 +283,15 @@ struct GPUTarget : public Target {
             GR_GL_CALL_RET(gl, version, GetString(GR_GL_SHADING_LANGUAGE_VERSION));
             log.appendString("GL_SHADING_LANGUAGE_VERSION", (const char*) version);
         }
+#endif
     }
 
     void dumpStats() override {
-        this->contextInfo.grContext()->priv().printCacheStats();
-        this->contextInfo.grContext()->priv().printGpuStats();
+        auto context = this->contextInfo.directContext();
+
+        context->priv().printCacheStats();
+        context->priv().printGpuStats();
+        context->priv().printContextStats();
     }
 };
 
@@ -286,9 +304,6 @@ static double time(int loops, Benchmark* bench, Target* target) {
     double start = now_ms();
     canvas = target->beginTiming(canvas);
     bench->draw(loops, canvas);
-    if (canvas) {
-        canvas->flush();
-    }
     target->endTiming();
     double elapsed = now_ms() - start;
     bench->postDraw(canvas);
@@ -462,7 +477,7 @@ static void create_config(const SkCommandLineConfig* config, SkTArray<Config>* c
         }
 
         GrContextFactory factory(grContextOpts);
-        if (const GrContext* ctx = factory.get(ctxType, ctxOverrides)) {
+        if (const auto ctx = factory.get(ctxType, ctxOverrides)) {
             GrBackendFormat format = ctx->defaultBackendFormat(colorType, GrRenderable::kYes);
             int supportedSampleCount =
                     ctx->priv().caps()->getRenderTargetSampleCount(sampleCount, format);
@@ -585,10 +600,10 @@ static Target* is_enabled(Benchmark* bench, const Config& config) {
 #pragma warning ( pop )
 #endif
 
+#ifdef SK_ENABLE_ANDROID_UTILS
 static bool valid_brd_bench(sk_sp<SkData> encoded, SkColorType colorType, uint32_t sampleSize,
         uint32_t minOutputSize, int* width, int* height) {
-    std::unique_ptr<SkBitmapRegionDecoder> brd(
-            SkBitmapRegionDecoder::Create(encoded, SkBitmapRegionDecoder::kAndroidCodec_Strategy));
+    auto brd = android::skia::BitmapRegionDecoder::Make(encoded);
     if (nullptr == brd.get()) {
         // This is indicates that subset decoding is not supported for a particular image format.
         return false;
@@ -606,6 +621,7 @@ static bool valid_brd_bench(sk_sp<SkData> encoded, SkColorType colorType, uint32
     *height = brd->height();
     return true;
 }
+#endif
 
 static void cleanup_run(Target* target) {
     delete target;
@@ -966,6 +982,7 @@ public:
             fCurrentSampleSize = 0;
         }
 
+#ifdef SK_ENABLE_ANDROID_UTILS
         // Run the BRDBenches
         // We intend to create benchmarks that model the use cases in
         // android/libraries/social/tiledimage.  In this library, an image is decoded in 512x512
@@ -1049,6 +1066,7 @@ public:
             }
             fCurrentColorType = 0;
         }
+#endif // SK_ENABLE_ANDROID_UTILS
 
         return nullptr;
     }
@@ -1078,6 +1096,7 @@ public:
     }
 
 private:
+#ifdef SK_ENABLE_ANDROID_UTILS
     enum SubsetType {
         kTopLeft_SubsetType     = 0,
         kTopRight_SubsetType    = 1,
@@ -1089,6 +1108,7 @@ private:
         kLast_SubsetType        = kZoom_SubsetType,
         kLastSingle_SubsetType  = kBottomRight_SubsetType,
     };
+#endif
 
     const BenchRegistry* fBenches;
     const skiagm::GMRegistry* fGMs;
@@ -1116,10 +1136,12 @@ private:
     int fCurrentUseMPD = 0;
     int fCurrentCodec = 0;
     int fCurrentAndroidCodec = 0;
+#ifdef SK_ENABLE_ANDROID_UTILS
     int fCurrentBRDImage = 0;
+    int fCurrentSubsetType = 0;
+#endif
     int fCurrentColorType = 0;
     int fCurrentAlphaType = 0;
-    int fCurrentSubsetType = 0;
     int fCurrentSampleSize = 0;
     int fCurrentAnimSKP = 0;
 };
@@ -1291,6 +1313,7 @@ int main(int argc, char** argv) {
                 auto stop = now_ms() + 1000;
                 do {
                     time(loops, bench.get(), target);
+                    pool.drain();
                 } while (now_ms() < stop);
             }
 
@@ -1299,11 +1322,13 @@ int main(int argc, char** argv) {
                 auto stop = now_ms() + FLAGS_ms;
                 do {
                     samples.push_back(time(loops, bench.get(), target) / loops);
+                    pool.drain();
                 } while (now_ms() < stop);
             } else {
                 samples.reset(FLAGS_samples);
                 for (int s = 0; s < FLAGS_samples; s++) {
                     samples[s] = time(loops, bench.get(), target) / loops;
+                    pool.drain();
                 }
             }
 
@@ -1440,6 +1465,8 @@ int main(int argc, char** argv) {
     log.appendS32("max_rss_mb", sk_tools::getMaxResidentSetSizeMB());
     log.endObject(); // config
     log.endBench();
+
+    RunSkSLMemoryBenchmarks(&log);
 
     log.endObject(); // results
     log.endObject(); // root

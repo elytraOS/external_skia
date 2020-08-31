@@ -14,10 +14,10 @@
 #include "src/gpu/GrStencilSettings.h"
 
 GrDawnCaps::GrDawnCaps(const GrContextOptions& contextOptions) : INHERITED(contextOptions) {
-    fMipMapSupport = false;  // FIXME: implement onRegenerateMipMapLevels in GrDawnGpu.
+    fMipmapSupport = false;  // FIXME: implement onRegenerateMipMapLevels in GrDawnGpu.
     fBufferMapThreshold = SK_MaxS32;  // FIXME: get this from Dawn?
     fShaderCaps.reset(new GrShaderCaps(contextOptions));
-    fMaxTextureSize = fMaxRenderTargetSize = 4096; // FIXME
+    fMaxTextureSize = fMaxRenderTargetSize = 8192; // FIXME
     fMaxVertexAttributes = 16; // FIXME
     fClampToBorderSupport = false;
     fPerformPartialClearsAsDraws = true;
@@ -36,10 +36,6 @@ GrDawnCaps::GrDawnCaps(const GrContextOptions& contextOptions) : INHERITED(conte
 
 bool GrDawnCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return false;
-}
-
-SkImage::CompressionType GrDawnCaps::compressionType(const GrBackendFormat& format) const {
-    return SkImage::CompressionType::kNone;
 }
 
 bool GrDawnCaps::isFormatTexturable(const GrBackendFormat& format) const {
@@ -67,29 +63,11 @@ static GrSwizzle get_swizzle(const GrBackendFormat& format, GrColorType colorTyp
             if (!forOutput) {
                 return GrSwizzle::RGB1();
             }
+            break;
         default:
             return GrSwizzle::RGBA();
     }
     return GrSwizzle::RGBA();
-}
-
-bool GrDawnCaps::isFormatTexturableAndUploadable(GrColorType ct,
-                                                 const GrBackendFormat& format) const {
-    wgpu::TextureFormat dawnFormat;
-    if (!format.asDawnFormat(&dawnFormat)) {
-        return false;
-    }
-    switch (ct) {
-        case GrColorType::kAlpha_8:
-            return wgpu::TextureFormat::R8Unorm == dawnFormat;
-        case GrColorType::kRGBA_8888:
-        case GrColorType::kRGB_888x:
-        case GrColorType::kBGRA_8888:
-            return wgpu::TextureFormat::RGBA8Unorm == dawnFormat ||
-                   wgpu::TextureFormat::BGRA8Unorm == dawnFormat;
-        default:
-            return false;
-    }
 }
 
 bool GrDawnCaps::isFormatRenderable(const GrBackendFormat& format,
@@ -105,6 +83,18 @@ bool GrDawnCaps::isFormatRenderable(const GrBackendFormat& format,
 bool GrDawnCaps::isFormatAsColorTypeRenderable(GrColorType ct, const GrBackendFormat& format,
                                                int sampleCount) const {
     return isFormatRenderable(format, sampleCount);
+}
+
+GrCaps::SurfaceReadPixelsSupport GrDawnCaps::surfaceSupportsReadPixels(
+      const GrSurface* surface) const {
+    // We currently support readbacks only from Textures and TextureRenderTargets.
+    return surface->asTexture() ? SurfaceReadPixelsSupport::kSupported
+                                : SurfaceReadPixelsSupport::kUnsupported;
+}
+
+bool GrDawnCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
+    // We currently support writePixels only to Textures and TextureRenderTargets.
+    return surface->asTexture() != nullptr;
 }
 
 size_t GrDawnCaps::bytesPerPixel(const GrBackendFormat& backendFormat) const {
@@ -128,11 +118,10 @@ int GrDawnCaps::maxRenderTargetSampleCount(const GrBackendFormat& format) const 
     return format.isValid() ? 1 : 0;
 }
 
-GrBackendFormat GrDawnCaps::onGetDefaultBackendFormat(GrColorType ct,
-                                                      GrRenderable renderable) const {
+GrBackendFormat GrDawnCaps::onGetDefaultBackendFormat(GrColorType ct) const {
     wgpu::TextureFormat format;
     if (!GrColorTypeToDawnFormat(ct, &format)) {
-        return GrBackendFormat();
+        return {};
     }
     return GrBackendFormat::MakeDawn(format);
 }
@@ -142,13 +131,12 @@ GrBackendFormat GrDawnCaps::getBackendFormatFromCompressionType(SkImage::Compres
     return GrBackendFormat();
 }
 
-GrSwizzle GrDawnCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
+GrSwizzle GrDawnCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
 {
     return get_swizzle(format, colorType, false);
 }
 
-GrSwizzle GrDawnCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType colorType) const
-{
+GrSwizzle GrDawnCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     return get_swizzle(format, colorType, true);
 }
 
@@ -166,21 +154,6 @@ uint64_t GrDawnCaps::computeFormatKey(const GrBackendFormat& format) const {
 bool GrDawnCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
                                                    const GrBackendFormat& format) const {
     return true;
-}
-
-GrColorType GrDawnCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& backendFormat,
-                                                          bool isAlphaChannel) const {
-    wgpu::TextureFormat textureFormat;
-    if (!backendFormat.asDawnFormat(&textureFormat)) {
-        return GrColorType::kUnknown;
-    }
-    switch (textureFormat) {
-        case wgpu::TextureFormat::R8Unorm:     return isAlphaChannel ? GrColorType::kAlpha_8
-                                                                     : GrColorType::kGray_8;
-        case wgpu::TextureFormat::RGBA8Unorm:  return GrColorType::kRGBA_8888;
-        case wgpu::TextureFormat::BGRA8Unorm:  return GrColorType::kBGRA_8888;
-        default:                               return GrColorType::kUnknown;
-    }
 }
 
 // FIXME: taken from GrVkPipelineState; refactor.
@@ -218,7 +191,7 @@ GrProgramDesc GrDawnCaps::makeDesc(const GrRenderTarget* rt,
     GrProcessorKeyBuilder b(&desc.key());
 
     GrStencilSettings stencil = programInfo.nonGLStencilSettings();
-    stencil.genKey(&b);
+    stencil.genKey(&b, true);
 
     // TODO: remove this reliance on the renderTarget
     bool hasDepthStencil = rt->renderTargetPriv().getStencilAttachment() != nullptr;

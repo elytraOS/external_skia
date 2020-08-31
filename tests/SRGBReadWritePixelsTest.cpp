@@ -7,7 +7,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
@@ -188,11 +188,11 @@ static std::unique_ptr<uint32_t[]> make_data() {
 }
 
 static std::unique_ptr<GrSurfaceContext> make_surface_context(Encoding contextEncoding,
-                                                              GrContext* context,
+                                                              GrRecordingContext* rContext,
                                                               skiatest::Reporter* reporter) {
     auto surfaceContext = GrRenderTargetContext::Make(
-            context, GrColorType::kRGBA_8888, encoding_as_color_space(contextEncoding),
-            SkBackingFit::kExact, {kW, kH}, 1, GrMipMapped::kNo, GrProtected::kNo,
+            rContext, GrColorType::kRGBA_8888, encoding_as_color_space(contextEncoding),
+            SkBackingFit::kExact, {kW, kH}, 1, GrMipmapped::kNo, GrProtected::kNo,
             kBottomLeft_GrSurfaceOrigin, SkBudgeted::kNo);
     if (!surfaceContext) {
         ERRORF(reporter, "Could not create %s surface context.", encoding_as_str(contextEncoding));
@@ -201,9 +201,9 @@ static std::unique_ptr<GrSurfaceContext> make_surface_context(Encoding contextEn
 }
 
 static void test_write_read(Encoding contextEncoding, Encoding writeEncoding, Encoding readEncoding,
-                            float error, CheckFn check, GrContext* context,
+                            float error, CheckFn check, GrRecordingContext* rContext,
                             skiatest::Reporter* reporter) {
-    auto surfaceContext = make_surface_context(contextEncoding, context, reporter);
+    auto surfaceContext = make_surface_context(contextEncoding, rContext, reporter);
     if (!surfaceContext) {
         return;
     }
@@ -228,7 +228,7 @@ static void test_write_read(Encoding contextEncoding, Encoding writeEncoding, En
 // Test all combinations of writePixels/readPixels where the surface context/write source/read dst
 // are sRGB, linear, or untagged RGBA_8888.
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SRGBReadWritePixels, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
+    auto context = ctxInfo.directContext();
     if (!context->priv().caps()->getDefaultBackendFormat(GrColorType::kRGBA_8888_SRGB,
                                                          GrRenderable::kNo).isValid()) {
         return;

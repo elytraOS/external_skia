@@ -21,8 +21,6 @@ public:
     static constexpr SkScalar kTileWidth = 20.f;
     static constexpr SkScalar kTileHeight = 20.f;
 
-    virtual ~ShapeRenderer() {}
-
     // Draw the shape, limited to kTileWidth x kTileHeight. It must apply the local subpixel (tx,
     // ty) translation and rotation by angle. Prior to these transform adjustments, the SkCanvas
     // will only have pixel aligned translations (these are separated to make super-sampling
@@ -133,7 +131,7 @@ public:
 
         // Adding round caps forces Ganesh to use the path renderer for lines instead of converting
         // them to rectangles (which are already explicitly tested). However, when not curved, the
-        // GrShape will still find a way to turn it into a rrect draw so it doesn't hit the
+        // GrStyledShape will still find a way to turn it into a rrect draw so it doesn't hit the
         // path renderer in that condition.
         paint->setStrokeCap(SkPaint::kRound_Cap);
         paint->setStrokeJoin(SkPaint::kMiter_Join);

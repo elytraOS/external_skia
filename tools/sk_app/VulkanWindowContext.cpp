@@ -11,7 +11,7 @@
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkAutoMalloc.h"
 
 #include "include/gpu/vk/GrVkExtensions.h"
@@ -49,6 +49,7 @@ VulkanWindowContext::VulkanWindowContext(const DisplayParams& params,
 }
 
 void VulkanWindowContext::initializeContext() {
+    SkASSERT(!fContext);
     // any config code here (particularly for msaa)?
 
     PFN_vkGetInstanceProcAddr getInstanceProc = fGetInstanceProcAddr;
@@ -117,7 +118,7 @@ void VulkanWindowContext::initializeContext() {
     GET_DEV_PROC(QueuePresentKHR);
     GET_DEV_PROC(GetDeviceQueue);
 
-    fContext = GrContext::MakeVulkan(backendContext, fDisplayParams.fGrContextOptions);
+    fContext = GrDirectContext::MakeVulkan(backendContext, fDisplayParams.fGrContextOptions);
 
     fSurface = fCreateVkSurfaceFn(fInstance);
     if (VK_NULL_HANDLE == fSurface) {
@@ -317,12 +318,14 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
         fDestroySwapchainKHR(fDevice, swapchainCreateInfo.oldSwapchain, nullptr);
     }
 
-    this->createBuffers(swapchainCreateInfo.imageFormat, colorType);
+    this->createBuffers(swapchainCreateInfo.imageFormat, colorType,
+                        swapchainCreateInfo.imageSharingMode);
 
     return true;
 }
 
-void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) {
+void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType,
+                                        VkSharingMode sharingMode) {
     fGetSwapchainImagesKHR(fDevice, fSwapchain, &fImageCount, nullptr);
     SkASSERT(fImageCount);
     fImages = new VkImage[fImageCount];
@@ -342,6 +345,7 @@ void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) 
         info.fFormat = format;
         info.fLevelCount = 1;
         info.fCurrentQueueFamily = fPresentQueueIndex;
+        info.fSharingMode = sharingMode;
 
         if (fSampleCount == 1) {
             GrBackendRenderTarget backendRT(fWidth, fHeight, fSampleCount, info);
@@ -525,7 +529,9 @@ void VulkanWindowContext::swapBuffers() {
     GrFlushInfo info;
     info.fNumSemaphores = 1;
     info.fSignalSemaphores = &beSemaphore;
-    surface->flush(SkSurface::BackendSurfaceAccess::kPresent, info);
+    GrBackendSurfaceMutableState presentState(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, fPresentQueueIndex);
+    surface->flush(info, &presentState);
+    surface->recordingContext()->asDirectContext()->submit();
 
     // Submit present operation to present queue
     const VkPresentInfoKHR presentInfo =

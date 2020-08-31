@@ -37,6 +37,15 @@ static void test_success(skiatest::Reporter* r, const char* src) {
     REPORTER_ASSERT(r, program);
 }
 
+DEF_TEST(SkSLConstVariableComparison, r) {
+    test_success(r,
+                 "void main() {"
+                 "  const float4 a = float4(0);"
+                 "  const float4 b = float4(1);"
+                 "  if (a == b) { discard; }"
+                 "}");
+}
+
 DEF_TEST(SkSLOpenArray, r) {
     test_failure(r,
                  "void main(inout float4 color) { color.r[ = ( color.g ); }",
@@ -371,7 +380,7 @@ DEF_TEST(SkSLUnreachable, r) {
                  "void main() { if (true) return; else discard; return; }",
                  "error: 1: unreachable\n1 error\n");
     test_failure(r,
-                 "void main() { return; while (true); }",
+                 "void main() { return; main(); }",
                  "error: 1: unreachable\n1 error\n");
 }
 

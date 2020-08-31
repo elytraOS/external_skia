@@ -24,7 +24,11 @@ DeviceDirs = collections.namedtuple(
 
 
 class DefaultFlavor(object):
-  def __init__(self, module):
+  def __init__(self, module, app_name):
+    # Name of the app we're going to run. May be used in various ways by
+    # different flavors.
+    self.app_name = app_name
+
     # Store a pointer to the parent recipe module (SkiaFlavorApi) so that
     # FlavorUtils objects can do recipe module-like things, like run steps or
     # access module-level resources.
@@ -199,8 +203,6 @@ class DefaultFlavor(object):
       cmd = [procdump, '-accepteula', '-mp', '-e', '1', '-x', dumps_dir] + cmd
 
     if 'ASAN' in extra_tokens:
-      # Note: if you see "<unknown module>" in stacktraces for xSAN warnings,
-      # try adding "fast_unwind_on_malloc=0" to xSAN_OPTIONS.
       os = self.m.vars.builder_cfg.get('os', '')
       if 'Mac' in os or 'Win' in os:
         # Mac and Win don't support detect_leaks.
@@ -209,6 +211,12 @@ class DefaultFlavor(object):
         env['ASAN_OPTIONS'] = 'symbolize=1 detect_leaks=1'
       env[ 'LSAN_OPTIONS'] = 'symbolize=1 print_suppressions=1'
       env['UBSAN_OPTIONS'] = 'symbolize=1 print_stacktrace=1'
+
+      # If you see <unknown module> in stacktraces, try fast_unwind_on_malloc=0.
+      # This may cause a 2-25x slowdown, so use it only when you really need it.
+      if name == 'dm' and 'Vulkan' in extra_tokens:
+        env['ASAN_OPTIONS'] += ' fast_unwind_on_malloc=0'
+        env['LSAN_OPTIONS'] += ' fast_unwind_on_malloc=0'
 
     if 'TSAN' in extra_tokens:
       # We don't care about malloc(), fprintf, etc. used in signal handlers.

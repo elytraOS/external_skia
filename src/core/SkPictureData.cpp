@@ -15,13 +15,10 @@
 #include "src/core/SkPictureRecord.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkTextBlobPriv.h"
+#include "src/core/SkVerticesPriv.h"
 #include "src/core/SkWriteBuffer.h"
 
 #include <new>
-
-#if SK_SUPPORT_GPU
-#include "include/gpu/GrContext.h"
-#endif
 
 template <typename T> int SafeCount(const T* obj) {
     return obj ? obj->count() : 0;
@@ -174,7 +171,7 @@ void SkPictureData::flattenToBuffer(SkWriteBuffer& buffer, bool textBlobsOnly) c
         if (!fVertices.empty()) {
             write_tag_size(buffer, SK_PICT_VERTICES_BUFFER_TAG, fVertices.count());
             for (const auto& vert : fVertices) {
-                buffer.writeDataAsByteArray(vert->encode().get());
+                vert->priv().encode(buffer);
             }
         }
 
@@ -314,7 +311,12 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
         case SK_PICT_TYPEFACE_TAG: {
             fTFPlayback.setCount(size);
             for (uint32_t i = 0; i < size; ++i) {
-                sk_sp<SkTypeface> tf(SkTypeface::MakeDeserialize(stream));
+                sk_sp<SkTypeface> tf;
+                if (procs.fTypefaceProc) {
+                    tf = procs.fTypefaceProc(&stream, sizeof(stream), procs.fTypefaceCtx);
+                } else {
+                    tf = SkTypeface::MakeDeserialize(stream);
+                }
                 if (!tf.get()) {    // failed to deserialize
                     // fTFPlayback asserts it never has a null, so we plop in
                     // the default here.
@@ -373,10 +375,6 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
 
 static sk_sp<SkImage> create_image_from_buffer(SkReadBuffer& buffer) {
     return buffer.readImage();
-}
-static sk_sp<SkVertices> create_vertices_from_buffer(SkReadBuffer& buffer) {
-    auto data = buffer.readByteArrayAsData();
-    return data ? SkVertices::Decode(data->data(), data->size()) : nullptr;
 }
 
 static sk_sp<SkDrawable> create_drawable_from_buffer(SkReadBuffer& buffer) {
@@ -440,7 +438,7 @@ void SkPictureData::parseBufferTag(SkReadBuffer& buffer, uint32_t tag, uint32_t 
             new_array_from_buffer(buffer, size, fTextBlobs, SkTextBlobPriv::MakeFromBuffer);
             break;
         case SK_PICT_VERTICES_BUFFER_TAG:
-            new_array_from_buffer(buffer, size, fVertices, create_vertices_from_buffer);
+            new_array_from_buffer(buffer, size, fVertices, SkVerticesPriv::Decode);
             break;
         case SK_PICT_IMAGE_BUFFER_TAG:
             new_array_from_buffer(buffer, size, fImages, create_image_from_buffer);

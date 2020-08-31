@@ -24,6 +24,10 @@ struct ReturnStatement : public Statement {
     : INHERITED(expression->fOffset, kReturn_Kind)
     , fExpression(std::move(expression)) {}
 
+    int nodeCount() const override {
+        return 1 + fExpression->nodeCount();
+    }
+
     std::unique_ptr<Statement> clone() const override {
         if (fExpression) {
             return std::unique_ptr<Statement>(new ReturnStatement(fExpression->clone()));
@@ -31,7 +35,6 @@ struct ReturnStatement : public Statement {
         return std::unique_ptr<Statement>(new ReturnStatement(fOffset));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         if (fExpression) {
             return "return " + fExpression->description() + ";";
@@ -39,7 +42,6 @@ struct ReturnStatement : public Statement {
             return String("return;");
         }
     }
-#endif
 
     std::unique_ptr<Expression> fExpression;
 

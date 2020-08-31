@@ -27,6 +27,10 @@ struct BinaryExpression : public Expression {
     , fOperator(op)
     , fRight(std::move(right)) {}
 
+    bool isConstantOrUniform() const override {
+        return fLeft->isConstantOrUniform() && fRight->isConstantOrUniform();
+    }
+
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override {
         return irGenerator.constantFold(*fLeft,
@@ -41,17 +45,19 @@ struct BinaryExpression : public Expression {
         return fLeft->hasProperty(property) || fRight->hasProperty(property);
     }
 
+    int nodeCount() const override {
+        return 1 + fLeft->nodeCount() + fRight->nodeCount();
+    }
+
     std::unique_ptr<Expression> clone() const override {
         return std::unique_ptr<Expression>(new BinaryExpression(fOffset, fLeft->clone(), fOperator,
                                                                 fRight->clone(), fType));
     }
 
-#ifdef SK_DEBUG
     String description() const override {
         return "(" + fLeft->description() + " " + Compiler::OperatorName(fOperator) + " " +
                fRight->description() + ")";
     }
-#endif
 
     std::unique_ptr<Expression> fLeft;
     const Token::Kind fOperator;

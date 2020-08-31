@@ -245,10 +245,10 @@ static CanvasTest kCanvasTests[] = {
         c->skew(SkIntToScalar(1), SkIntToScalar(2));
     },
     [](SkCanvas* c, skiatest::Reporter* r) {
-        c->concat(SkMatrix::MakeScale(2, 3));
+        c->concat(SkMatrix::Scale(2, 3));
     },
     [](SkCanvas* c, skiatest::Reporter* r) {
-        c->setMatrix(SkMatrix::MakeScale(2, 3));
+        c->setMatrix(SkMatrix::Scale(2, 3));
     },
     [](SkCanvas* c, skiatest::Reporter* r) {
         c->clipRect(kRect);
@@ -482,7 +482,7 @@ public:
     LifeLineCanvas(int w, int h, bool* lifeline) : SkCanvas(w, h), fLifeLine(lifeline) {
         *fLifeLine = true;
     }
-    ~LifeLineCanvas() {
+    ~LifeLineCanvas() override {
         *fLifeLine = false;
     }
 };
@@ -680,3 +680,45 @@ DEF_TEST(Canvas_ClippedOutImageFilter, reporter) {
     REPORTER_ASSERT(reporter, preCTM == postCTM);
 }
 
+DEF_TEST(canvas_markctm, reporter) {
+    SkCanvas canvas(10, 10);
+
+    SkM44    m;
+    const char* id_a = "a";
+    const char* id_b = "b";
+
+    REPORTER_ASSERT(reporter, !canvas.findMarkedCTM(id_a, nullptr));
+    REPORTER_ASSERT(reporter, !canvas.findMarkedCTM(id_b, nullptr));
+
+    // remember the starting state
+    SkM44 b = canvas.getLocalToDevice();
+    canvas.markCTM(id_b);
+
+    // test add
+    canvas.concat(SkM44::Scale(2, 4, 6));
+    SkM44 a = canvas.getLocalToDevice();
+    canvas.markCTM(id_a);
+    REPORTER_ASSERT(reporter, canvas.findMarkedCTM(id_a, &m) && m == a);
+
+    // test replace
+    canvas.translate(1, 2);
+    SkM44 a1 = canvas.getLocalToDevice();
+    SkASSERT(a != a1);
+    canvas.markCTM(id_a);
+    REPORTER_ASSERT(reporter, canvas.findMarkedCTM(id_a, &m) && m == a1);
+
+    // test nested
+    canvas.save();
+    // no change
+    REPORTER_ASSERT(reporter, canvas.findMarkedCTM(id_b, &m) && m == b);
+    REPORTER_ASSERT(reporter, canvas.findMarkedCTM(id_a, &m) && m == a1);
+    canvas.translate(2, 3);
+    SkM44 a2 = canvas.getLocalToDevice();
+    SkASSERT(a2 != a1);
+    canvas.markCTM(id_a);
+    // found the new one
+    REPORTER_ASSERT(reporter, canvas.findMarkedCTM(id_a, &m) && m == a2);
+    canvas.restore();
+    // found the previous one
+    REPORTER_ASSERT(reporter, canvas.findMarkedCTM(id_a, &m) && m == a1);
+}

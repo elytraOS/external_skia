@@ -13,12 +13,13 @@
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrTextureProxy.h"
 
+class GrDirectContext;
 class GrProgramInfo;
 
 namespace sk_gpu_test {
 
 /** Makes a texture proxy containing the passed in color data. */
-sk_sp<GrTextureProxy> MakeTextureProxyFromData(GrContext*,
+sk_sp<GrTextureProxy> MakeTextureProxyFromData(GrDirectContext*,
                                                GrRenderable,
                                                GrSurfaceOrigin,
                                                const GrImageInfo&,
@@ -27,10 +28,11 @@ sk_sp<GrTextureProxy> MakeTextureProxyFromData(GrContext*,
 
 GrProgramInfo* CreateProgramInfo(const GrCaps*,
                                  SkArenaAlloc*,
-                                 const GrSurfaceProxyView* dstView,
+                                 const GrSurfaceProxyView* writeView,
                                  GrAppliedClip&&,
-                                 const GrXferProcessor::DstProxyView& dstProxyView,
-                                 GrGeometryProcessor*, SkBlendMode,
+                                 const GrXferProcessor::DstProxyView&,
+                                 GrGeometryProcessor*,
+                                 SkBlendMode,
                                  GrPrimitiveType,
                                  GrPipeline::InputFlags flags = GrPipeline::InputFlags::kNone,
                                  const GrUserStencilSettings* stencil =

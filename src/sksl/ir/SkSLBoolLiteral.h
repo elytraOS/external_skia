@@ -21,23 +21,25 @@ struct BoolLiteral : public Expression {
     : INHERITED(offset, kBoolLiteral_Kind, *context.fBool_Type)
     , fValue(value) {}
 
-#ifdef SK_DEBUG
     String description() const override {
         return String(fValue ? "true" : "false");
     }
-#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isConstant() const override {
+    bool isCompileTimeConstant() const override {
         return true;
     }
 
     bool compareConstant(const Context& context, const Expression& other) const override {
         BoolLiteral& b = (BoolLiteral&) other;
         return fValue == b.fValue;
+    }
+
+    int nodeCount() const override {
+        return 1;
     }
 
     std::unique_ptr<Expression> clone() const override {

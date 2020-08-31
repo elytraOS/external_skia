@@ -8,6 +8,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "src/core/SkGeometry.h"
+#include "src/core/SkMatrixPriv.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkPointPriv.h"
 #include "src/gpu/GrAuditTrail.h"
@@ -15,10 +16,11 @@
 #include "src/gpu/GrDrawOpTest.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrProcessor.h"
+#include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/geometry/GrPathUtils.h"
-#include "src/gpu/geometry/GrShape.h"
+#include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
@@ -27,7 +29,7 @@
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/ops/GrAAConvexPathRenderer.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 
 GrAAConvexPathRenderer::GrAAConvexPathRenderer() {
 }
@@ -212,6 +214,7 @@ static void update_degenerate_test(DegenerateTestData* data, const SkPoint& pt) 
             if (SkScalarAbs(data->fLineNormal.dot(pt) + data->fLineC) > kClose) {
                 data->fStage = DegenerateTestData::kNonDegenerate;
             }
+            break;
         case DegenerateTestData::kNonDegenerate:
             break;
         default:
@@ -575,14 +578,11 @@ public:
 
             // Setup position
             this->writeOutputPosition(vertBuilder, gpArgs, qe.fInPosition.name());
-
-            // emit transforms
-            this->emitTransforms(vertBuilder,
-                                 varyingHandler,
-                                 uniformHandler,
-                                 qe.fInPosition.asShaderVar(),
-                                 qe.fLocalMatrix,
-                                 args.fFPCoordTransformHandler);
+            if (qe.fUsesLocalCoords) {
+                this->writeLocalCoord(vertBuilder, uniformHandler, gpArgs,
+                                      qe.fInPosition.asShaderVar(), qe.fLocalMatrix,
+                                      &fLocalMatrixUniform);
+            }
 
             fragBuilder->codeAppendf("half edgeAlpha;");
 
@@ -609,18 +609,22 @@ public:
                                   const GrShaderCaps&,
                                   GrProcessorKeyBuilder* b) {
             const QuadEdgeEffect& qee = gp.cast<QuadEdgeEffect>();
-            b->add32(SkToBool(qee.fUsesLocalCoords && qee.fLocalMatrix.hasPerspective()));
+            uint32_t key = (uint32_t) qee.fUsesLocalCoords;
+            key |= ComputeMatrixKey(qee.fLocalMatrix) << 1;
+            b->add32(key);
         }
 
         void setData(const GrGLSLProgramDataManager& pdman,
-                     const GrPrimitiveProcessor& gp,
-                     const CoordTransformRange& transformRange) override {
+                     const GrPrimitiveProcessor& gp) override {
             const QuadEdgeEffect& qe = gp.cast<QuadEdgeEffect>();
-            this->setTransformDataHelper(qe.fLocalMatrix, pdman, transformRange);
+            this->setTransform(pdman, fLocalMatrixUniform, qe.fLocalMatrix, &fLocalMatrix);
         }
 
     private:
         typedef GrGLSLGeometryProcessor INHERITED;
+
+        SkMatrix      fLocalMatrix = SkMatrix::InvalidMatrix();
+        UniformHandle fLocalMatrixUniform;
     };
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
@@ -713,7 +717,11 @@ public:
     const char* name() const override { return "AAConvexPathOp"; }
 
     void visitProxies(const VisitProxyFunc& func) const override {
-        fHelper.visitProxies(func);
+        if (fProgramInfo) {
+            fProgramInfo->visitFPProxies(func);
+        } else {
+            fHelper.visitProxies(func);
+        }
     }
 
 #ifdef SK_DEBUG
@@ -737,19 +745,41 @@ public:
     }
 
 private:
-    void onPrepareDraws(Target* target) override {
-        int instanceCount = fPaths.count();
+    GrProgramInfo* programInfo() override { return fProgramInfo; }
 
+    void onCreateProgramInfo(const GrCaps* caps,
+                             SkArenaAlloc* arena,
+                             const GrSurfaceProxyView* writeView,
+                             GrAppliedClip&& appliedClip,
+                             const GrXferProcessor::DstProxyView& dstProxyView) override {
         SkMatrix invert;
         if (fHelper.usesLocalCoords() && !fPaths.back().fViewMatrix.invert(&invert)) {
             return;
         }
 
-        // Setup GrGeometryProcessor
-        GrGeometryProcessor* quadProcessor = QuadEdgeEffect::Make(target->allocator(), invert,
+        GrGeometryProcessor* quadProcessor = QuadEdgeEffect::Make(arena, invert,
                                                                   fHelper.usesLocalCoords(),
                                                                   fWideColor);
-        const size_t kVertexStride = quadProcessor->vertexStride();
+
+        fProgramInfo = fHelper.createProgramInfoWithStencil(caps, arena, writeView,
+                                                            std::move(appliedClip),
+                                                            dstProxyView, quadProcessor,
+                                                            GrPrimitiveType::kTriangles);
+    }
+
+    void onPrepareDraws(Target* target) override {
+        int instanceCount = fPaths.count();
+
+        if (!fProgramInfo) {
+            this->createProgramInfo(target);
+            if (!fProgramInfo) {
+                return;
+            }
+        }
+
+        const size_t kVertexStride = fProgramInfo->primProc().vertexStride();
+
+        fDraws.reserve(instanceCount);
 
         // TODO generate all segments for all paths and use one vertex buffer
         for (int i = 0; i < instanceCount; i++) {
@@ -809,26 +839,32 @@ private:
             GrVertexColor color(args.fColor, fWideColor);
             create_vertices(segments, fanPt, color, &draws, verts, idxs, kVertexStride);
 
-            GrMesh* meshes = target->allocMeshes(draws.count());
+            GrSimpleMesh* meshes = target->allocMeshes(draws.count());
             for (int j = 0; j < draws.count(); ++j) {
                 const Draw& draw = draws[j];
                 meshes[j].setIndexed(indexBuffer, draw.fIndexCnt, firstIndex, 0,
-                                     draw.fVertexCnt - 1, GrPrimitiveRestart::kNo);
-                meshes[j].setVertexData(vertexBuffer, firstVertex);
+                                     draw.fVertexCnt - 1, GrPrimitiveRestart::kNo, vertexBuffer,
+                                     firstVertex);
                 firstIndex += draw.fIndexCnt;
                 firstVertex += draw.fVertexCnt;
             }
-            target->recordDraw(quadProcessor, meshes, draws.count(), GrPrimitiveType::kTriangles);
+
+            fDraws.push_back({ meshes, draws.count() });
         }
     }
 
     void onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) override {
-        auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
-                                                                 fHelper.detachProcessorSet(),
-                                                                 fHelper.pipelineFlags(),
-                                                                 fHelper.stencilSettings());
+        if (!fProgramInfo || fDraws.isEmpty()) {
+            return;
+        }
 
-        flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
+        flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
+        flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
+        for (int i = 0; i < fDraws.count(); ++i) {
+            for (int j = 0; j < fDraws[i].fMeshCount; ++j) {
+                flushState->drawMesh(fDraws[i].fMeshes[j]);
+            }
+        }
     }
 
     CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
@@ -848,14 +884,22 @@ private:
     }
 
     struct PathData {
-        SkMatrix fViewMatrix;
-        SkPath fPath;
+        SkMatrix    fViewMatrix;
+        SkPath      fPath;
         SkPMColor4f fColor;
     };
 
     Helper fHelper;
     SkSTArray<1, PathData, true> fPaths;
     bool fWideColor;
+
+    struct MeshDraw {
+        GrSimpleMesh* fMeshes;
+        int fMeshCount;
+    };
+
+    SkTDArray<MeshDraw> fDraws;
+    GrProgramInfo*      fProgramInfo = nullptr;
 
     typedef GrMeshDrawOp INHERITED;
 };
@@ -874,7 +918,7 @@ bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     std::unique_ptr<GrDrawOp> op = AAConvexPathOp::Make(args.fContext, std::move(args.fPaint),
                                                         *args.fViewMatrix,
                                                         path, args.fUserStencilSettings);
-    args.fRenderTargetContext->addDrawOp(*args.fClip, std::move(op));
+    args.fRenderTargetContext->addDrawOp(args.fClip, std::move(op));
     return true;
 }
 

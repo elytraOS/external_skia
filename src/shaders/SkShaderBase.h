@@ -29,6 +29,7 @@ class SkImage;
 struct SkImageInfo;
 class SkPaint;
 class SkRasterPipeline;
+class SkRuntimeEffect;
 
 /**
  *  Shaders can optionally return a subclass of this when appending their stages.
@@ -44,12 +45,15 @@ class SkStageUpdater {
 public:
     virtual ~SkStageUpdater() {}
 
-    virtual bool update(const SkMatrix& ctm, const SkMatrix* localM) = 0;
+    virtual bool SK_WARN_UNUSED_RESULT update(const SkMatrix& ctm, const SkMatrix* localM) = 0;
 };
 
 class SkShaderBase : public SkShader {
 public:
     ~SkShaderBase() override;
+
+    sk_sp<SkShader> makeInvertAlpha() const;
+    sk_sp<SkShader> makeWithCTM(const SkMatrix&) const;  // owns its own ctm
 
     /**
      *  Returns true if the shader is guaranteed to produce only a single color.
@@ -179,13 +183,13 @@ public:
     //
     //   M = postLocalMatrix x shaderLocalMatrix x preLocalMatrix
     //
-    SkTCopyOnFirstWrite<SkMatrix> totalLocalMatrix(const SkMatrix* preLocalMatrix,
-                                                   const SkMatrix* postLocalMatrix = nullptr) const;
+    SkTCopyOnFirstWrite<SkMatrix> totalLocalMatrix(const SkMatrix* preLocalMatrix) const;
 
     virtual SkImage* onIsAImage(SkMatrix*, SkTileMode[2]) const {
         return nullptr;
     }
-    virtual SkPicture* isAPicture(SkMatrix*, SkTileMode[2], SkRect* tile) const { return nullptr; }
+
+    virtual SkRuntimeEffect* asRuntimeEffect() const { return nullptr; }
 
     static Type GetFlattenableType() { return kSkShaderBase_Type; }
     Type getFlattenableType() const override { return GetFlattenableType(); }
@@ -207,12 +211,10 @@ public:
         return this->onAppendUpdatableStages(rec);
     }
 
-    bool program(skvm::Builder*,
-                 const SkMatrix& ctm, const SkMatrix* localM,
-                 SkFilterQuality quality, SkColorSpace* dstCS,
-                 skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
-                 skvm::F32 x, skvm::F32 y,
-                 skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const;
+    skvm::Color program(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                        const SkMatrixProvider&, const SkMatrix* localM,
+                        SkFilterQuality quality, const SkColorInfo& dst,
+                        skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const;
 
 protected:
     SkShaderBase(const SkMatrix* localMatrix = nullptr);
@@ -239,18 +241,17 @@ protected:
     virtual SkStageUpdater* onAppendUpdatableStages(const SkStageRec&) const { return nullptr; }
 
 protected:
-    static void ApplyMatrix(skvm::Builder*, const SkMatrix&, skvm::F32* x, skvm::F32* y, skvm::Uniforms*);
+    static skvm::Coord ApplyMatrix(skvm::Builder*, const SkMatrix&, skvm::Coord, skvm::Uniforms*);
 
 private:
     // This is essentially const, but not officially so it can be modified in constructors.
     SkMatrix fLocalMatrix;
 
-    virtual bool onProgram(skvm::Builder*,
-                           const SkMatrix& ctm, const SkMatrix* localM,
-                           SkFilterQuality quality, SkColorSpace* dstCS,
-                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc,
-                           skvm::F32 x, skvm::F32 y,
-                           skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const;
+    virtual skvm::Color onProgram(skvm::Builder*,
+                                  skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                                  const SkMatrixProvider&, const SkMatrix* localM,
+                                  SkFilterQuality quality, const SkColorInfo& dst,
+                                  skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const;
 
     typedef SkShader INHERITED;
 };
