@@ -98,7 +98,7 @@ public:
         return fTokenTracker.nextDrawToken();
     }
 
-    virtual GrDeferredUploadToken addASAPUpload(GrDeferredTextureUploadFn&& upload) final {
+    GrDeferredUploadToken addASAPUpload(GrDeferredTextureUploadFn&& upload) final {
         return fTokenTracker.nextTokenToFlush();
     }
 
@@ -108,7 +108,7 @@ public:
 private:
     GrTokenTracker fTokenTracker;
 
-    typedef GrDeferredUploadTarget INHERITED;
+    using INHERITED = GrDeferredUploadTarget;
 };
 
 static bool fill_plot(GrDrawOpAtlas* atlas,
@@ -227,10 +227,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation, reporter, ctxInfo) 
     GrOpFlushState::OpArgs opArgs(op.get(),
                                   &surfaceView,
                                   nullptr,
-                                  GrXferProcessor::DstProxyView(GrSurfaceProxyView(),
-                                                                SkIPoint::Make(0, 0)));
+                                  GrXferProcessor::DstProxyView(),
+                                  GrXferBarrierFlags::kNone);
 
-    // Cripple the atlas manager so it can't allocate any pages. This will force a failure
+    // Modify the atlas manager so it can't allocate any pages. This will force a failure
     // in the preparation of the text op
     auto atlasManager = context->priv().getAtlasManager();
     unsigned int numProxies;

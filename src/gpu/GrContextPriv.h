@@ -58,6 +58,10 @@ public:
     GrStrikeCache* getGrStrikeCache() { return fContext->fStrikeCache.get(); }
     GrTextBlobCache* getTextBlobCache() { return fContext->getTextBlobCache(); }
 
+    GrThreadSafeUniquelyKeyedProxyViewCache* threadSafeViewCache() {
+        return fContext->threadSafeViewCache();
+    }
+
     /**
      * Registers an object for flush-related callbacks. (See GrOnFlushCallbackObject.)
      *
@@ -112,6 +116,11 @@ public:
         return fContext->onGetAtlasManager();
     }
 
+    // This accessor should only ever be called by the GrOpFlushState.
+    GrSmallPathAtlasMgr* getSmallPathAtlasMgr() {
+        return fContext->onGetSmallPathAtlasMgr();
+    }
+
     void copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest);
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&);
@@ -162,8 +171,8 @@ public:
 
 private:
     explicit GrContextPriv(GrContext* context) : fContext(context) {}
-    GrContextPriv(const GrContextPriv&); // unimpl
-    GrContextPriv& operator=(const GrContextPriv&); // unimpl
+    GrContextPriv(const GrContextPriv&) = delete;
+    GrContextPriv& operator=(const GrContextPriv&) = delete;
 
     // No taking addresses of this type.
     const GrContextPriv* operator&() const;
@@ -176,7 +185,7 @@ private:
 
 inline GrContextPriv GrContext::priv() { return GrContextPriv(this); }
 
-inline const GrContextPriv GrContext::priv() const {
+inline const GrContextPriv GrContext::priv() const {  // NOLINT(readability-const-return-type)
     return GrContextPriv(const_cast<GrContext*>(this));
 }
 

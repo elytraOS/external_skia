@@ -17,7 +17,7 @@ SkScalar littleRound(SkScalar a) {
         return SkScalarFloorToScalar(a);
     }
 }
-}
+}  // namespace
 
 // Since we allow cluster clipping when they don't fit
 // we have to work with stretches - parts of clusters
@@ -224,11 +224,10 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
         return;
     }
     auto maxLines = parent->paragraphStyle().getMaxLines();
-    auto& ellipsisStr = parent->paragraphStyle().getEllipsis();
     auto align = parent->paragraphStyle().effective_align();
     auto unlimitedLines = maxLines == std::numeric_limits<size_t>::max();
     auto endlessLine = !SkScalarIsFinite(maxWidth);
-    auto hasEllipsis = !ellipsisStr.isEmpty();
+    auto hasEllipsis = parent->paragraphStyle().ellipsized();
 
     SkScalar softLineMaxIntrinsicWidth = 0;
     fEndLine = TextStretch(span.begin(), span.begin(), parent->strutForceHeight());

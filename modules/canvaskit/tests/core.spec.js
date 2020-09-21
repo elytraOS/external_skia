@@ -24,7 +24,7 @@ describe('Core canvas behavior', () => {
         paint.setColor(CanvasKit.Color(0, 0, 0, 1.0));
         paint.setStyle(CanvasKit.PaintStyle.Stroke);
 
-        rcanvas.drawRoundRect(CanvasKit.LTRBRect(5, 35, 45, 80), 15, 10, paint);
+        rcanvas.drawRRect(CanvasKit.RRectXY([5, 35, 45, 80], 15, 10), paint);
 
         const font = new CanvasKit.SkFont(null, 20);
         rcanvas.drawText('this picture has a round rect', 5, 100, paint, font);
@@ -165,24 +165,24 @@ describe('Core canvas behavior', () => {
         expect(aImg.width()).toEqual(320);
         expect(aImg.height()).toEqual(240);
         expect(aImg.getFrameCount()).toEqual(60);
-        // TODO(kjlubick): deprecate drawAnimatedImage and have it just snap off
-        // an SkImage at the desired frame.
 
-        canvas.drawAnimatedImage(aImg, 0, 0);
+        let img = aImg.makeImageAtCurrentFrame();
+        canvas.drawImage(img, 0, 0, null);
+        img.delete(); // This is annoying, so we added drawImageAtCurrentFrame
 
         let c = aImg.decodeNextFrame();
         expect(c).not.toEqual(-1);
-        canvas.drawAnimatedImage(aImg, 300, 0);
+        canvas.drawImageAtCurrentFrame(aImg, 300, 0, null);
         for(let i = 0; i < 10; i++) {
             c = aImg.decodeNextFrame();
             expect(c).not.toEqual(-1);
         }
-        canvas.drawAnimatedImage(aImg, 0, 300);
+        canvas.drawImageAtCurrentFrame(aImg, 0, 300, null);
         for(let i = 0; i < 10; i++) {
             c = aImg.decodeNextFrame();
             expect(c).not.toEqual(-1);
         }
-        canvas.drawAnimatedImage(aImg, 300, 300);
+        canvas.drawImageAtCurrentFrame(aImg, 300, 300, null);
 
         aImg.delete();
     }, '/assets/flightAnim.gif');

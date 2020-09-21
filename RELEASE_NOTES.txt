@@ -4,8 +4,55 @@ This file includes a list of high level updates for each milestone release.
 
 * * *
 
+Milestone 87
+------------
+
+  * <insert new release notes here>
+
+  * New optimized clip stack for GPU backends. Enabled by default but old behavior based on
+    SkClipStack can be restored by defining SK_DISABLE_NEW_GR_CLIP_STACK when building. It is not
+    compatible with SK_SUPPORT_DEPRECATED_CLIPOPS and we are targeting the removal of support for
+    the deprecated, expanding clip ops.
+    https://review.skia.org/317209
+
+  * Switch to using Microsoft::WRL::ComPtr for wrapping D3D12 objects.
+    https://review.skia.org/314957
+
+  * GPU backends now properly honor the SkFilterQuality when calling drawAtlas.
+    https://review.skia.org/313081
+
+  * The signature of 'main' used with SkRuntimeEffect SkSL has changed. There is no longer an
+    'inout half4 color' parameter, effects must return their color instead.
+    Valid signatures are now 'half4 main()' or 'half4 main(float2 coord)'.
+    https://review.skia.org/310756
+
+  * New YUVA planar specifications for SkCodec, SkImageGenerator, SkImage::MakeFromYUVAPixmaps.
+    Chroma subsampling is specified in more structured way. SkCodec and SkImageGenerator
+    don't assume 3 planes with 8bit planar values. Old APIs are deprecated.
+    https://review.skia.org/309658
+    https://review.skia.org/312886
+    https://review.skia.org/314276
+    https://review.skia.org/316837
+    https://review.skia.org/317097
+
+  * Added VkImageUsageFlags to GrVkImageInfo struct.
+
+* * *
+
 Milestone 86
 ------------
+
+  * Remove support for 'in' variables from SkRuntimeEffect. API now exclusively refers to inputs
+    as 'uniforms'.
+    https://review.skia.org/309050
+
+  * Add SkImageGeneratorNDK and SkEncodeImageWithNDK for using Android's NDK APIs to decode and
+    encode.
+    https://review.skia.org/308185
+    https://review.skia.org/308800
+
+  * SkImage:remove DecodeToRaster, DecodeToTexture
+    https://review.skia.org/306331
 
   * Add GrContext api to update compressed backend textures.
     https://review.skia.org/302265
@@ -41,6 +88,9 @@ Milestone 86
     GrRecordingContexts. Clients requiring context features that need GPU access can then
     check (via GrRecordingContext::asDirectContext) if the available recording context is actually
     a direct context.
+
+  * Replace #defined values in SkString with equivalent constexprs.
+    http://review.skia.org/306160
 
 * * *
 

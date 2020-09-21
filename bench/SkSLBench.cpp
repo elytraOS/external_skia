@@ -30,9 +30,7 @@ protected:
                                                                       SkSL::Program::kFragment_Kind,
                                                                       fSrc,
                                                                       fSettings);
-            if (!fCompiler.errorCount()) {
-                fCompiler.optimize(*program);
-            } else {
+            if (fCompiler.errorCount()) {
                 printf("%s\n", fCompiler.errorText().c_str());
                 SK_ABORT("shader compilation failed");
             }
@@ -45,7 +43,7 @@ private:
     SkSL::Compiler fCompiler;
     SkSL::Program::Settings fSettings;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

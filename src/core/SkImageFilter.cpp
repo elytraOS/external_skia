@@ -174,6 +174,12 @@ bool SkImageFilter_Base::Common::unflatten(SkReadBuffer& buffer, int expectedCou
         return false;
     }
 
+#if defined(SK_BUILD_FOR_FUZZER)
+    if (count > 4) {
+        return false;
+    }
+#endif
+
     SkASSERT(fInputs.empty());
     for (int i = 0; i < count; i++) {
         fInputs.push_back(buffer.readBool() ? buffer.readImageFilter() : nullptr);
@@ -526,7 +532,6 @@ skif::LayerSpace<SkIRect> SkImageFilter_Base::onGetOutputLayerBounds(
 
 template<skif::Usage kU>
 skif::FilterResult<kU> SkImageFilter_Base::filterInput(int index, const skif::Context& ctx) const {
-    // Sanity checks for the index-specific input usages
     SkASSERT(kU != skif::Usage::kInput0 || index == 0);
     SkASSERT(kU != skif::Usage::kInput1 || index == 1);
 

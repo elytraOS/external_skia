@@ -151,10 +151,6 @@ bool SkBinaryWriteBuffer::writeToStream(SkWStream* stream) const {
  */
 void SkBinaryWriteBuffer::writeImage(const SkImage* image) {
     uint32_t flags = 0;
-    const SkIRect r = SkImage_getSubset(image);
-    if (r.x() != 0 || r.y() != 0 || r.width() != image->width() || r.height() != image->height()) {
-        flags |= SkWriteBufferImageFlags::kHasSubsetRect;
-    }
     const SkMipmap* mips = as_IB(image)->onPeekMips();
     if (mips) {
         flags |= SkWriteBufferImageFlags::kHasMipmap;
@@ -171,12 +167,8 @@ void SkBinaryWriteBuffer::writeImage(const SkImage* image) {
     }
     this->writeDataAsByteArray(data.get());
 
-    if (flags & SkWriteBufferImageFlags::kHasSubsetRect) {
-        this->writeIRect(r);
-    }
     if (flags & SkWriteBufferImageFlags::kHasMipmap) {
         this->writeDataAsByteArray(mips->serialize().get());
-
     }
 }
 
@@ -227,21 +219,17 @@ void SkBinaryWriteBuffer::writeFlattenable(const SkFlattenable* flattenable) {
 
     /*
      *  We can write 1 of 2 versions of the flattenable:
-     *  1.  index into fFactorySet : This assumes the writer will later
-     *      resolve the function-ptrs into strings for its reader. SkPicture
-     *      does exactly this, by writing a table of names (matching the indices)
-     *      up front in its serialized form.
-     *  2.  string name of the flattenable or index into fFlattenableDict:  We
-     *      store the string to allow the reader to specify its own factories
-     *      after write time.  In order to improve compression, if we have
-     *      already written the string, we write its index instead.
+     *
+     *  1. index into fFactorySet: This assumes the writer will later resolve the function-ptrs
+     *     into strings for its reader. SkPicture does exactly this, by writing a table of names
+     *     (matching the indices) up front in its serialized form.
+     *
+     *  2. string name of the flattenable or index into fFlattenableDict:  We store the string to
+     *     allow the reader to specify its own factories after write time. In order to improve
+     *     compression, if we have already written the string, we write its index instead.
      */
 
-
-    if (fFactorySet) {
-        SkFlattenable::Factory factory = flattenable->getFactory();
-        SkASSERT(factory);
-
+    if (SkFlattenable::Factory factory = flattenable->getFactory(); factory && fFactorySet) {
         this->write32(fFactorySet->add(factory));
     } else {
         const char* name = flattenable->getTypeName();

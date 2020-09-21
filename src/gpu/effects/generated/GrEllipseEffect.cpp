@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrEllipseEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -140,7 +141,7 @@ GrGLSLFragmentProcessor* GrEllipseEffect::onCreateGLSLInstance() const {
 }
 void GrEllipseEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                             GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)edgeType);
+    b->add32((uint32_t)edgeType);
 }
 bool GrEllipseEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const GrEllipseEffect& that = other.cast<GrEllipseEffect>();
@@ -150,6 +151,7 @@ bool GrEllipseEffect::onIsEqual(const GrFragmentProcessor& other) const {
     if (radii != that.radii) return false;
     return true;
 }
+bool GrEllipseEffect::usesExplicitReturn() const { return false; }
 GrEllipseEffect::GrEllipseEffect(const GrEllipseEffect& src)
         : INHERITED(kGrEllipseEffect_ClassID, src.optimizationFlags())
         , edgeType(src.edgeType)
@@ -158,8 +160,14 @@ GrEllipseEffect::GrEllipseEffect(const GrEllipseEffect& src)
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrEllipseEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrEllipseEffect(*this));
+    return std::make_unique<GrEllipseEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrEllipseEffect::onDumpInfo() const {
+    return SkStringPrintf("(edgeType=%d, center=float2(%f, %f), radii=float2(%f, %f))",
+                          (int)edgeType, center.fX, center.fY, radii.fX, radii.fY);
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrEllipseEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrEllipseEffect::TestCreate(GrProcessorTestData* testData) {

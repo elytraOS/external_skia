@@ -185,13 +185,16 @@ public:
     #endif
 
         inline int random()  {
-            static const int gRandAmplitude = 16807; // 7**5; primitive root of m
-            static const int gRandQ = 127773; // m / a
-            static const int gRandR = 2836; // m % a
+            // See https://www.w3.org/TR/SVG11/filters.html#feTurbulenceElement
+            // m = kRandMaximum, 2**31 - 1 (2147483647)
+            static constexpr int kRandAmplitude = 16807; // 7**5; primitive root of m
+            static constexpr int kRandQ = 127773; // m / a
+            static constexpr int kRandR = 2836; // m % a
 
-            int result = gRandAmplitude * (fSeed % gRandQ) - gRandR * (fSeed / gRandQ);
-            if (result <= 0)
+            int result = kRandAmplitude * (fSeed % kRandQ) - kRandR * (fSeed / kRandQ);
+            if (result <= 0) {
                 result += kRandMaximum;
+            }
             fSeed = result;
             return result;
         }
@@ -199,8 +202,6 @@ public:
         // Only called once. Could be part of the constructor.
         void init(SkScalar seed)
         {
-            static const SkScalar gInvBlockSizef = SkScalarInvert(SkIntToScalar(kBlockSize));
-
             // According to the SVG spec, we must truncate (not round) the seed value.
             fSeed = SkScalarTruncToInt(seed);
             // The seed value clamp to the range [1, kRandMaximum - 1].
@@ -248,20 +249,21 @@ public:
             }
 
             // Half of the largest possible value for 16 bit unsigned int
-            static const SkScalar gHalfMax16bits = 32767.5f;
+            static constexpr SkScalar kHalfMax16bits = 32767.5f;
 
             // Compute gradients from permutated noise data
+            static constexpr SkScalar kInvBlockSizef = 1.0 / SkIntToScalar(kBlockSize);
             for (int channel = 0; channel < 4; ++channel) {
                 for (int i = 0; i < kBlockSize; ++i) {
                     fGradient[channel][i] = SkPoint::Make(
-                        (fNoise[channel][i][0] - kBlockSize) * gInvBlockSizef,
-                        (fNoise[channel][i][1] - kBlockSize) * gInvBlockSizef);
+                        (fNoise[channel][i][0] - kBlockSize) * kInvBlockSizef,
+                        (fNoise[channel][i][1] - kBlockSize) * kInvBlockSizef);
                     fGradient[channel][i].normalize();
                     // Put the normalized gradient back into the noise data
-                    fNoise[channel][i][0] = SkScalarRoundToInt(
-                                                   (fGradient[channel][i].fX + 1) * gHalfMax16bits);
-                    fNoise[channel][i][1] = SkScalarRoundToInt(
-                                                   (fGradient[channel][i].fY + 1) * gHalfMax16bits);
+                    fNoise[channel][i][0] =
+                            SkScalarRoundToInt((fGradient[channel][i].fX + 1) * kHalfMax16bits);
+                    fNoise[channel][i][1] =
+                            SkScalarRoundToInt((fGradient[channel][i].fY + 1) * kHalfMax16bits);
                 }
             }
         }
@@ -362,7 +364,7 @@ public:
         SkMatrix     fMatrix;
         PaintingData fPaintingData;
 
-        typedef Context INHERITED;
+        using INHERITED = Context;
     };
 
 #if SK_SUPPORT_GPU
@@ -388,7 +390,7 @@ private:
 
     friend class ::SkPerlinNoiseShader;
 
-    typedef SkShaderBase INHERITED;
+    using INHERITED = SkShaderBase;
 };
 
 namespace {
@@ -549,7 +551,7 @@ SkScalar SkPerlinNoiseShaderImpl::PerlinNoiseShaderContext::calculateTurbulenceV
         ratio *= 2;
         if (perlinNoiseShader.fStitchTiles) {
             // Update stitch values
-            stitchData = StitchData(SkIntToScalar(stitchData.fWidth)  * 2,
+            stitchData = StitchData(SkIntToScalar(stitchData.fWidth) * 2,
                                     SkIntToScalar(stitchData.fHeight) * 2);
         }
     }
@@ -710,7 +712,7 @@ private:
     GrGLSLProgramDataManager::UniformHandle fStitchDataUni;
     GrGLSLProgramDataManager::UniformHandle fBaseFrequencyUni;
 
-    typedef GrGLSLFragmentProcessor INHERITED;
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -758,8 +760,7 @@ private:
         return new GrGLPerlinNoise;
     }
 
-    virtual void onGetGLSLProcessorKey(const GrShaderCaps& caps,
-                                       GrProcessorKeyBuilder* b) const override {
+    void onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
         GrGLPerlinNoise::GenKey(*this, caps, b);
     }
 
@@ -807,7 +808,7 @@ private:
 
     std::unique_ptr<SkPerlinNoiseShaderImpl::PaintingData> fPaintingData;
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -1083,7 +1084,7 @@ private:
     GrGLSLProgramDataManager::UniformHandle fZUni;
     GrGLSLProgramDataManager::UniformHandle fBaseFrequencyUni;
 
-    typedef GrGLSLFragmentProcessor INHERITED;
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -1132,9 +1133,10 @@ private:
     }
 
     bool onIsEqual(const GrFragmentProcessor& sBase) const override {
-        const GrImprovedPerlinNoiseEffect& s = sBase.cast<GrImprovedPerlinNoiseEffect>();
-        return fZ == fZ &&
-               fPaintingData->fBaseFrequency == s.fPaintingData->fBaseFrequency;
+        const GrImprovedPerlinNoiseEffect& that = sBase.cast<GrImprovedPerlinNoiseEffect>();
+        return this->z() == that.z() &&
+               this->octaves() == that.octaves() &&
+               this->baseFrequency() == that.baseFrequency();
     }
 
     GrImprovedPerlinNoiseEffect(int octaves,
@@ -1155,7 +1157,8 @@ private:
             : INHERITED(kGrImprovedPerlinNoiseEffect_ClassID, kNone_OptimizationFlags)
             , fOctaves(that.fOctaves)
             , fZ(that.fZ)
-            , fPaintingData(new SkPerlinNoiseShaderImpl::PaintingData(*that.fPaintingData)) {
+            , fPaintingData(std::make_unique<SkPerlinNoiseShaderImpl::PaintingData>(
+                      *that.fPaintingData)) {
         this->cloneAndRegisterAllChildProcessors(that);
         this->setUsesSampleCoordsDirectly();
     }
@@ -1167,7 +1170,7 @@ private:
 
     std::unique_ptr<SkPerlinNoiseShaderImpl::PaintingData> fPaintingData;
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -1184,9 +1187,9 @@ std::unique_ptr<GrFragmentProcessor> GrImprovedPerlinNoiseEffect::TestCreate(
     SkScalar z = SkIntToScalar(d->fRandom->nextU());
 
     sk_sp<SkShader> shader(SkPerlinNoiseShader::MakeImprovedNoise(baseFrequencyX,
-                                                                   baseFrequencyY,
-                                                                   numOctaves,
-                                                                   z));
+                                                                  baseFrequencyY,
+                                                                  numOctaves,
+                                                                  z));
 
     GrTest::TestAsFPArgs asFPArgs(d);
     return as_SB(shader)->asFragmentProcessor(asFPArgs.args());

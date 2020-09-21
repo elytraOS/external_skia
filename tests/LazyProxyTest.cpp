@@ -114,7 +114,8 @@ public:
         void onPrePrepare(GrRecordingContext*,
                           const GrSurfaceProxyView* writeView,
                           GrAppliedClip*,
-                          const GrXferProcessor::DstProxyView&) override {}
+                          const GrXferProcessor::DstProxyView&,
+                          GrXferBarrierFlags renderPassXferBarriers) override {}
 
         void onPrepare(GrOpFlushState*) override {}
 
@@ -178,7 +179,7 @@ public:
         SkIRect getConservativeBounds() const final {
             return SkIRect::MakeSize(fAtlas->dimensions());
         }
-        Effect apply(GrRecordingContext* context, GrRenderTargetContext*, bool useHWAA,
+        Effect apply(GrRecordingContext* context, GrRenderTargetContext*, GrAAType,
                          bool hasUserStencilSettings, GrAppliedClip* out,
                          SkRect* bounds) const override {
             GrProxyProvider* proxyProvider = context->priv().proxyProvider();
@@ -273,9 +274,9 @@ DEF_GPUTEST(LazyProxyReleaseTest, reporter, /* options */) {
             };
             sk_sp<GrTextureProxy> proxy = proxyProvider->createLazyProxy(
                     TestCallback(&testCount, releaseCallback, tex), format, {kSize, kSize},
-                    GrRenderable::kNo, 1, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
-                    GrInternalSurfaceFlags::kNone, SkBackingFit::kExact, SkBudgeted::kNo,
-                    GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
+                    GrMipmapped::kNo, GrMipmapStatus::kNotAllocated, GrInternalSurfaceFlags::kNone,
+                    SkBackingFit::kExact, SkBudgeted::kNo, GrProtected::kNo,
+                    GrSurfaceProxy::UseAllocator::kYes);
 
             REPORTER_ASSERT(reporter, proxy.get());
             REPORTER_ASSERT(reporter, 0 == testCount);
@@ -343,9 +344,9 @@ private:
                                               desc.fProtected),
                             true, GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced};
                 },
-                format, dims, GrRenderable::kNo, 1, GrMipmapped::kNo,
-                GrMipmapStatus::kNotAllocated, GrInternalSurfaceFlags::kNone, SkBackingFit::kExact,
-                SkBudgeted::kNo, GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
+                format, dims, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
+                GrInternalSurfaceFlags::kNone, SkBackingFit::kExact, SkBudgeted::kNo,
+                GrProtected::kNo, GrSurfaceProxy::UseAllocator::kYes);
 
         SkASSERT(fLazyProxy.get());
 
@@ -361,7 +362,8 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState* state, const SkRect& chainBounds) override {
         *fTestExecuteValue = 2;
@@ -370,7 +372,7 @@ private:
     int* fTestExecuteValue;
     sk_sp<GrTextureProxy> fLazyProxy;
 
-    typedef GrDrawOp INHERITED;
+    using INHERITED = GrDrawOp;
 };
 
 // Test that when a lazy proxy fails to instantiate during flush that we drop the Op that it was

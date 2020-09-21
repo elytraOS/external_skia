@@ -59,7 +59,7 @@ void MetalWindowContext::initializeContext() {
 
 void MetalWindowContext::destroyContext() {
     if (fContext) {
-        // in case we have outstanding refs to this guy (lua?)
+        // in case we have outstanding refs to this (lua?)
         fContext->abandonContext();
         fContext.reset();
     }
@@ -88,15 +88,16 @@ sk_sp<SkSurface> MetalWindowContext::getBackbufferSurface() {
 }
 
 void MetalWindowContext::swapBuffers() {
-    // ARC is off in sk_app, so we need to release the CF ref manually
     id<CAMetalDrawable> currentDrawable = (id<CAMetalDrawable>)fDrawableHandle;
-    CFRelease(fDrawableHandle);
 
     id<MTLCommandBuffer> commandBuffer = [fQueue commandBuffer];
     commandBuffer.label = @"Present";
 
     [commandBuffer presentDrawable:currentDrawable];
     [commandBuffer commit];
+    // ARC is off in sk_app, so we need to release the CF ref manually
+    CFRelease(fDrawableHandle);
+    fDrawableHandle = nil;
 }
 
 void MetalWindowContext::setDisplayParams(const DisplayParams& params) {

@@ -601,7 +601,7 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_FreeType::onGetAdvancedMet
     info->fFontName = info->fPostScriptName;
 
     if (FT_HAS_MULTIPLE_MASTERS(face)) {
-        info->fFlags |= SkAdvancedTypefaceMetrics::kMultiMaster_FontFlag;
+        info->fFlags |= SkAdvancedTypefaceMetrics::kVariable_FontFlag;
     }
     if (!canEmbed(face)) {
         info->fFlags |= SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag;
@@ -1489,10 +1489,14 @@ void SkScalerContext_FreeType::generateFontMetrics(SkFontMetrics* metrics) {
         ascent = -SkIntToScalar(face->size->metrics.ascender) / (yppem * 64.0f);
         descent = -SkIntToScalar(face->size->metrics.descender) / (yppem * 64.0f);
         leading = (SkIntToScalar(face->size->metrics.height) / (yppem * 64.0f)) + ascent - descent;
+
         xmin = 0.0f;
         xmax = SkIntToScalar(face->available_sizes[fStrikeIndex].width) / xppem;
         ymin = descent;
         ymax = ascent;
+        // The actual bitmaps may be any size and placed at any offset.
+        metrics->fFlags |= SkFontMetrics::kBoundsInvalid_Flag;
+
         underlineThickness = 0;
         underlinePosition = 0;
         metrics->fFlags &= ~SkFontMetrics::kUnderlineThicknessIsValid_Flag;

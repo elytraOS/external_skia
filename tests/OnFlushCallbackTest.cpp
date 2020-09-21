@@ -103,7 +103,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         using namespace GrDefaultGeoProcFactory;
 
         GrGeometryProcessor* gp = GrDefaultGeoProcFactory::Make(
@@ -119,7 +120,8 @@ private:
         }
 
         fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                                 dstProxyView, gp, GrPrimitiveType::kTriangles);
+                                                 dstProxyView, gp, GrPrimitiveType::kTriangles,
+                                                 renderPassXferBarriers);
     }
 
     void onPrepareDraws(Target* target) override {
@@ -200,7 +202,7 @@ private:
     GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 }  // anonymous namespace
@@ -266,7 +268,7 @@ private:
     // The Atlased ops have an internal singly-linked list of ops that land in the same opsTask
     AtlasedRectOp* fNext;
 
-    typedef NonAARectOp INHERITED;
+    using INHERITED = NonAARectOp;
 };
 
 }  // anonymous namespace
@@ -564,17 +566,17 @@ static void test_color(skiatest::Reporter* reporter, const SkBitmap& bm, int x, 
 DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(OnFlushCallbackTest, reporter, ctxInfo) {
     static const int kNumViews = 3;
 
-    auto context = ctxInfo.directContext();
-    auto proxyProvider = context->priv().proxyProvider();
+    auto dContext = ctxInfo.directContext();
+    auto proxyProvider = dContext->priv().proxyProvider();
 
     AtlasObject object(reporter);
 
-    context->priv().addOnFlushCallbackObject(&object);
+    dContext->priv().addOnFlushCallbackObject(&object);
 
     GrSurfaceProxyView views[kNumViews];
     for (int i = 0; i < kNumViews; ++i) {
-        views[i] = make_upstream_image(context, &object, i * 3,
-                                       object.getAtlasView(proxyProvider, context->priv().caps()),
+        views[i] = make_upstream_image(dContext, &object, i * 3,
+                                       object.getAtlasView(proxyProvider, dContext->priv().caps()),
                                        kPremul_SkAlphaType);
     }
 
@@ -582,7 +584,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(OnFlushCallbackTest, reporter, ctxInfo) {
     static const int kFinalHeight = kDrawnTileSize;
 
     auto rtc = GrRenderTargetContext::Make(
-            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox,
+            dContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox,
             {kFinalWidth, kFinalHeight});
 
     rtc->clear(SK_PMColor4fWHITE);
@@ -606,11 +608,10 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(OnFlushCallbackTest, reporter, ctxInfo) {
     SkBitmap readBack;
     readBack.allocN32Pixels(kFinalWidth, kFinalHeight);
 
-    SkDEBUGCODE(bool result =) rtc->readPixels(readBack.info(), readBack.getPixels(),
-                                               readBack.rowBytes(), {0, 0});
-    SkASSERT(result);
+    SkAssertResult(rtc->readPixels(dContext, readBack.info(), readBack.getPixels(),
+                                   readBack.rowBytes(), {0, 0}));
 
-    context->priv().testingOnly_flushAndRemoveOnFlushCallbackObject(&object);
+    dContext->priv().testingOnly_flushAndRemoveOnFlushCallbackObject(&object);
 
     object.markAsDone();
 

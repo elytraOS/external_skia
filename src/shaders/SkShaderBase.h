@@ -135,7 +135,7 @@ public:
         SkMatrix    fTotalInverse;
         uint8_t     fPaintAlpha;
 
-        typedef SkNoncopyable INHERITED;
+        using INHERITED = SkNoncopyable;
     };
 
     /**
@@ -173,6 +173,7 @@ public:
     bool asLuminanceColor(SkColor*) const;
 
     // If this returns false, then we draw nothing (do not fall back to shader context)
+    SK_WARN_UNUSED_RESULT
     bool appendStages(const SkStageRec&) const;
 
     bool SK_WARN_UNUSED_RESULT computeTotalInverse(const SkMatrix& ctm,
@@ -211,6 +212,7 @@ public:
         return this->onAppendUpdatableStages(rec);
     }
 
+    SK_WARN_UNUSED_RESULT
     skvm::Color program(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
                         const SkMatrixProvider&, const SkMatrix* localM,
                         SkFilterQuality quality, const SkColorInfo& dst,
@@ -253,7 +255,7 @@ private:
                                   SkFilterQuality quality, const SkColorInfo& dst,
                                   skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const;
 
-    typedef SkShader INHERITED;
+    using INHERITED = SkShader;
 };
 
 inline SkShaderBase* as_SB(SkShader* shader) {

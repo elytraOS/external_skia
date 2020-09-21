@@ -13,9 +13,11 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
+#include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/gl/GrGLDefines.h"
 #include "src/image/SkImage_Base.h"
+#include "src/image/SkImage_GpuBase.h"
 
 #include "tools/Resources.h"
 
@@ -56,7 +58,7 @@ static sk_sp<SkData> load_ktx(const char* filename, ImageInfo* imageInfo) {
         0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A
     };
 
-    if (memcmp(header, kExpectedIdentifier, kKTXIdentifierSize)) {
+    if (0 != memcmp(header, kExpectedIdentifier, kKTXIdentifierSize)) {
         return nullptr;
     }
 
@@ -336,9 +338,10 @@ protected:
         return SkISize::Make(2*kImgWidthHeight + 3 * kPad, kImgWidthHeight + 2 * kPad);
     }
 
-    void loadImages(GrDirectContext *direct) {
+    bool loadImages(GrDirectContext *direct) {
+        SkASSERT(!fETC1Image && !fBC1Image);
 
-        if (!fETC1Image) {
+        {
             ImageInfo info;
             sk_sp<SkData> data = load_ktx(GetResourcePath("images/flower-etc1.ktx").c_str(), &info);
             if (data) {
@@ -349,10 +352,11 @@ protected:
                 fETC1Image = data_to_img(direct, std::move(data), info);
             } else {
                 SkDebugf("failed to load flower-etc1.ktx\n");
+                return false;
             }
         }
 
-        if (!fBC1Image) {
+        {
             ImageInfo info;
             sk_sp<SkData> data = load_dds(GetResourcePath("images/flower-bc1.dds").c_str(), &info);
             if (data) {
@@ -363,19 +367,21 @@ protected:
                 fBC1Image = data_to_img(direct, std::move(data), info);
             } else {
                 SkDebugf("failed to load flower-bc1.dds\n");
+                return false;
             }
         }
 
+        return true;
     }
 
-    void drawImage(GrRecordingContext* context, SkCanvas* canvas, SkImage* image, int x, int y) {
+    void drawImage(SkCanvas* canvas, SkImage* image, int x, int y) {
         if (!image) {
             return;
         }
 
         bool isCompressed = false;
         if (image->isTextureBacked()) {
-            const GrCaps* caps = context->priv().caps();
+            const GrCaps* caps = as_IB(image)->context()->priv().caps();
 
             GrTextureProxy* proxy = as_IB(image)->peekProxy();
             isCompressed = caps->isFormatCompressed(proxy->backendFormat());
@@ -394,19 +400,31 @@ protected:
         }
     }
 
-    void onDraw(SkCanvas* canvas) override {
-        auto recording = canvas->recordingContext();
-        auto direct = GrAsDirectContext(recording);
-
-        // In DDL mode, these draws will be dropped.
-        if (recording && !direct) {
-            return;
+    DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
+        if (dContext && dContext->abandoned()) {
+            // This isn't a GpuGM so a null 'context' is okay but an abandoned context
+            // if forbidden.
+            return DrawResult::kSkip;
         }
 
-        this->loadImages(direct);
+        if (!this->loadImages(dContext)) {
+            *errorMsg = "Failed to create images.";
+            return DrawResult::kFail;
+        }
 
-        this->drawImage(direct, canvas, fETC1Image.get(), kPad, kPad);
-        this->drawImage(direct, canvas, fBC1Image.get(), kImgWidthHeight + 2 * kPad, kPad);
+        return DrawResult::kOk;
+    }
+
+    void onGpuTeardown() override {
+        fETC1Image = nullptr;
+        fBC1Image = nullptr;
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+        SkASSERT(fETC1Image && fBC1Image);
+
+        this->drawImage(canvas, fETC1Image.get(), kPad, kPad);
+        this->drawImage(canvas, fBC1Image.get(), kImgWidthHeight + 2 * kPad, kPad);
     }
 
 private:
@@ -416,10 +434,10 @@ private:
     sk_sp<SkImage> fETC1Image;
     sk_sp<SkImage> fBC1Image;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new ExoticFormatsGM;)
-}
+}  // namespace skiagm

@@ -13,7 +13,7 @@
 #include "src/gpu/GrPrimitiveProcessor.h"
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
@@ -49,10 +49,7 @@ static uint32_t sampler_key(GrTextureType textureType, const GrSwizzle& swizzle,
     int samplerTypeKey = texture_type_key(textureType);
 
     static_assert(2 == sizeof(swizzle.asKey()));
-    uint16_t swizzleKey = 0;
-    if (caps.shaderCaps()->textureSwizzleAppliedInShader()) {
-        swizzleKey = swizzle.asKey();
-    }
+    uint16_t swizzleKey = swizzle.asKey();
     return SkToU32(samplerTypeKey | swizzleKey << kSamplerOrImageTypeKeyBits);
 }
 
@@ -163,9 +160,10 @@ static bool gen_frag_proc_and_meta_keys(const GrPrimitiveProcessor& primProc,
     return gen_fp_meta_key(fp, caps, primProc.computeCoordTransformsKey(fp), b);
 }
 
-bool GrProgramDesc::Build(GrProgramDesc* desc, const GrRenderTarget* renderTarget,
-                          const GrProgramInfo& programInfo, const GrCaps& caps) {
-
+bool GrProgramDesc::Build(GrProgramDesc* desc,
+                          GrRenderTarget* renderTarget,
+                          const GrProgramInfo& programInfo,
+                          const GrCaps& caps) {
 #ifdef SK_DEBUG
     if (renderTarget) {
         SkASSERT(programInfo.backendFormat() == renderTarget->backendFormat());
@@ -222,7 +220,7 @@ bool GrProgramDesc::Build(GrProgramDesc* desc, const GrRenderTarget* renderTarge
 
     if (programInfo.requestedFeatures() & GrProcessor::CustomFeatures::kSampleLocations) {
         SkASSERT(pipeline.isHWAntialiasState());
-        b.add32(renderTarget->renderTargetPriv().getSamplePatternKey());
+        b.add32(renderTarget->getSamplePatternKey());
     }
 
     // --------DO NOT MOVE HEADER ABOVE THIS LINE--------------------------------------------------

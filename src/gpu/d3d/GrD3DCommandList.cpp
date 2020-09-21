@@ -18,8 +18,8 @@
 #include "src/gpu/d3d/GrD3DTextureResource.h"
 #include "src/gpu/d3d/GrD3DUtil.h"
 
-GrD3DCommandList::GrD3DCommandList(gr_cp<ID3D12CommandAllocator> allocator,
-                                   gr_cp<ID3D12GraphicsCommandList> commandList)
+GrD3DCommandList::GrD3DCommandList(ComPtr<ID3D12CommandAllocator> allocator,
+                                   ComPtr<ID3D12GraphicsCommandList> commandList)
     : fCommandList(std::move(commandList))
     , fAllocator(std::move(allocator)) {
 }
@@ -43,7 +43,7 @@ GrD3DCommandList::SubmitResult GrD3DCommandList::submit(ID3D12CommandQueue* queu
         return SubmitResult::kFailure;
     }
     SkASSERT(!fIsActive);
-    ID3D12CommandList* ppCommandLists[] = { fCommandList.get() };
+    ID3D12CommandList* ppCommandLists[] = { fCommandList.Get() };
     queue->ExecuteCommandLists(1, ppCommandLists);
 
     return SubmitResult::kSuccess;
@@ -52,7 +52,7 @@ GrD3DCommandList::SubmitResult GrD3DCommandList::submit(ID3D12CommandQueue* queu
 void GrD3DCommandList::reset() {
     SkASSERT(!fIsActive);
     GR_D3D_CALL_ERRCHECK(fAllocator->Reset());
-    GR_D3D_CALL_ERRCHECK(fCommandList->Reset(fAllocator.get(), nullptr));
+    GR_D3D_CALL_ERRCHECK(fCommandList->Reset(fAllocator.Get(), nullptr));
     this->onReset();
 
     this->releaseResources();
@@ -200,21 +200,21 @@ void GrD3DCommandList::addingWork() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<GrD3DDirectCommandList> GrD3DDirectCommandList::Make(ID3D12Device* device) {
-    gr_cp<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12CommandAllocator> allocator;
     GR_D3D_CALL_ERRCHECK(device->CreateCommandAllocator(
                          D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
 
-    gr_cp<ID3D12GraphicsCommandList> commandList;
+    ComPtr<ID3D12GraphicsCommandList> commandList;
     GR_D3D_CALL_ERRCHECK(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                   allocator.get(), nullptr,
+                                                   allocator.Get(), nullptr,
                                                    IID_PPV_ARGS(&commandList)));
 
     auto grCL = new GrD3DDirectCommandList(std::move(allocator), std::move(commandList));
     return std::unique_ptr<GrD3DDirectCommandList>(grCL);
 }
 
-GrD3DDirectCommandList::GrD3DDirectCommandList(gr_cp<ID3D12CommandAllocator> allocator,
-                                               gr_cp<ID3D12GraphicsCommandList> commandList)
+GrD3DDirectCommandList::GrD3DDirectCommandList(ComPtr<ID3D12CommandAllocator> allocator,
+                                               ComPtr<ID3D12GraphicsCommandList> commandList)
     : GrD3DCommandList(std::move(allocator), std::move(commandList))
     , fCurrentPipelineState(nullptr)
     , fCurrentRootSignature(nullptr)
@@ -223,7 +223,6 @@ GrD3DDirectCommandList::GrD3DDirectCommandList(gr_cp<ID3D12CommandAllocator> all
     , fCurrentInstanceBuffer(nullptr)
     , fCurrentInstanceStride(0)
     , fCurrentIndexBuffer(nullptr)
-    , fCurrentConstantRingBuffer(nullptr)
     , fCurrentConstantBufferAddress(0)
     , fCurrentSRVCRVDescriptorHeap(nullptr)
     , fCurrentSamplerDescriptorHeap(nullptr) {
@@ -238,10 +237,6 @@ void GrD3DDirectCommandList::onReset() {
     fCurrentInstanceBuffer = nullptr;
     fCurrentInstanceStride = 0;
     fCurrentIndexBuffer = nullptr;
-    if (fCurrentConstantRingBuffer) {
-        fCurrentConstantRingBuffer->finishSubmit(fConstantRingBufferSubmitData);
-        fCurrentConstantRingBuffer = nullptr;
-    }
     fCurrentConstantBufferAddress = 0;
     sk_bzero(fCurrentRootDescriptorTable, sizeof(fCurrentRootDescriptorTable));
     fCurrentSRVCRVDescriptorHeap = nullptr;
@@ -254,18 +249,7 @@ void GrD3DDirectCommandList::setPipelineState(sk_sp<GrD3DPipelineState> pipeline
         fCommandList->SetPipelineState(pipelineState->pipelineState());
         this->addResource(std::move(pipelineState));
         fCurrentPipelineState = pipelineState.get();
-    }
-}
-
-void GrD3DDirectCommandList::setCurrentConstantBuffer(GrRingBuffer* constantsRingBuffer) {
-    fCurrentConstantRingBuffer = constantsRingBuffer;
-    if (fCurrentConstantRingBuffer) {
-        constantsRingBuffer->startSubmit(&fConstantRingBufferSubmitData);
-        for (unsigned int i = 0; i < fConstantRingBufferSubmitData.fTrackedBuffers.size(); ++i) {
-            this->addGrBuffer(std::move(fConstantRingBufferSubmitData.fTrackedBuffers[i]));
-        }
-        // we don't need these any more so clear this copy out
-        fConstantRingBufferSubmitData.fTrackedBuffers.clear();
+        this->setDefaultSamplePositions();
     }
 }
 
@@ -295,12 +279,33 @@ void GrD3DDirectCommandList::setViewports(unsigned int numViewports,
     fCommandList->RSSetViewports(numViewports, viewports);
 }
 
+void GrD3DDirectCommandList::setCenteredSamplePositions(unsigned int numSamples) {
+    if (!fUsingCenteredSamples && numSamples > 1) {
+        ComPtr<ID3D12GraphicsCommandList1> commandList1;
+        GR_D3D_CALL_ERRCHECK(fCommandList->QueryInterface(IID_PPV_ARGS(&commandList1)));
+        static D3D12_SAMPLE_POSITION kCenteredSampleLocations[16] = {};
+        commandList1->SetSamplePositions(numSamples, 1, kCenteredSampleLocations);
+        fUsingCenteredSamples = true;
+    }
+}
+
+void GrD3DDirectCommandList::setDefaultSamplePositions() {
+    if (fUsingCenteredSamples) {
+        ComPtr<ID3D12GraphicsCommandList1> commandList1;
+        GR_D3D_CALL_ERRCHECK(fCommandList->QueryInterface(IID_PPV_ARGS(&commandList1)));
+        commandList1->SetSamplePositions(0, 0, nullptr);
+        fUsingCenteredSamples = false;
+    }
+}
+
 void GrD3DDirectCommandList::setGraphicsRootSignature(const sk_sp<GrD3DRootSignature>& rootSig) {
     SkASSERT(fIsActive);
     if (fCurrentRootSignature != rootSig.get()) {
         fCommandList->SetGraphicsRootSignature(rootSig->rootSignature());
         this->addResource(rootSig);
         fCurrentRootSignature = rootSig.get();
+        // need to reset the current descriptor tables as well
+        sk_bzero(fCurrentRootDescriptorTable, sizeof(fCurrentRootDescriptorTable));
     }
 }
 
@@ -418,7 +423,7 @@ void GrD3DDirectCommandList::setRenderTarget(const GrD3DRenderTarget* renderTarg
 
     D3D12_CPU_DESCRIPTOR_HANDLE dsDescriptor;
     D3D12_CPU_DESCRIPTOR_HANDLE* dsDescriptorPtr = nullptr;
-    if (auto stencil = renderTarget->renderTargetPriv().getStencilAttachment()) {
+    if (auto stencil = renderTarget->getStencilAttachment()) {
         GrD3DStencilAttachment* d3dStencil = static_cast<GrD3DStencilAttachment*>(stencil);
         this->addResource(d3dStencil->resource());
         dsDescriptor = d3dStencil->view();
@@ -439,7 +444,7 @@ void GrD3DDirectCommandList::resolveSubresourceRegion(const GrD3DTextureResource
     this->addResource(dstTexture->resource());
     this->addResource(srcTexture->resource());
 
-    gr_cp<ID3D12GraphicsCommandList1> commandList1;
+    ComPtr<ID3D12GraphicsCommandList1> commandList1;
     HRESULT result = fCommandList->QueryInterface(IID_PPV_ARGS(&commandList1));
     if (SUCCEEDED(result)) {
         commandList1->ResolveSubresourceRegion(dstTexture->d3dResource(), 0, dstX, dstY,
@@ -500,18 +505,18 @@ void GrD3DDirectCommandList::addSampledTextureRef(GrD3DTexture* texture) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<GrD3DCopyCommandList> GrD3DCopyCommandList::Make(ID3D12Device* device) {
-    gr_cp<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12CommandAllocator> allocator;
     GR_D3D_CALL_ERRCHECK(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                         IID_PPV_ARGS(&allocator)));
 
-    gr_cp<ID3D12GraphicsCommandList> commandList;
-    GR_D3D_CALL_ERRCHECK(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, allocator.get(),
+    ComPtr<ID3D12GraphicsCommandList> commandList;
+    GR_D3D_CALL_ERRCHECK(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, allocator.Get(),
                                                    nullptr, IID_PPV_ARGS(&commandList)));
     auto grCL = new GrD3DCopyCommandList(std::move(allocator), std::move(commandList));
     return std::unique_ptr<GrD3DCopyCommandList>(grCL);
 }
 
-GrD3DCopyCommandList::GrD3DCopyCommandList(gr_cp<ID3D12CommandAllocator> allocator,
-                                           gr_cp<ID3D12GraphicsCommandList> commandList)
+GrD3DCopyCommandList::GrD3DCopyCommandList(ComPtr<ID3D12CommandAllocator> allocator,
+                                           ComPtr<ID3D12GraphicsCommandList> commandList)
     : GrD3DCommandList(std::move(allocator), std::move(commandList)) {
 }

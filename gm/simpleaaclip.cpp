@@ -197,7 +197,7 @@ private:
     SkPath fBasePath;       // fBase as a round rect
     SkPath fRectPath;       // fRect as a round rect
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -207,4 +207,4 @@ DEF_GM( return new SimpleClipGM(SimpleClipGM::kRect_GeomType); )
 DEF_GM( return new SimpleClipGM(SimpleClipGM::kPath_GeomType); )
 DEF_GM( return new SimpleClipGM(SimpleClipGM::kAAClip_GeomType); )
 
-}
+}  // namespace skiagm

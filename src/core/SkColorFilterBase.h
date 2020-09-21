@@ -24,12 +24,14 @@ namespace skvm {
     struct F32;
     struct Uniforms;
     struct Color;
-}
+}  // namespace skvm
 
 class SkColorFilterBase : public SkColorFilter {
 public:
+    SK_WARN_UNUSED_RESULT
     bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const;
 
+    SK_WARN_UNUSED_RESULT
     skvm::Color program(skvm::Builder*, skvm::Color,
                         SkColorSpace* dstCS, skvm::Uniforms*, SkArenaAlloc*) const;
 
@@ -87,7 +89,7 @@ private:
 
     friend class SkColorFilter;
 
-    typedef SkFlattenable INHERITED;
+    using INHERITED = SkFlattenable;
 };
 
 static inline SkColorFilterBase* as_CFB(SkColorFilter* filter) {

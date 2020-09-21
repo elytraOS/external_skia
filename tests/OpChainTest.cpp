@@ -14,6 +14,7 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/ops/GrOp.h"
 #include "tests/Test.h"
+#include <iterator>
 
 // We create Ops that write a value into a range of a buffer. We create ranges from
 // kNumOpPositions starting positions x kRanges canonical ranges. We repeat each range kNumRepeats
@@ -127,7 +128,8 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
 
     void onPrepare(GrOpFlushState*) override {}
 
@@ -161,7 +163,7 @@ private:
     int* fResult;
     const Combinable* fCombinable;
 
-    typedef GrOp INHERITED;
+    using INHERITED = GrOp;
 };
 }  // namespace
 

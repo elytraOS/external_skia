@@ -51,14 +51,6 @@ public:
 
     const char* name() const override { return "Blend"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString str;
-        str.appendf("Mode: %s", SkBlendMode_Name(fMode));
-        return str;
-    }
-#endif
-
     std::unique_ptr<GrFragmentProcessor> clone() const override;
 
     SkBlendMode getMode() const { return fMode; }
@@ -85,6 +77,12 @@ private:
             , fBlendBehavior(that.fBlendBehavior) {
         this->cloneAndRegisterAllChildProcessors(that);
     }
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("(fMode=%s)", SkBlendMode_Name(fMode));
+    }
+#endif
 
     static OptimizationFlags OptFlags(const GrFragmentProcessor* src,
                                       const GrFragmentProcessor* dst, SkBlendMode mode) {
@@ -220,7 +218,7 @@ private:
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -230,7 +228,7 @@ public:
     void emitCode(EmitArgs&) override;
 
 private:
-    typedef GrGLSLFragmentProcessor INHERITED;
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -239,19 +237,22 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(BlendFragmentProcessor);
 
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> BlendFragmentProcessor::TestCreate(GrProcessorTestData* d) {
-    // Create two random frag procs.
-    std::unique_ptr<GrFragmentProcessor> fpA(GrProcessorUnitTest::MakeChildFP(d));
-    std::unique_ptr<GrFragmentProcessor> fpB(GrProcessorUnitTest::MakeChildFP(d));
+    // Create one or two random fragment processors.
+    std::unique_ptr<GrFragmentProcessor> src(GrProcessorUnitTest::MakeOptionalChildFP(d));
+    std::unique_ptr<GrFragmentProcessor> dst(GrProcessorUnitTest::MakeChildFP(d));
+    if (d->fRandom->nextBool()) {
+        std::swap(src, dst);
+    }
 
     SkBlendMode mode;
     BlendBehavior behavior;
     do {
         mode = static_cast<SkBlendMode>(d->fRandom->nextRangeU(0, (int)SkBlendMode::kLastMode));
         behavior = static_cast<BlendBehavior>(
-                       d->fRandom->nextRangeU(0, (int)BlendBehavior::kLastBlendBehavior));
+                d->fRandom->nextRangeU(0, (int)BlendBehavior::kLastBlendBehavior));
     } while (SkBlendMode::kClear == mode || SkBlendMode::kSrc == mode || SkBlendMode::kDst == mode);
     return std::unique_ptr<GrFragmentProcessor>(
-            new BlendFragmentProcessor(std::move(fpA), std::move(fpB), mode, behavior));
+            new BlendFragmentProcessor(std::move(src), std::move(dst), mode, behavior));
 }
 #endif
 
@@ -287,7 +288,9 @@ void GLBlendFragmentProcessor::emitCode(EmitArgs& args) {
 
         case BlendBehavior::kComposeTwoBehavior:
             // Compose-two operations historically have forced the input color to opaque.
-            fragBuilder->codeAppendf("half4 inputOpaque = %s.rgb1;\n", args.fInputColor);
+            // We're going to re-apply the input color's alpha below, so feed the *unpremul* RGB
+            // to the children, to avoid double-applying alpha.
+            fragBuilder->codeAppendf("half4 inputOpaque = unpremul(%s).rgb1;\n", args.fInputColor);
             srcColor = this->invokeChild(0, "inputOpaque", args);
             dstColor = this->invokeChild(1, "inputOpaque", args);
             break;

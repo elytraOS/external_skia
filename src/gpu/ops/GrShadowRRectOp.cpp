@@ -239,23 +239,6 @@ public:
 
     const char* name() const override { return "ShadowCircularRRectOp"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString string;
-        for (int i = 0; i < fGeoData.count(); ++i) {
-            string.appendf(
-                    "Color: 0x%08x Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f],"
-                    "OuterRad: %.2f, Umbra: %.2f, InnerRad: %.2f, BlurRad: %.2f\n",
-                    fGeoData[i].fColor, fGeoData[i].fDevBounds.fLeft, fGeoData[i].fDevBounds.fTop,
-                    fGeoData[i].fDevBounds.fRight, fGeoData[i].fDevBounds.fBottom,
-                    fGeoData[i].fOuterRadius, fGeoData[i].fUmbraInset,
-                    fGeoData[i].fInnerRadius, fGeoData[i].fBlurRadius);
-        }
-        string.append(INHERITED::dumpInfo());
-        return string;
-    }
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
 
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -546,7 +529,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         GrGeometryProcessor* gp = GrRRectShadowGeoProc::Make(arena, fFalloffView);
         SkASSERT(sizeof(CircleVertex) == gp->vertexStride());
 
@@ -555,6 +539,7 @@ private:
                                                                    dstProxyView, gp,
                                                                    GrProcessorSet::MakeEmptySet(),
                                                                    GrPrimitiveType::kTriangles,
+                                                                   renderPassXferBarriers,
                                                                    GrPipeline::InputFlags::kNone,
                                                                    &GrUserStencilSettings::kUnused);
     }
@@ -637,6 +622,22 @@ private:
         return CombineResult::kMerged;
     }
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString string;
+        for (int i = 0; i < fGeoData.count(); ++i) {
+            string.appendf(
+                    "Color: 0x%08x Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f],"
+                    "OuterRad: %.2f, Umbra: %.2f, InnerRad: %.2f, BlurRad: %.2f\n",
+                    fGeoData[i].fColor, fGeoData[i].fDevBounds.fLeft, fGeoData[i].fDevBounds.fTop,
+                    fGeoData[i].fDevBounds.fRight, fGeoData[i].fDevBounds.fBottom,
+                    fGeoData[i].fOuterRadius, fGeoData[i].fUmbraInset,
+                    fGeoData[i].fInnerRadius, fGeoData[i].fBlurRadius);
+        }
+        return string;
+    }
+#endif
+
     void visitProxies(const VisitProxyFunc& func) const override {
         func(fFalloffView.proxy(), GrMipmapped(false));
         if (fProgramInfo) {
@@ -652,7 +653,7 @@ private:
     GrSimpleMesh*      fMesh = nullptr;
     GrProgramInfo*     fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 }  // anonymous namespace
@@ -738,7 +739,7 @@ std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
                                                  scaledInsetWidth,
                                                  std::move(falloffView));
 }
-}
+}  // namespace GrShadowRRectOp
 
 ///////////////////////////////////////////////////////////////////////////////
 

@@ -89,10 +89,9 @@ public:
     // Should we discard stencil values after a render pass? (Tilers get better performance if we
     // always load stencil buffers with a "clear" op, and then discard the content when finished.)
     bool discardStencilValuesAfterRenderPass() const {
-#if defined(SK_BUILD_FOR_ANDROID)
         // b/160958008
         return false;
-#else
+#if 0
         // This method is actually just a duplicate of preferFullscreenClears(), with a descriptive
         // name for the sake of readability.
         return this->preferFullscreenClears();
@@ -384,6 +383,9 @@ public:
     bool driverDisableCCPR() const { return fDriverDisableCCPR; }
     bool driverDisableMSAACCPR() const { return fDriverDisableMSAACCPR; }
 
+    // Returns how to sample the dst values for the passed in GrRenderTargetProxy.
+    GrDstSampleType getDstSampleTypeForProxy(const GrRenderTargetProxy*) const;
+
     /**
      * This is used to try to ensure a successful copy a dst in order to perform shader-based
      * blending.
@@ -445,7 +447,14 @@ public:
                                     GrSamplerState,
                                     const GrBackendFormat&) const {}
 
-    virtual GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const = 0;
+    virtual GrProgramDesc makeDesc(GrRenderTarget*, const GrProgramInfo&) const = 0;
+
+    // This method specifies, for each backend, the extra properties of a RT when Ganesh creates one
+    // internally. For example, for Vulkan, Ganesh always creates RTs that can be used as input
+    // attachments.
+    virtual GrInternalSurfaceFlags getExtraSurfaceFlagsForDeferredRT() const {
+        return GrInternalSurfaceFlags::kNone;
+    }
 
 #if GR_TEST_UTILS
     struct TestFormatColorTypeCombination {
@@ -564,11 +573,14 @@ private:
 
     virtual GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const = 0;
 
+    virtual GrDstSampleType onGetDstSampleTypeForProxy(const GrRenderTargetProxy*) const {
+        return GrDstSampleType::kAsTextureCopy;
+    }
 
     bool fSuppressPrints : 1;
     bool fWireframeMode  : 1;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

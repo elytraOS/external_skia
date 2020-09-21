@@ -92,11 +92,11 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new DiscardGM;)
 
-} // end namespace
+}  // namespace skiagm

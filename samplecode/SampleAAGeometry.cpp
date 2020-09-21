@@ -1248,7 +1248,7 @@ public:
     }
 
     void quad_coverage(SkPoint pts[3], uint8_t* distanceMap, int w, int h) {
-        SkScalar dist = pts[0].Distance(pts[0], pts[2]);
+        SkScalar dist = SkPoint::Distance(pts[0], pts[2]);
         if (dist < gCurveDistance) {
             (void) coverage(pts[0], pts[2], distanceMap, w, h);
             return;
@@ -1260,7 +1260,7 @@ public:
     }
 
     void conic_coverage(SkPoint pts[3], SkScalar weight, uint8_t* distanceMap, int w, int h) {
-        SkScalar dist = pts[0].Distance(pts[0], pts[2]);
+        SkScalar dist = SkPoint::Distance(pts[0], pts[2]);
         if (dist < gCurveDistance) {
             (void) coverage(pts[0], pts[2], distanceMap, w, h);
             return;
@@ -1275,7 +1275,7 @@ public:
     }
 
     void cubic_coverage(SkPoint pts[4], uint8_t* distanceMap, int w, int h) {
-        SkScalar dist = pts[0].Distance(pts[0], pts[3]);
+        SkScalar dist = SkPoint::Distance(pts[0], pts[3]);
         if (dist < gCurveDistance) {
             (void) coverage(pts[0], pts[3], distanceMap, w, h);
             return;
@@ -1519,7 +1519,7 @@ public:
         return -1;
     }
 
-    virtual Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         SkPoint pt = {x, y};
         int ptHit = hittest_pt(pt);
         if (ptHit >= 0) {
@@ -1695,7 +1695,7 @@ public:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 static struct KeyCommand {

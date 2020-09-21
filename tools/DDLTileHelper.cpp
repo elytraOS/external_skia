@@ -50,7 +50,7 @@ void DDLTileHelper::TileData::createTileSpecificSKP(SkData* compressedPictureDat
     fReconstitutedPicture = helper.reinflateSKP(&recorder, compressedPictureData, &fPromiseImages);
 
     auto ddl = recorder.detach();
-    if (ddl->priv().numRenderTasks()) {
+    if (ddl && ddl->priv().numRenderTasks()) {
         // TODO: remove this once skbug.com/8424 is fixed. If the DDL resulting from the
         // reinflation of the SKPs contains opsTasks that means some image subset operation
         // created a draw.
@@ -71,13 +71,10 @@ void DDLTileHelper::TileData::createDDL() {
     // stored in fReconstitutedPicture's promise images are incorrect. Patch them with the correct
     // one now.
     for (int i = 0; i < fPromiseImages.count(); ++i) {
-        // CONTEXT TODO: this can be converted to a recording context once images no longer
-        // hold GrContexts
-        GrContext* newContext = recordingCanvas->getGrContext();
-
         if (fPromiseImages[i]->isTextureBacked()) {
+            auto rContext = recordingCanvas->recordingContext();
             SkImage_GpuBase* gpuImage = (SkImage_GpuBase*) fPromiseImages[i].get();
-            gpuImage->resetContext(sk_ref_sp(newContext));
+            gpuImage->resetContext(sk_ref_sp(rContext));
         }
     }
 
@@ -209,8 +206,10 @@ sk_sp<SkImage> DDLTileHelper::TileData::makePromiseImage(SkDeferredDisplayListRe
 
 void DDLTileHelper::TileData::CreateBackendTexture(GrDirectContext* direct, TileData* tile) {
     SkASSERT(tile->fCallbackContext && !tile->fCallbackContext->promiseImageTexture());
-
-    GrBackendTexture beTex = direct->createBackendTexture(tile->fCharacterization);
+    const SkSurfaceCharacterization& c = tile->fCharacterization;
+    GrBackendTexture beTex = direct->createBackendTexture(c.width(), c.height(), c.colorType(),
+                                                          GrMipMapped(c.isMipMapped()),
+                                                          GrRenderable::kYes);
     tile->fCallbackContext->setBackendTexture(beTex);
 }
 

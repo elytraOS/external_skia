@@ -53,8 +53,8 @@ GrD3DGpu::GrD3DGpu(GrDirectContext* direct, const GrContextOptions& contextOptio
         , fOutstandingCommandLists(sizeof(OutstandingCommandList), kDefaultOutstandingAllocCnt)
         , fCompiler(new SkSL::Compiler()) {
     fCaps.reset(new GrD3DCaps(contextOptions,
-                              backendContext.fAdapter.get(),
-                              backendContext.fDevice.get()));
+                              backendContext.fAdapter.Get(),
+                              backendContext.fDevice.Get()));
 
     fCurrentDirectCommandList = fResourceProvider.findOrCreateDirectCommandList();
     SkASSERT(fCurrentDirectCommandList);
@@ -102,11 +102,12 @@ void GrD3DGpu::destroyResources() {
 }
 
 GrOpsRenderPass* GrD3DGpu::getOpsRenderPass(
-    GrRenderTarget* rt, GrStencilAttachment*,
-    GrSurfaceOrigin origin, const SkIRect& bounds,
-    const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
-    const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
-    const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
+        GrRenderTarget* rt, GrStencilAttachment*,
+        GrSurfaceOrigin origin, const SkIRect& bounds,
+        const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
+        const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
+        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+        GrXferBarrierFlags renderPassXferBarriers) {
     if (!fCachedOpsRenderPass) {
         fCachedOpsRenderPass.reset(new GrD3DOpsRenderPass(this));
     }
@@ -120,12 +121,9 @@ GrOpsRenderPass* GrD3DGpu::getOpsRenderPass(
 bool GrD3DGpu::submitDirectCommandList(SyncQueue sync) {
     SkASSERT(fCurrentDirectCommandList);
 
-    // set up constant data
-    fCurrentDirectCommandList->setCurrentConstantBuffer(&fConstantsRingBuffer);
-
     fResourceProvider.prepForSubmit();
 
-    GrD3DDirectCommandList::SubmitResult result = fCurrentDirectCommandList->submit(fQueue.get());
+    GrD3DDirectCommandList::SubmitResult result = fCurrentDirectCommandList->submit(fQueue.Get());
     if (result == GrD3DDirectCommandList::SubmitResult::kFailure) {
         return false;
     } else if (result == GrD3DDirectCommandList::SubmitResult::kNoWork) {
@@ -219,8 +217,59 @@ void GrD3DGpu::addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback) {
     fCurrentDirectCommandList->addFinishedCallback(std::move(finishedCallback));
 }
 
-void GrD3DGpu::querySampleLocations(GrRenderTarget* rt, SkTArray<SkPoint>* sampleLocations) {
-    // TODO
+void GrD3DGpu::querySampleLocations(GrRenderTarget* renderTarget,
+                                    SkTArray<SkPoint>* sampleLocations) {
+    // By default, the Direct3D backend uses the standard sample locations defined by the docs.
+    // These are transformed from D3D's integer coordinate system with origin at the center,
+    // to our normalized coordinate system with origin at the upper left.
+    // This ends up corresponding with Vulkan's sample locations.
+    SkASSERT(this->caps()->sampleLocationsSupport());
+    static constexpr SkPoint kStandardSampleLocations_1[1] = {
+        {0.5f, 0.5f} };
+    static constexpr SkPoint kStandardSampleLocations_2[2] = {
+        {0.75f, 0.75f}, {0.25f, 0.25f} };
+    static constexpr SkPoint kStandardSampleLocations_4[4] = {
+        {0.375f, 0.125f}, {0.875f, 0.375f}, {0.125f, 0.625f}, {0.625f, 0.875f} };
+    static constexpr SkPoint kStandardSampleLocations_8[8] = {
+        {0.5625f, 0.3125f}, {0.4375f, 0.6875f}, {0.8125f, 0.5625f}, {0.3125f, 0.1875f},
+        {0.1875f, 0.8125f}, {0.0625f, 0.4375f}, {0.6875f, 0.9375f}, {0.9375f, 0.0625f} };
+    static constexpr SkPoint kStandardSampleLocations_16[16] = {
+        {0.5625f, 0.5625f}, {0.4375f, 0.3125f}, {0.3125f, 0.625f}, {0.75f, 0.4375f},
+        {0.1875f, 0.375f}, {0.625f, 0.8125f}, {0.8125f, 0.6875f}, {0.6875f, 0.1875f},
+        {0.375f, 0.875f}, {0.5f, 0.0625f}, {0.25f, 0.125f}, {0.125f, 0.75f},
+        {0.0f, 0.5f}, {0.9375f, 0.25f}, {0.875f, 0.9375f}, {0.0625f, 0.0f} };
+
+    int numSamples = renderTarget->numSamples();
+    // TODO: support mixed samples?
+    SkASSERT(numSamples > 1);
+    SkASSERT(!renderTarget->getStencilAttachment() ||
+             numSamples == renderTarget->getStencilAttachment()->numSamples());
+
+    GrD3DRenderTarget* d3dRT = static_cast<GrD3DRenderTarget*>(renderTarget);
+    unsigned int pattern = d3dRT->msaaTextureResource()->sampleQualityPattern();
+    if (pattern == DXGI_CENTER_MULTISAMPLE_QUALITY_PATTERN) {
+        sampleLocations->push_back_n(numSamples, kStandardSampleLocations_1[0]);
+        return;
+    }
+    SkASSERT(pattern == DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN);
+
+    switch (numSamples) {
+    case 2:
+        sampleLocations->push_back_n(2, kStandardSampleLocations_2);
+        break;
+    case 4:
+        sampleLocations->push_back_n(4, kStandardSampleLocations_4);
+        break;
+    case 8:
+        sampleLocations->push_back_n(8, kStandardSampleLocations_8);
+        break;
+    case 16:
+        sampleLocations->push_back_n(16, kStandardSampleLocations_16);
+        break;
+    default:
+        SK_ABORT("Invalid sample count.");
+        break;
+    }
 }
 
 sk_sp<GrD3DTexture> GrD3DGpu::createD3DTexture(SkISize dimensions,
@@ -251,8 +300,7 @@ sk_sp<GrD3DTexture> GrD3DGpu::createD3DTexture(SkISize dimensions,
     resourceDesc.MipLevels = mipLevelCount;
     resourceDesc.Format = dxgiFormat;
     resourceDesc.SampleDesc.Count = 1;
-    // quality levels are only supported for tiled resources so ignore for now
-    resourceDesc.SampleDesc.Quality = GrD3DTextureResource::kDefaultQualityLevel;
+    resourceDesc.SampleDesc.Quality = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
     resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  // use driver-selected swizzle
     resourceDesc.Flags = usageFlags;
 
@@ -727,7 +775,7 @@ bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex, int left, int top, int width, 
 }
 
 static bool check_resource_info(const GrD3DTextureResourceInfo& info) {
-    if (!info.fResource.get()) {
+    if (!info.fResource.Get()) {
         return false;
     }
     return true;
@@ -958,8 +1006,7 @@ bool GrD3DGpu::createTextureResourceForBackendSurface(DXGI_FORMAT dxgiFormat,
     resourceDesc.MipLevels = numMipLevels;
     resourceDesc.Format = dxgiFormat;
     resourceDesc.SampleDesc.Count = 1;
-    // quality levels are only supported for tiled resources so ignore for now
-    resourceDesc.SampleDesc.Quality = GrD3DTextureResource::kDefaultQualityLevel;
+    resourceDesc.SampleDesc.Quality = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
     resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;  // use driver-selected swizzle
     resourceDesc.Flags = usageFlags;
 
@@ -1188,7 +1235,7 @@ bool GrD3DGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     if (!tex.getD3DTextureResourceInfo(&info)) {
         return false;
     }
-    ID3D12Resource* textureResource = info.fResource.get();
+    ID3D12Resource* textureResource = info.fResource.Get();
     if (!textureResource) {
         return false;
     }
@@ -1290,7 +1337,7 @@ void GrD3DGpu::prepareSurfacesForBackendAccessAndStateUpdates(
     }
 }
 
-void GrD3DGpu::takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer> buffer) {
+void GrD3DGpu::takeOwnershipOfBuffer(sk_sp<GrGpuBuffer> buffer) {
     fCurrentDirectCommandList->addGrBuffer(std::move(buffer));
 }
 
@@ -1332,7 +1379,7 @@ void GrD3DGpu::waitSemaphore(GrSemaphore* semaphore) {
 }
 
 GrFence SK_WARN_UNUSED_RESULT GrD3DGpu::insertFence() {
-    GR_D3D_CALL_ERRCHECK(fQueue->Signal(fFence.get(), ++fCurrentFenceValue));
+    GR_D3D_CALL_ERRCHECK(fQueue->Signal(fFence.Get(), ++fCurrentFenceValue));
     return fCurrentFenceValue;
 }
 

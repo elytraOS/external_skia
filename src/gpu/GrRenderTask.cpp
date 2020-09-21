@@ -7,7 +7,7 @@
 
 #include "src/gpu/GrRenderTask.h"
 
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrStencilAttachment.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/GrTextureResolveRenderTask.h"
@@ -284,7 +284,7 @@ void GrRenderTask::addTarget(GrDrawingManager* drawingMgr, GrSurfaceProxyView vi
     fTargets.push_back(std::move(view));
 }
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
 void GrRenderTask::dump(bool printDependencies) const {
     SkDebugf("--------------------------------------------------------------\n");
     SkDebugf("%s - renderTaskID: %d\n", this->name(), fUniqueID);

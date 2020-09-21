@@ -35,7 +35,7 @@ struct D {
     int fID;
 };
 
-}
+}  // namespace
 
 // Checks that the allocator has the correct count, etc and that the element IDs are correct.
 // Then pops popCnt items and checks again.
@@ -179,7 +179,6 @@ static void run_concat_test(skiatest::Reporter* reporter, int aCount, int bCount
         listB.emplace_back(aCount + i);
     }
 
-    // Sanity check
     REPORTER_ASSERT(reporter, listA.count() == aCount && listB.count() == bCount);
     REPORTER_ASSERT(reporter, C::gInstCnt == aCount + bCount);
 
@@ -217,7 +216,6 @@ static void run_concat_trivial_test(skiatest::Reporter* reporter, int aCount, in
         listB.push_back({aCount + i});
     }
 
-    // Sanity check
     REPORTER_ASSERT(reporter, listA.count() == aCount && listB.count() == bCount);
     // Concatenate B into A and verify.
     listA.concat(std::move(listB));

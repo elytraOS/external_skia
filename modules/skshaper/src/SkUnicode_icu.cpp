@@ -4,18 +4,24 @@
 * Use of this source code is governed by a BSD-style license that can be
 * found in the LICENSE file.
 */
+#include "include/core/SkString.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkTemplates.h"
 #include "modules/skshaper/src/SkUnicode.h"
 #include "src/utils/SkUTF.h"
 #include <unicode/ubidi.h>
 #include <unicode/ubrk.h>
+#include <unicode/ustring.h>
 #include <unicode/utext.h>
 #include <unicode/utypes.h>
 #include <vector>
 #include <functional>
 
-using ICUBiDi = std::unique_ptr<UBiDi, SkFunctionWrapper<decltype(ubidi_close), ubidi_close>>;
+#if defined(SK_USING_THIRD_PARTY_ICU)
+#include "SkLoadICU.h"
+#endif
+
+using SkUnicodeBidi = std::unique_ptr<UBiDi, SkFunctionWrapper<decltype(ubidi_close), ubidi_close>>;
 using ICUUText = std::unique_ptr<UText, SkFunctionWrapper<decltype(utext_close), utext_close>>;
 using ICUBreakIterator = std::unique_ptr<UBreakIterator, SkFunctionWrapper<decltype(ubrk_close), ubrk_close>>;
 
@@ -25,7 +31,92 @@ static inline SkUnichar utf8_next(const char** ptr, const char* end) {
     return val < 0 ? 0xFFFD : val;
 }
 
-namespace skia {
+class SkBidiIterator_icu : public SkBidiIterator {
+    SkUnicodeBidi fBidi;
+public:
+    explicit SkBidiIterator_icu(SkUnicodeBidi bidi) : fBidi(std::move(bidi)) {}
+    Position getLength() override { return ubidi_getLength(fBidi.get()); }
+    Level getLevelAt(Position pos) override { return ubidi_getLevelAt(fBidi.get(), pos); }
+
+    static std::unique_ptr<SkBidiIterator> makeBidiIterator(const uint16_t utf16[], int utf16Units, Direction dir) {
+        UErrorCode status = U_ZERO_ERROR;
+        SkUnicodeBidi bidi(ubidi_openSized(utf16Units, 0, &status));
+        if (U_FAILURE(status)) {
+            SkDEBUGF("Bidi error: %s", u_errorName(status));
+            return nullptr;
+        }
+        SkASSERT(bidi);
+        uint8_t bidiLevel = (dir == SkBidiIterator::kLTR) ? UBIDI_LTR : UBIDI_RTL;
+        // The required lifetime of utf16 isn't well documented.
+        // It appears it isn't used after ubidi_setPara except through ubidi_getText.
+        ubidi_setPara(bidi.get(), (const UChar*)utf16, utf16Units, bidiLevel, nullptr, &status);
+        if (U_FAILURE(status)) {
+            SkDEBUGF("Bidi error: %s", u_errorName(status));
+            return nullptr;
+        }
+        return std::unique_ptr<SkBidiIterator>(new SkBidiIterator_icu(std::move(bidi)));
+    }
+
+    // ICU bidi iterator works with utf16 but clients (Flutter for instance) may work with utf8
+    // This method allows the clients not to think about all these details
+    static std::unique_ptr<SkBidiIterator> makeBidiIterator(const char utf8[], int utf8Units, Direction dir) {
+        // Convert utf8 into utf16 since ubidi only accepts utf16
+        if (!SkTFitsIn<int32_t>(utf8Units)) {
+            SkDEBUGF("Bidi error: text too long");
+            return nullptr;
+        }
+
+        // Getting the length like this seems to always set U_BUFFER_OVERFLOW_ERROR
+        int utf16Units = SkUTF::UTF8ToUTF16(nullptr, 0, utf8, utf8Units);
+        if (utf16Units < 0) {
+            SkDEBUGF("Bidi error: Invalid utf8 input");
+            return nullptr;
+        }
+        std::unique_ptr<uint16_t[]> utf16(new uint16_t[utf16Units]);
+        SkDEBUGCODE(int dstLen =) SkUTF::UTF8ToUTF16(utf16.get(), utf16Units, utf8, utf8Units);
+        SkASSERT(dstLen == utf16Units);
+
+        return makeBidiIterator(utf16.get(), utf16Units, dir);
+    }
+
+    // This method returns the final results only: a list of bidi regions
+    // (this is all SkParagraph really needs; SkShaper however uses the iterator itself)
+    static std::vector<Region> getBidiRegions(const char utf8[], int utf8Units, Direction dir) {
+
+        auto bidiIterator = makeBidiIterator(utf8, utf8Units, dir);
+        std::vector<Region> bidiRegions;
+        const char* start8 = utf8;
+        const char* end8 = utf8 + utf8Units;
+        SkBidiIterator::Level currentLevel = 0;
+
+        Position pos8 = 0;
+        Position pos16 = 0;
+        Position end16 = bidiIterator->getLength();
+        while (pos16 < end16) {
+            auto level = bidiIterator->getLevelAt(pos16);
+            if (pos16 == 0) {
+                currentLevel = level;
+            } else if (level != currentLevel) {
+                auto end = start8 - utf8;
+                bidiRegions.emplace_back(pos8, end, currentLevel);
+                currentLevel = level;
+                pos8 = end;
+            }
+            SkUnichar u = utf8_next(&start8, end8);
+            pos16 += SkUTF::ToUTF16(u);
+        }
+        auto end = start8 - utf8;
+        if (end != pos8) {
+            bidiRegions.emplace_back(pos8, end, currentLevel);
+        }
+        return bidiRegions;
+    }
+};
+
+void SkBidiIterator::ReorderVisual(const Level runLevels[], int levelsCount,
+                                   int32_t logicalFromVisual[]) {
+    ubidi_reorderVisual(runLevels, levelsCount, logicalFromVisual);
+}
 
 class SkUnicode_icu : public SkUnicode {
 
@@ -40,36 +131,24 @@ class SkUnicode_icu : public SkUnicode {
         }
     }
 
-    static int convertUtf8ToUtf16(const char* utf8, size_t utf8Units, std::unique_ptr<uint16_t[]>* utf16) {
-        int utf16Units = SkUTF::UTF8ToUTF16(nullptr, 0, utf8, utf8Units);
-        if (utf16Units < 0) {
-            SkDEBUGF("Convert error: Invalid utf8 input");
-            return utf16Units;
-        }
-        *utf16 = std::unique_ptr<uint16_t[]>(new uint16_t[utf16Units]);
-        SkDEBUGCODE(int dstLen =) SkUTF::UTF8ToUTF16(utf16->get(), utf16Units, utf8, utf8Units);
-        SkASSERT(dstLen == utf16Units);
-        return utf16Units;
-    }
-
-    static bool extractBidi(const char utf8[], int utf8Units,  Direction dir, std::vector<BidiRegion>* bidiRegions) {
+    static bool extractBidi(const char utf8[], int utf8Units, TextDirection dir, std::vector<BidiRegion>* bidiRegions) {
 
         // Convert to UTF16 since for now bidi iterator only operates on utf16
         std::unique_ptr<uint16_t[]> utf16;
-        auto utf16Units = convertUtf8ToUtf16(utf8, utf8Units, &utf16);
+        auto utf16Units = utf8ToUtf16(utf8, utf8Units, &utf16);
         if (utf16Units < 0) {
             return false;
         }
 
         // Create bidi iterator
         UErrorCode status = U_ZERO_ERROR;
-        ICUBiDi bidi(ubidi_openSized(utf16Units, 0, &status));
+        SkUnicodeBidi bidi(ubidi_openSized(utf16Units, 0, &status));
         if (U_FAILURE(status)) {
             SkDEBUGF("Bidi error: %s", u_errorName(status));
             return false;
         }
         SkASSERT(bidi);
-        uint8_t bidiLevel = (dir == Direction::kLTR) ? UBIDI_LTR : UBIDI_RTL;
+        uint8_t bidiLevel = (dir == TextDirection::kLTR) ? UBIDI_LTR : UBIDI_RTL;
         // The required lifetime of utf16 isn't well documented.
         // It appears it isn't used after ubidi_setPara except through ubidi_getText.
         ubidi_setPara(bidi.get(), (const UChar*)utf16.get(), utf16Units, bidiLevel, nullptr, &status);
@@ -191,10 +270,60 @@ class SkUnicode_icu : public SkUnicode {
         return true;
     }
 
+    static int utf8ToUtf16(const char* utf8, size_t utf8Units, std::unique_ptr<uint16_t[]>* utf16) {
+        int utf16Units = SkUTF::UTF8ToUTF16(nullptr, 0, utf8, utf8Units);
+        if (utf16Units < 0) {
+            SkDEBUGF("Convert error: Invalid utf8 input");
+            return utf16Units;
+        }
+        *utf16 = std::unique_ptr<uint16_t[]>(new uint16_t[utf16Units]);
+        SkDEBUGCODE(int dstLen =) SkUTF::UTF8ToUTF16(utf16->get(), utf16Units, utf8, utf8Units);
+        SkASSERT(dstLen == utf16Units);
+        return utf16Units;
+   }
+
+    static int utf16ToUtf8(const uint16_t* utf16, size_t utf16Units, std::unique_ptr<char[]>* utf8) {
+        int utf8Units = SkUTF::UTF16ToUTF8(nullptr, 0, utf16, utf16Units);
+        if (utf8Units < 0) {
+            SkDEBUGF("Convert error: Invalid utf16 input");
+            return utf8Units;
+        }
+        *utf8 = std::unique_ptr<char[]>(new char[utf8Units]);
+        SkDEBUGCODE(int dstLen =) SkUTF::UTF16ToUTF8(utf8->get(), utf8Units, utf16, utf16Units);
+        SkASSERT(dstLen == utf8Units);
+        return utf8Units;
+   }
 public:
     ~SkUnicode_icu() override { }
+    std::unique_ptr<SkBidiIterator> makeBidiIterator(const uint16_t text[], int count,
+                                                     SkBidiIterator::Direction dir) override {
+        return SkBidiIterator_icu::makeBidiIterator(text, count, dir);
+    }
+    std::unique_ptr<SkBidiIterator> makeBidiIterator(const char text[], int count,
+                                                     SkBidiIterator::Direction dir) override {
+        return SkBidiIterator_icu::makeBidiIterator(text, count, dir);
+    }
 
-    bool getBidiRegions(const char utf8[], int utf8Units, Direction dir, std::vector<BidiRegion>* results) override {
+    // TODO: Use ICU data file to detect controls and whitespaces
+    bool isControl(SkUnichar utf8) override {
+        return u_iscntrl(utf8);
+    }
+
+    bool isWhitespace(SkUnichar utf8) override {
+        return u_isWhitespace(utf8);
+    }
+
+    SkString convertUtf16ToUtf8(const std::u16string& utf16) override {
+        std::unique_ptr<char[]> utf8;
+        auto utf8Units = SkUnicode_icu::utf16ToUtf8((uint16_t*)utf16.data(), utf16.size(), &utf8);
+        if (utf8Units >= 0) {
+            return SkString(utf8.get(), utf8Units);
+        } else {
+            return SkString();
+        }
+    }
+
+    bool getBidiRegions(const char utf8[], int utf8Units, TextDirection dir, std::vector<BidiRegion>* results) override {
         return extractBidi(utf8, utf8Units, dir, results);
     }
 
@@ -212,7 +341,7 @@ public:
 
         // Convert to UTF16 since we want the results in utf16
         std::unique_ptr<uint16_t[]> utf16;
-        auto utf16Units = convertUtf8ToUtf16(utf8, utf8Units, &utf16);
+        auto utf16Units = utf8ToUtf16(utf8, utf8Units, &utf16);
         if (utf16Units < 0) {
             return false;
         }
@@ -237,7 +366,12 @@ public:
     }
 };
 
-std::unique_ptr<SkUnicode> SkUnicode::Make() { return std::make_unique<SkUnicode_icu>(); }
-
+std::unique_ptr<SkUnicode> SkUnicode::Make() {
+    #if defined(SK_USING_THIRD_PARTY_ICU)
+    if (!SkLoadICU()) {
+        SkDEBUGF("SkLoadICU() failed!\n");
+        return nullptr;
+    }
+    #endif
+    return std::make_unique<SkUnicode_icu>();
 }
-

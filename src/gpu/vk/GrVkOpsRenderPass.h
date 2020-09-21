@@ -14,10 +14,10 @@
 #include "include/gpu/vk/GrVkTypes.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/vk/GrVkPipelineState.h"
+#include "src/gpu/vk/GrVkRenderPass.h"
 
 class GrVkGpu;
 class GrVkImage;
-class GrVkRenderPass;
 class GrVkRenderTarget;
 class GrVkSecondaryCommandBuffer;
 
@@ -31,11 +31,14 @@ public:
 
     void onExecuteDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler>) override;
 
+    using SelfDependencyFlags = GrVkRenderPass::SelfDependencyFlags;
+
     bool set(GrRenderTarget*, GrStencilAttachment*,
              GrSurfaceOrigin, const SkIRect& bounds,
              const GrOpsRenderPass::LoadAndStoreInfo&,
              const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-             const SkTArray<GrSurfaceProxy*, true>& sampledProxies);
+             const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+             GrXferBarrierFlags renderPassXferBarriers);
     void reset();
 
     void submit();
@@ -95,6 +98,7 @@ private:
     GrVkPipelineState*                          fCurrentPipelineState = nullptr;
     bool                                        fCurrentCBIsEmpty = true;
     SkIRect                                     fBounds;
+    SelfDependencyFlags                         fSelfDependencyFlags = SelfDependencyFlags::kNone;
     GrVkGpu*                                    fGpu;
 
 #ifdef SK_DEBUG
@@ -107,7 +111,7 @@ private:
     bool fIsActive = false;
 #endif
 
-    typedef GrOpsRenderPass INHERITED;
+    using INHERITED = GrOpsRenderPass;
 };
 
 #endif

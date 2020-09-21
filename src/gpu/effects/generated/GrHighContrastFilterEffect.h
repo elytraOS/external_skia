@@ -37,6 +37,7 @@ public:
     GrHighContrastFilterEffect(const GrHighContrastFilterEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "HighContrastFilterEffect"; }
+    bool usesExplicitReturn() const override;
     float contrastMod;
     bool hasContrast;
     bool grayscale;
@@ -65,7 +66,10 @@ private:
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 #endif

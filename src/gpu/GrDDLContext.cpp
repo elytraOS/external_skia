@@ -63,6 +63,11 @@ private:
         return nullptr;
     }
 
+    GrSmallPathAtlasMgr* onGetSmallPathAtlasMgr() override {
+        SkASSERT(0);  // DDL recorders should never invoke this
+        return nullptr;
+    }
+
     // Add to the set of unique program infos required by this DDL
     void recordProgramInfo(const GrProgramInfo* programInfo) final {
         if (!programInfo) {
@@ -144,7 +149,7 @@ private:
 
     ProgramInfoMap fProgramInfoMap;
 
-    typedef GrContext INHERITED;
+    using INHERITED = GrContext;
 };
 
 sk_sp<GrRecordingContext> GrRecordingContextPriv::MakeDDL(sk_sp<GrContextThreadSafeProxy> proxy) {

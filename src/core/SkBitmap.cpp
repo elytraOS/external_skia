@@ -228,7 +228,12 @@ void SkBitmap::allocPixels() {
 }
 
 void SkBitmap::allocPixels(Allocator* allocator) {
-    SkASSERT_RELEASE(this->tryAllocPixels(allocator));
+    if (!this->tryAllocPixels(allocator)) {
+        const SkImageInfo& info = this->info();
+        SK_ABORT("SkBitmap::tryAllocPixels failed "
+                 "ColorType:%d AlphaType:%d [w:%d h:%d] rb:%zu",
+                 info.colorType(), info.alphaType(), info.width(), info.height(), this->rowBytes());
+    }
 }
 
 void SkBitmap::allocPixelsFlags(const SkImageInfo& info, uint32_t flags) {
@@ -352,7 +357,7 @@ void SkBitmap::notifyPixelsChanged() const {
  so that we can freely assign memory allocated by one class to the other.
  */
 bool SkBitmap::HeapAllocator::allocPixelRef(SkBitmap* dst) {
-    const SkImageInfo info = dst->info();
+    const SkImageInfo& info = dst->info();
     if (kUnknown_SkColorType == info.colorType()) {
 //        SkDebugf("unsupported config for info %d\n", dst->config());
         return false;

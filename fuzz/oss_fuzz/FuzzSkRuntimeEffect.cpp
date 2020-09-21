@@ -9,6 +9,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrShaderCaps.h"
 
 #include "fuzz/Fuzz.h"
@@ -22,8 +23,14 @@ static constexpr size_t kReservedBytes = 256;
  * For the second part, it will first reserve 256 bytes and then allocate bytes with same size
  * as effect->inputSize() to uniformBytes. The uniformBytes is intended to create makeShader().
  * Note that if uniformBytes->size() != effect->inputSize() the shader won't be created.
+ *
+ * We fuzz twice, with two different settings for inlining in the SkSL compiler. By default, the
+ * compiler inlines most small to medium functions. This can hide bugs related to function-calling.
+ * So we run the fuzzer once with inlining disabled, and again with it enabled (aggressively).
+ * This gives us better coverage, and eases the burden on the fuzzer to inject useless noise into
+ * functions to suppress inlining.
  */
-bool FuzzSkRuntimeEffect(sk_sp<SkData> bytes) {
+static bool FuzzSkRuntimeEffect_Once(sk_sp<SkData> bytes) {
     if (bytes->size() < kReservedBytes) {
         return false;
     }
@@ -34,11 +41,11 @@ bool FuzzSkRuntimeEffect(sk_sp<SkData> bytes) {
     );
     SkRuntimeEffect* effect = std::get<0>(tuple).get();
 
-    if (!effect || effect->inputSize() > kReservedBytes) { // if there is not enough uniform bytes
+    if (!effect || effect->uniformSize() > kReservedBytes) { // if there is not enough uniform bytes
         return false;
     }
-    sk_sp<SkData> uniformBytes = SkData::MakeSubset(bytes.get(), bytes->size() - kReservedBytes,
-                                                                effect->inputSize());
+    sk_sp<SkData> uniformBytes =
+            SkData::MakeSubset(bytes.get(), bytes->size() - kReservedBytes, effect->uniformSize());
     auto shader = effect->makeShader(uniformBytes, nullptr, 0, nullptr, false);
     if (!shader) {
         return false;
@@ -55,7 +62,19 @@ bool FuzzSkRuntimeEffect(sk_sp<SkData> bytes) {
     return true;
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+bool FuzzSkRuntimeEffect(sk_sp<SkData> bytes) {
+    // Inline nothing
+    SkRuntimeEffect_SetInlineThreshold(0);
+    bool result = FuzzSkRuntimeEffect_Once(bytes);
+
+    // Inline everything
+    SkRuntimeEffect_SetInlineThreshold(std::numeric_limits<int>::max());
+    result = FuzzSkRuntimeEffect_Once(bytes) || result;
+
+    return result;
+}
+
+#if defined(SK_BUILD_FOR_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 3000) {
         return 0;

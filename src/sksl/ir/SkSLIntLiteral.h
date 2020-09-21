@@ -17,14 +17,16 @@ namespace SkSL {
  * A literal integer.
  */
 struct IntLiteral : public Expression {
+    static constexpr Kind kExpressionKind = Kind::kIntLiteral;
+
     // FIXME: we will need to revisit this if/when we add full support for both signed and unsigned
     // 64-bit integers, but for right now an int64_t will hold every value we care about
     IntLiteral(const Context& context, int offset, int64_t value)
-    : INHERITED(offset, kIntLiteral_Kind, *context.fInt_Type)
+    : INHERITED(offset, kExpressionKind, context.fInt_Type.get())
     , fValue(value) {}
 
     IntLiteral(int offset, int64_t value, const Type* type = nullptr)
-    : INHERITED(offset, kIntLiteral_Kind, *type)
+    : INHERITED(offset, kExpressionKind, type)
     , fValue(value) {}
 
     String description() const override {
@@ -40,14 +42,13 @@ struct IntLiteral : public Expression {
     }
 
     bool compareConstant(const Context& context, const Expression& other) const override {
-        IntLiteral& i = (IntLiteral&) other;
-        return fValue == i.fValue;
+        return fValue == other.as<IntLiteral>().fValue;
     }
 
-    int coercionCost(const Type& target) const override {
+    CoercionCost coercionCost(const Type& target) const override {
         if (target.isSigned() || target.isUnsigned() || target.isFloat() ||
-            target.kind() == Type::kEnum_Kind) {
-            return 0;
+            target.typeKind() == Type::TypeKind::kEnum) {
+            return CoercionCost::Free();
         }
         return INHERITED::coercionCost(target);
     }
@@ -56,19 +57,15 @@ struct IntLiteral : public Expression {
         return fValue;
     }
 
-    int nodeCount() const override {
-        return 1;
-    }
-
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new IntLiteral(fOffset, fValue, &fType));
+        return std::unique_ptr<Expression>(new IntLiteral(fOffset, fValue, &this->type()));
     }
 
     const int64_t fValue;
 
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

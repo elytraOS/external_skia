@@ -102,7 +102,7 @@ public:
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 
-    GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const override;
+    GrProgramDesc makeDesc(GrRenderTarget*, const GrProgramInfo&) const override;
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -121,7 +121,7 @@ private:
     void init(const GrContextOptions& contextOptions, IDXGIAdapter1*, ID3D12Device*);
 
     void initGrCaps(const D3D12_FEATURE_DATA_D3D12_OPTIONS&,
-                    const D3D12_FEATURE_DATA_D3D12_OPTIONS2&);
+                    ID3D12Device*);
     void initShaderCaps(int vendorID, const D3D12_FEATURE_DATA_D3D12_OPTIONS& optionsDesc);
 
     void initFormatTable(const DXGI_ADAPTER_DESC&, ID3D12Device*);
@@ -208,7 +208,7 @@ private:
 
     StencilFormat fPreferredStencilFormat;
 
-    typedef GrCaps INHERITED;
+    using INHERITED = GrCaps;
 };
 
 #endif

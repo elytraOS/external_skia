@@ -1113,7 +1113,10 @@ DEF_TEST(SkVM_Assembler, r) {
         a.add(A::Mem{A::rsi}, 7);                       // addq $7, (%rsi)
         a.add(A::Mem{A::rsi, 12}, 7);                   // addq $7, 12(%rsi)
         a.add(A::Mem{A::rsp, 12}, 7);                   // addq $7, 12(%rsp)
+        a.add(A::Mem{A::r12, 12}, 7);                   // addq $7, 12(%r12)
         a.add(A::Mem{A::rsp, 12, A::rax, A::FOUR}, 7);  // addq $7, 12(%rsp,%rax,4)
+        a.add(A::Mem{A::r12, 12, A::rax, A::FOUR}, 7);  // addq $7, 12(%r12,%rax,4)
+        a.add(A::Mem{A::rax, 12, A::r12, A::FOUR}, 7);  // addq $7, 12(%rax,%r12,4)
         a.add(A::Mem{A::r11, 12, A::r8 , A::TWO }, 7);  // addq $7, 12(%r11,%r8,2)
         a.add(A::Mem{A::r11, 12, A::rax}         , 7);  // addq $7, 12(%r11,%rax)
         a.add(A::Mem{A::rax, 12, A::r11}         , 7);  // addq $7, 12(%rax,%r11)
@@ -1142,7 +1145,10 @@ DEF_TEST(SkVM_Assembler, r) {
         0x48,0x83,0x06,0x07,
         0x48,0x83,0x46,0x0c,0x07,
         0x48,0x83,0x44,0x24,0x0c,0x07,
+        0x49,0x83,0x44,0x24,0x0c,0x07,
         0x48,0x83,0x44,0x84,0x0c,0x07,
+        0x49,0x83,0x44,0x84,0x0c,0x07,
+        0x4a,0x83,0x44,0xa0,0x0c,0x07,
         0x4b,0x83,0x44,0x43,0x0c,0x07,
         0x49,0x83,0x44,0x03,0x0c,0x07,
         0x4a,0x83,0x44,0x18,0x0c,0x07,
@@ -1172,6 +1178,38 @@ DEF_TEST(SkVM_Assembler, r) {
         0xc4, 0xc1, 0x75, 0xfe, 0xc0,
         0xc4, 0xe2, 0x75, 0x40, 0xc2,
         0xc5,       0xf5, 0xfa, 0xc2,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.vpaddw   (A::ymm4, A::ymm3, A::ymm2);
+        a.vpavgw   (A::ymm4, A::ymm3, A::ymm2);
+        a.vpcmpeqw (A::ymm4, A::ymm3, A::ymm2);
+        a.vpcmpgtw (A::ymm4, A::ymm3, A::ymm2);
+
+        a.vpminsw  (A::ymm4, A::ymm3, A::ymm2);
+        a.vpmaxsw  (A::ymm4, A::ymm3, A::ymm2);
+        a.vpminuw  (A::ymm4, A::ymm3, A::ymm2);
+        a.vpmaxuw  (A::ymm4, A::ymm3, A::ymm2);
+
+        a.vpmulhrsw(A::ymm4, A::ymm3, A::ymm2);
+        a.vpabsw   (A::ymm4, A::ymm3);
+        a.vpsllw   (A::ymm4, A::ymm3, 12);
+        a.vpsraw   (A::ymm4, A::ymm3, 12);
+    },{
+        0xc5,     0xe5, 0xfd, 0xe2,
+        0xc5,     0xe5, 0xe3, 0xe2,
+        0xc5,     0xe5, 0x75, 0xe2,
+        0xc5,     0xe5, 0x65, 0xe2,
+
+        0xc5,     0xe5, 0xea, 0xe2,
+        0xc5,     0xe5, 0xee, 0xe2,
+        0xc4,0xe2,0x65, 0x3a, 0xe2,
+        0xc4,0xe2,0x65, 0x3e, 0xe2,
+
+        0xc4,0xe2,0x65, 0x0b, 0xe2,
+        0xc4,0xe2,0x7d, 0x1d, 0xe3,
+        0xc5,0xdd,0x71, 0xf3, 0x0c,
+        0xc5,0xdd,0x71, 0xe3, 0x0c,
     });
 
     test_asm(r, [&](A& a) {
@@ -1474,11 +1512,14 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
+        a.vpinsrd(A::xmm1, A::xmm8, A::Mem{A::rsi}, 1);   // vpinsrd $1, (%rsi), %xmm8, %xmm1
+        a.vpinsrd(A::xmm8, A::xmm1, A::Mem{A::r8 }, 3);   // vpinsrd $3, (%r8), %xmm1, %xmm8;
+
         a.vpinsrw(A::xmm1, A::xmm8, A::Mem{A::rsi}, 4);   // vpinsrw $4, (%rsi), %xmm8, %xmm1
         a.vpinsrw(A::xmm8, A::xmm1, A::Mem{A::r8 }, 12);  // vpinrsw $12, (%r8), %xmm1, %xmm8
 
         a.vpinsrb(A::xmm1, A::xmm8, A::Mem{A::rsi}, 4);   // vpinsrb $4, (%rsi), %xmm8, %xmm1
-        a.vpinsrb(A::xmm8, A::xmm1, A::Mem{A::r8 }, 12);  // vpinsrb $4, (%rsi), %xmm8, %xmm1
+        a.vpinsrb(A::xmm8, A::xmm1, A::Mem{A::r8 }, 12);  // vpinsrb $12, (%r8), %xmm1, %xmm8
 
         a.vextracti128(A::xmm1, A::ymm8, 1);  // vextracti128 $1, %ymm8, %xmm1
         a.vextracti128(A::xmm8, A::ymm1, 0);  // vextracti128 $0, %ymm1, %xmm8
@@ -1492,6 +1533,9 @@ DEF_TEST(SkVM_Assembler, r) {
         a.vpextrb(A::Mem{A::rsi}, A::xmm8, 7);
         a.vpextrb(A::Mem{A::r8 }, A::xmm1, 15);
     },{
+        0xc4,0xe3,0x39, 0x22, 0x0e, 1,
+        0xc4,0x43,0x71, 0x22, 0x00, 3,
+
         0xc5,0xb9,      0xc4, 0x0e,  4,
         0xc4,0x41,0x71, 0xc4, 0x00, 12,
 
@@ -2244,8 +2288,8 @@ DEF_TEST(SkVM_64bit, r) {
             skvm::Arg wide = b.varying<uint64_t>(),
                         lo = b.varying<int>(),
                         hi = b.varying<int>();
-            b.store32(lo, b.load64_lo(wide));
-            b.store32(hi, b.load64_hi(wide));
+            b.store32(lo, b.load64(wide, 0));
+            b.store32(hi, b.load64(wide, 1));
         }
         test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
             uint32_t l[65], h[65];
@@ -2297,4 +2341,169 @@ DEF_TEST(SkVM_is_NaN_is_finite, r) {
                                            i == 4 || i == 5) ? 0xffffffff : 0));
         }
     });
+}
+
+DEF_TEST(SkVM_args, r) {
+    // Test we can handle at least six arguments.
+    skvm::Builder b;
+    {
+        skvm::Arg dst = b.varying<float>(),
+                    A = b.varying<float>(),
+                    B = b.varying<float>(),
+                    C = b.varying<float>(),
+                    D = b.varying<float>(),
+                    E = b.varying<float>();
+        storeF(dst, b.loadF(A)
+                  + b.loadF(B)
+                  + b.loadF(C)
+                  + b.loadF(D)
+                  + b.loadF(E));
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+        float dst[17],A[17],B[17],C[17],D[17],E[17];
+        for (int i = 0; i < 17; i++) {
+            A[i] = B[i] = C[i] = D[i] = E[i] = (float)i;
+        }
+        program.eval(17, dst,A,B,C,D,E);
+        for (int i = 0; i < 17; i++) {
+            REPORTER_ASSERT(r, dst[i] == 5.0f*i);
+        }
+    });
+}
+
+DEF_TEST(SkVM_Q14x2, r) {
+    // Some nice round Q14 test values, from 0.0 out to ±1.0 (0x4000, 0xc000) by 16ths (0x0400).
+    const uint32_t src[] = {
+        0x0000'0000, 0xfc00'0400, 0xf800'0800, 0xf400'0c00,
+        0xf000'1000, 0xec00'1400, 0xe800'1800, 0xe400'1c00,
+        0xe000'2000, 0xdc00'2400, 0xd800'2800, 0xd400'2c00,
+        0xd000'3000, 0xcc00'3400, 0xc800'3800, 0xc400'3c00, 0xc000'4000
+    };
+    for (int i = 0; false && i < 17; i++) {
+        // Just showing our work how we got those values.
+        int16_t x = i * (+1/16.0f) * 0x4000;
+        REPORTER_ASSERT(r, src[i] == (uint32_t)(x|-x<<16));
+    }
+
+    // These test cases are essentially mechanically generated to get coverage...
+    // I've spot checked here and there and things seem correct, but I wouldn't
+    // be surprised to find that there were bugs.  Using nice round numbers to
+    // avoid having to think about low-bit precision for now.
+    struct {
+        skvm::Q14x2 (*fn)(skvm::Q14x2);
+        uint32_t expected[17];
+    } cases[] = {
+        {[](skvm::Q14x2 x) { return x; },   // Just double checking the test harness works.
+         {0x00000000, 0xfc000400, 0xf8000800, 0xf4000c00,
+          0xf0001000, 0xec001400, 0xe8001800, 0xe4001c00,
+          0xe0002000, 0xdc002400, 0xd8002800, 0xd4002c00,
+          0xd0003000, 0xcc003400, 0xc8003800, 0xc4003c00, 0xc0004000}},
+
+        {[](skvm::Q14x2 x) { return x*x; }, // square ±1/16 (0x0400) -> 1/256 (0x0040), etc.
+         {0x00000000, 0x00400040, 0x01000100, 0x02400240,
+          0x04000400, 0x06400640, 0x09000900, 0x0c400c40,
+          0x10001000, 0x14401440, 0x19001900, 0x1e401e40,
+          0x24002400, 0x2a402a40, 0x31003100, 0x38403840, 0x40004000}},
+
+        {[](skvm::Q14x2 x) { return -(x*-x); }, // square, version B
+         {0x00000000, 0x00400040, 0x01000100, 0x02400240,
+          0x04000400, 0x06400640, 0x09000900, 0x0c400c40,
+          0x10001000, 0x14401440, 0x19001900, 0x1e401e40,
+          0x24002400, 0x2a402a40, 0x31003100, 0x38403840, 0x40004000}},
+
+        {[](skvm::Q14x2 x) { return x>>1; },  // divide by 2
+         {0x00000000, 0xfe000200, 0xfc000400, 0xfa000600,
+          0xf8000800, 0xf6000a00, 0xf4000c00, 0xf2000e00,
+          0xf0001000, 0xee001200, 0xec001400, 0xea001600,
+          0xe8001800, 0xe6001a00, 0xe4001c00, 0xe2001e00, 0xe0002000}},
+
+        {[](skvm::Q14x2 x) { return shr(x,1); },  // logical shift by 1
+         {0x00000000, 0x7e000200, 0x7c000400, 0x7a000600,
+          0x78000800, 0x76000a00, 0x74000c00, 0x72000e00,
+          0x70001000, 0x6e001200, 0x6c001400, 0x6a001600,
+          0x68001800, 0x66001a00, 0x64001c00, 0x62001e00, 0x60002000}},
+
+        {[](skvm::Q14x2 x) { return x - (x>>2); },  // 3/4 x, version A
+         {0x00000000, 0xfd000300, 0xfa000600, 0xf7000900,
+          0xf4000c00, 0xf1000f00, 0xee001200, 0xeb001500,
+          0xe8001800, 0xe5001b00, 0xe2001e00, 0xdf002100,
+          0xdc002400, 0xd9002700, 0xd6002a00, 0xd3002d00, 0xd0003000}},
+
+        {[](skvm::Q14x2 x) { return (x>>1) + (x>>2); },  // 3/4 x, version B
+         {0x00000000, 0xfd000300, 0xfa000600, 0xf7000900,
+          0xf4000c00, 0xf1000f00, 0xee001200, 0xeb001500,
+          0xe8001800, 0xe5001b00, 0xe2001e00, 0xdf002100,
+          0xdc002400, 0xd9002700, 0xd6002a00, 0xd3002d00, 0xd0003000}},
+
+        {[](skvm::Q14x2 x) { return ((x>>2) + (x>>3))<<1; },  // 3/4 x, version C
+         {0x00000000, 0xfd000300, 0xfa000600, 0xf7000900,
+          0xf4000c00, 0xf1000f00, 0xee001200, 0xeb001500,
+          0xe8001800, 0xe5001b00, 0xe2001e00, 0xdf002100,
+          0xdc002400, 0xd9002700, 0xd6002a00, 0xd3002d00, 0xd0003000}},
+
+        // TODO: I'm not sure if this one is working correctly or not.  Should only work for >=0?
+        {[](skvm::Q14x2 x) { return unsigned_avg(x, x>>1); },  // 3/4 x, version D
+         {0x00000000, 0xfd000300, 0xfa000600, 0xf7000900,
+          0xf4000c00, 0xf1000f00, 0xee001200, 0xeb001500,
+          0xe8001800, 0xe5001b00, 0xe2001e00, 0xdf002100,
+          0xdc002400, 0xd9002700, 0xd6002a00, 0xd3002d00, 0xd0003000}},
+
+        {[](skvm::Q14x2 x) { return min(x, +0.5f); },  // clamp down to 0x2000, version A
+         {0x00000000, 0xfc000400, 0xf8000800, 0xf4000c00,
+          0xf0001000, 0xec001400, 0xe8001800, 0xe4001c00,
+          0xe0002000, 0xdc002000, 0xd8002000, 0xd4002000,
+          0xd0002000, 0xcc002000, 0xc8002000, 0xc4002000, 0xc0002000}},
+
+        {[](skvm::Q14x2 x) { return select(x < +0.5f, x, +0.5f); },  // clamp down to 0x2000, vB
+         {0x00000000, 0xfc000400, 0xf8000800, 0xf4000c00,
+          0xf0001000, 0xec001400, 0xe8001800, 0xe4001c00,
+          0xe0002000, 0xdc002000, 0xd8002000, 0xd4002000,
+          0xd0002000, 0xcc002000, 0xc8002000, 0xc4002000, 0xc0002000}},
+
+        {[](skvm::Q14x2 x) { return select(x == 1.0f, 0.5f, x); },
+         {0x00000000, 0xfc000400, 0xf8000800, 0xf4000c00,
+          0xf0001000, 0xec001400, 0xe8001800, 0xe4001c00,
+          0xe0002000, 0xdc002400, 0xd8002800, 0xd4002c00,
+          0xd0003000, 0xcc003400, 0xc8003800, 0xc4003c00, 0xc0002000}},
+
+        {[](skvm::Q14x2 x) { return max(x, -0.5f); },  // clamp up to 0xe000
+         {0x00000000, 0xfc000400, 0xf8000800, 0xf4000c00,
+          0xf0001000, 0xec001400, 0xe8001800, 0xe4001c00,
+          0xe0002000, 0xe0002400, 0xe0002800, 0xe0002c00,
+          0xe0003000, 0xe0003400, 0xe0003800, 0xe0003c00, 0xe0004000}},
+
+        // TODO: I had higher hopes for this op until I realized it clamps negative values
+        // to the upper limit, not zero.  Duh.  Might end up removing this.
+        {[](skvm::Q14x2 x) { return unsigned_min(x, 0.5f); },  // clamp around to [0,0x2000]
+         {0x00000000, 0x20000400, 0x20000800, 0x20000c00,
+          0x20001000, 0x20001400, 0x20001800, 0x20001c00,
+          0x20002000, 0x20002000, 0x20002000, 0x20002000,
+          0x20002000, 0x20002000, 0x20002000, 0x20002000, 0x20002000}},
+    };
+
+    for (const auto& test : cases) {
+        skvm::Builder b;
+        {
+            skvm::Arg dst = b.varying<uint32_t>(),
+                      src = b.varying<uint32_t>();
+
+            skvm::Q14x2 x = as_Q14x2(b.load32(src));
+            store32(dst, as_I32(test.fn(x)));
+        }
+
+        test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+            uint32_t dst[17];
+            program.eval(17, dst,src);
+            for (int i = 0; i < 17; i++) {
+                if (test.expected[16]) {
+                    REPORTER_ASSERT(r, test.expected[i] == dst[i]);
+                } else {
+                    if (i == 0 || i == 4 || i == 8 || i == 12) SkDebugf("\n");
+                    SkDebugf("0x%08x, ", dst[i]);
+                }
+            }
+        });
+    }
+
 }

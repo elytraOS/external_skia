@@ -33,6 +33,7 @@ class GrPathRendering;
 class GrPipeline;
 class GrPrimitiveProcessor;
 class GrRenderTarget;
+class GrRingBuffer;
 class GrSemaphore;
 class GrStagingBufferManager;
 class GrStencilAttachment;
@@ -58,6 +59,8 @@ public:
     GrPathRendering* pathRendering() { return fPathRendering.get();  }
 
     virtual GrStagingBufferManager* stagingBufferManager() { return nullptr; }
+
+    virtual GrRingBuffer* uniformsRingBuffer() { return nullptr; }
 
     enum class DisconnectType {
         // No cleanup should be attempted, immediately cease making backend API calls
@@ -356,7 +359,8 @@ public:
             const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) = 0;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+            GrXferBarrierFlags renderPassXferBarriers) = 0;
 
     // Called by GrDrawingManager when flushing.
     // Provides a hook for post-flush actions (e.g. Vulkan command buffer submits). This will also
@@ -382,9 +386,11 @@ public:
     virtual void insertSemaphore(GrSemaphore* semaphore) = 0;
     virtual void waitSemaphore(GrSemaphore* semaphore) = 0;
 
+    virtual void addFinishedProc(GrGpuFinishedProc finishedProc,
+                                 GrGpuFinishedContext finishedContext) = 0;
     virtual void checkFinishProcs() = 0;
 
-    virtual void takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer>) {}
+    virtual void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) {}
 
     /**
      * Checks if we detected an OOM from the underlying 3D API and if so returns true and resets
@@ -820,9 +826,6 @@ private:
     virtual bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                                const SkIPoint& dstPoint) = 0;
 
-    virtual void addFinishedProc(GrGpuFinishedProc finishedProc,
-                                 GrGpuFinishedContext finishedContext) = 0;
-
     virtual void prepareSurfacesForBackendAccessAndStateUpdates(
             GrSurfaceProxy* proxies[],
             int numProxies,
@@ -868,7 +871,7 @@ private:
     bool fOOMed = false;
 
     friend class GrPathRendering;
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

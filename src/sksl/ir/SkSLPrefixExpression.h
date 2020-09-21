@@ -20,8 +20,10 @@ namespace SkSL {
  * An expression modified by a unary operator appearing before it, such as '!flag'.
  */
 struct PrefixExpression : public Expression {
+    static constexpr Kind kExpressionKind = Kind::kPrefix;
+
     PrefixExpression(Token::Kind op, std::unique_ptr<Expression> operand)
-    : INHERITED(operand->fOffset, kPrefix_Kind, operand->fType)
+    : INHERITED(operand->fOffset, kExpressionKind, &operand->type())
     , fOperand(std::move(operand))
     , fOperator(op) {}
 
@@ -39,11 +41,11 @@ struct PrefixExpression : public Expression {
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override {
-        if (fOperand->fKind == Expression::kFloatLiteral_Kind) {
+        if (fOperand->kind() == Expression::Kind::kFloatLiteral) {
             return std::unique_ptr<Expression>(new FloatLiteral(
-                                                              irGenerator.fContext,
-                                                              fOffset,
-                                                              -((FloatLiteral&) *fOperand).fValue));
+                                                             irGenerator.fContext,
+                                                             fOffset,
+                                                             -fOperand->as<FloatLiteral>().fValue));
 
         }
         return nullptr;
@@ -64,10 +66,6 @@ struct PrefixExpression : public Expression {
         return -fOperand->getMatComponent(col, row);
     }
 
-    int nodeCount() const override {
-        return 1 + fOperand->nodeCount();
-    }
-
     std::unique_ptr<Expression> clone() const override {
         return std::unique_ptr<Expression>(new PrefixExpression(fOperator, fOperand->clone()));
     }
@@ -79,9 +77,9 @@ struct PrefixExpression : public Expression {
     std::unique_ptr<Expression> fOperand;
     const Token::Kind fOperator;
 
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

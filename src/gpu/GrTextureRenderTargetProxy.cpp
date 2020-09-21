@@ -9,8 +9,7 @@
 
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrRenderTargetProxyPriv.h"
-#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrSurface.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxyPriv.h"
@@ -82,7 +81,7 @@ GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(sk_sp<GrSurface> surf,
         , GrTextureProxy(surf, useAllocator, creatingProvider) {
     SkASSERT(surf->asTexture());
     SkASSERT(surf->asRenderTarget());
-    SkASSERT(fSurfaceFlags == fTarget->surfacePriv().flags());
+    SkASSERT(fSurfaceFlags == fTarget->flags());
     SkASSERT((this->numSamples() <= 1 ||
               fTarget->getContext()->priv().caps()->msaaResolvesAutomatically()) !=
              this->requiresManualMSAAResolve());
@@ -90,7 +89,7 @@ GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(sk_sp<GrSurface> surf,
 
 void GrTextureRenderTargetProxy::initSurfaceFlags(const GrCaps& caps) {
     // FBO 0 should never be wrapped as a texture render target.
-    SkASSERT(!this->rtPriv().glRTFBOIDIs0());
+    SkASSERT(!this->glRTFBOIDIs0());
     if (this->numSamples() > 1 && !caps.msaaResolvesAutomatically())  {
         // MSAA texture-render-targets always require manual resolve if we are not using a
         // multisampled-render-to-texture extension.
@@ -186,7 +185,7 @@ void GrTextureRenderTargetProxy::onValidateSurface(const GrSurface* surface) {
     SkASSERT(surface->asTexture()->textureType() == this->textureType());
 
     GrInternalSurfaceFlags proxyFlags = fSurfaceFlags;
-    GrInternalSurfaceFlags surfaceFlags = surface->surfacePriv().flags();
+    GrInternalSurfaceFlags surfaceFlags = surface->flags();
 
     // Only non-RT textures can be read only.
     SkASSERT(!(proxyFlags & GrInternalSurfaceFlags::kReadOnly));
@@ -194,6 +193,13 @@ void GrTextureRenderTargetProxy::onValidateSurface(const GrSurface* surface) {
 
     SkASSERT(((int)proxyFlags & kGrInternalTextureRenderTargetFlagsMask) ==
              ((int)surfaceFlags & kGrInternalTextureRenderTargetFlagsMask));
+
+    // We manually check the kVkRTSupportsInputAttachment since we only require it on the surface if
+    // the proxy has it set. If the proxy doesn't have the flag it is legal for the surface to
+    // have the flag.
+    if (proxyFlags & GrInternalSurfaceFlags::kVkRTSupportsInputAttachment) {
+        SkASSERT(surfaceFlags & GrInternalSurfaceFlags::kVkRTSupportsInputAttachment);
+    }
 }
 #endif
 

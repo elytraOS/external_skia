@@ -91,10 +91,10 @@ protected:
 private:
     SkScalar fTextHeight;
     sk_sp<SkTextBlob> fBlob;
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new LcdOverlapGM; )
-}
+}  // namespace skiagm

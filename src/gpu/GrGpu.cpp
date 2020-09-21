@@ -23,14 +23,14 @@
 #include "src/gpu/GrNativeRect.h"
 #include "src/gpu/GrPathRendering.h"
 #include "src/gpu/GrPipeline.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrRingBuffer.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrStagingBufferManager.h"
 #include "src/gpu/GrStencilAttachment.h"
 #include "src/gpu/GrStencilSettings.h"
-#include "src/gpu/GrSurfacePriv.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/GrTracing.h"
 #include "src/utils/SkJSONWriter.h"
@@ -434,7 +434,7 @@ bool GrGpu::writePixels(GrSurface* surface, int left, int top, int width, int he
                         GrColorType surfaceColorType, GrColorType srcColorType,
                         const GrMipLevel texels[], int mipLevelCount, bool prepForTexSampling) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    ATRACE_ANDROID_FRAMEWORK_ALWAYS("texture_upload");
+    ATRACE_ANDROID_FRAMEWORK_ALWAYS("Upload %ix%i Texture", width, height);
     SkASSERT(surface);
     SkASSERT(!surface->framebufferOnly());
 
@@ -596,8 +596,8 @@ void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const 
 int GrGpu::findOrAssignSamplePatternKey(GrRenderTarget* renderTarget) {
     SkASSERT(this->caps()->sampleLocationsSupport());
     SkASSERT(renderTarget->numSamples() > 1 ||
-             (renderTarget->renderTargetPriv().getStencilAttachment() &&
-              renderTarget->renderTargetPriv().getStencilAttachment()->numSamples() > 1));
+             (renderTarget->getStencilAttachment() &&
+              renderTarget->getStencilAttachment()->numSamples() > 1));
 
     SkSTArray<16, SkPoint> sampleLocations;
     this->querySampleLocations(renderTarget, &sampleLocations);
@@ -658,6 +658,10 @@ bool GrGpu::submitToGpu(bool syncCpu) {
 
     if (auto manager = this->stagingBufferManager()) {
         manager->detachBuffers();
+    }
+
+    if (auto uniformsBuffer = this->uniformsRingBuffer()) {
+        uniformsBuffer->startSubmit(this);
     }
 
     bool submitted = this->onSubmitToGpu(syncCpu);

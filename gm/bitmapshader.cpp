@@ -112,7 +112,7 @@ private:
     SkBitmap fBitmap;
     SkBitmap fMask;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 DEF_SIMPLE_GM(hugebitmapshader, canvas, 100, 100) {
@@ -146,4 +146,4 @@ DEF_SIMPLE_GM(hugebitmapshader, canvas, 100, 100) {
 
 DEF_GM( return new BitmapShaderGM; )
 
-}
+}  // namespace skiagm

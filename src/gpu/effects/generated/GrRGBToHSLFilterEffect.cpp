@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrRGBToHSLFilterEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -54,10 +55,14 @@ bool GrRGBToHSLFilterEffect::onIsEqual(const GrFragmentProcessor& other) const {
     (void)that;
     return true;
 }
+bool GrRGBToHSLFilterEffect::usesExplicitReturn() const { return false; }
 GrRGBToHSLFilterEffect::GrRGBToHSLFilterEffect(const GrRGBToHSLFilterEffect& src)
         : INHERITED(kGrRGBToHSLFilterEffect_ClassID, src.optimizationFlags()) {
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrRGBToHSLFilterEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrRGBToHSLFilterEffect(*this));
+    return std::make_unique<GrRGBToHSLFilterEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrRGBToHSLFilterEffect::onDumpInfo() const { return SkString(); }
+#endif

@@ -130,7 +130,9 @@ static D3D12_TEXTURE_ADDRESS_MODE wrap_mode_to_d3d_address_mode(GrSamplerState::
 
 static D3D12_FILTER d3d_filter(GrSamplerState sampler) {
     switch (sampler.mipmapMode()) {
+        // When the mode is kNone we disable filtering using maxLOD.
         case GrSamplerState::MipmapMode::kNone:
+        case GrSamplerState::MipmapMode::kNearest:
             switch (sampler.filter()) {
                 case GrSamplerState::Filter::kNearest: return D3D12_FILTER_MIN_MAG_MIP_POINT;
                 case GrSamplerState::Filter::kLinear:  return D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
@@ -197,7 +199,7 @@ D3D12_GPU_VIRTUAL_ADDRESS GrD3DResourceProvider::uploadConstantData(void* data, 
 
     // upload the data
     size_t paddedSize = GrAlignTo(size, kConstantAlignment);
-    GrRingBuffer::Slice slice = fGpu->constantsRingBuffer()->suballocate(paddedSize);
+    GrRingBuffer::Slice slice = fGpu->uniformsRingBuffer()->suballocate(paddedSize);
     char* destPtr = static_cast<char*>(slice.fBuffer->map()) + slice.fOffset;
     memcpy(destPtr, data, size);
 

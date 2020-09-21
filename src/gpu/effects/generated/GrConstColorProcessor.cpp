@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrConstColorProcessor.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -59,13 +60,19 @@ bool GrConstColorProcessor::onIsEqual(const GrFragmentProcessor& other) const {
     if (color != that.color) return false;
     return true;
 }
+bool GrConstColorProcessor::usesExplicitReturn() const { return false; }
 GrConstColorProcessor::GrConstColorProcessor(const GrConstColorProcessor& src)
         : INHERITED(kGrConstColorProcessor_ClassID, src.optimizationFlags()), color(src.color) {
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrConstColorProcessor::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrConstColorProcessor(*this));
+    return std::make_unique<GrConstColorProcessor>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrConstColorProcessor::onDumpInfo() const {
+    return SkStringPrintf("(color=half4(%f, %f, %f, %f))", color.fR, color.fG, color.fB, color.fA);
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrConstColorProcessor);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrConstColorProcessor::TestCreate(GrProcessorTestData* d) {

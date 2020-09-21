@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrAARectEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -91,7 +92,7 @@ GrGLSLFragmentProcessor* GrAARectEffect::onCreateGLSLInstance() const {
 }
 void GrAARectEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                            GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)edgeType);
+    b->add32((uint32_t)edgeType);
 }
 bool GrAARectEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const GrAARectEffect& that = other.cast<GrAARectEffect>();
@@ -100,6 +101,7 @@ bool GrAARectEffect::onIsEqual(const GrFragmentProcessor& other) const {
     if (rect != that.rect) return false;
     return true;
 }
+bool GrAARectEffect::usesExplicitReturn() const { return false; }
 GrAARectEffect::GrAARectEffect(const GrAARectEffect& src)
         : INHERITED(kGrAARectEffect_ClassID, src.optimizationFlags())
         , edgeType(src.edgeType)
@@ -107,8 +109,14 @@ GrAARectEffect::GrAARectEffect(const GrAARectEffect& src)
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrAARectEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrAARectEffect(*this));
+    return std::make_unique<GrAARectEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrAARectEffect::onDumpInfo() const {
+    return SkStringPrintf("(edgeType=%d, rect=float4(%f, %f, %f, %f))", (int)edgeType, rect.left(),
+                          rect.top(), rect.right(), rect.bottom());
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrAARectEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrAARectEffect::TestCreate(GrProcessorTestData* d) {

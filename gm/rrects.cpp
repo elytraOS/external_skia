@@ -196,7 +196,7 @@ private:
     static constexpr int kNumRRects = kNumSimpleCases + kNumComplexCases;
     SkRRect fRRects[kNumRRects];
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 // Radii for the various test cases. Order is UL, UR, LR, LL
@@ -270,4 +270,4 @@ DEF_GM( return new RRectGM(RRectGM::kAA_Clip_Type); )
 DEF_GM( return new RRectGM(RRectGM::kBW_Clip_Type); )
 DEF_GM( return new RRectGM(RRectGM::kEffect_Type); )
 
-}
+}  // namespace skiagm

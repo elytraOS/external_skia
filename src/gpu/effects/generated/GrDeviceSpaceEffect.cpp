@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrDeviceSpaceEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -45,13 +46,17 @@ bool GrDeviceSpaceEffect::onIsEqual(const GrFragmentProcessor& other) const {
     (void)that;
     return true;
 }
+bool GrDeviceSpaceEffect::usesExplicitReturn() const { return false; }
 GrDeviceSpaceEffect::GrDeviceSpaceEffect(const GrDeviceSpaceEffect& src)
         : INHERITED(kGrDeviceSpaceEffect_ClassID, src.optimizationFlags()) {
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrDeviceSpaceEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrDeviceSpaceEffect(*this));
+    return std::make_unique<GrDeviceSpaceEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrDeviceSpaceEffect::onDumpInfo() const { return SkString(); }
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrDeviceSpaceEffect);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrDeviceSpaceEffect::TestCreate(GrProcessorTestData* d) {

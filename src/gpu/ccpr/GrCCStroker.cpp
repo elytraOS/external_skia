@@ -97,7 +97,7 @@ private:
         return new Impl();
     }
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 void LinearStrokeProcessor::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
@@ -730,7 +730,8 @@ void GrCCStroker::drawLog2Strokes(int numSegmentsLog2, GrOpFlushState* flushStat
                               flushState->proxy()->numStencilSamples(),
                               flushState->proxy()->backendFormat(),
                               flushState->writeView()->origin(), &pipeline, &processor,
-                              GrPrimitiveType::kTriangleStrip);
+                              GrPrimitiveType::kTriangleStrip, 0,
+                              flushState->renderPassBarriers());
 
     flushState->bindPipeline(programInfo, SkRect::Make(drawBounds));
     flushState->bindBuffers(nullptr, fInstanceBuffer, nullptr);

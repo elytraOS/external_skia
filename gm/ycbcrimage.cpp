@@ -108,13 +108,13 @@ private:
 
     sk_sp<SkImage> fYCbCrImage;
 
-    typedef GpuGM INHERITED;
+    using INHERITED = GpuGM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new YCbCrImageGM;)
 
-} // skiagm
+}  // namespace skiagm
 
 #endif // SK_VULKAN

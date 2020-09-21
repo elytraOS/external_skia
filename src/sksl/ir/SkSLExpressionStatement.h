@@ -17,13 +17,11 @@ namespace SkSL {
  * A lone expression being used as a statement.
  */
 struct ExpressionStatement : public Statement {
-    ExpressionStatement(std::unique_ptr<Expression> expression)
-    : INHERITED(expression->fOffset, kExpression_Kind)
-    , fExpression(std::move(expression)) {}
+    static constexpr Kind kStatementKind = Kind::kExpression;
 
-    int nodeCount() const override {
-        return 1 + fExpression->nodeCount();
-    }
+    ExpressionStatement(std::unique_ptr<Expression> expression)
+    : INHERITED(expression->fOffset, kStatementKind)
+    , fExpression(std::move(expression)) {}
 
     std::unique_ptr<Statement> clone() const override {
         return std::unique_ptr<Statement>(new ExpressionStatement(fExpression->clone()));
@@ -35,9 +33,9 @@ struct ExpressionStatement : public Statement {
 
     std::unique_ptr<Expression> fExpression;
 
-    typedef Statement INHERITED;
+    using INHERITED = Statement;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

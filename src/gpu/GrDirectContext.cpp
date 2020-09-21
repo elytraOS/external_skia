@@ -16,6 +16,7 @@
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/mock/GrMockGpu.h"
+#include "src/gpu/ops/GrSmallPathAtlasMgr.h"
 #include "src/gpu/text/GrAtlasManager.h"
 #include "src/gpu/text/GrStrikeCache.h"
 #ifdef SK_METAL
@@ -45,8 +46,7 @@ static const bool kDefaultReduceOpsTaskSplitting = false;
 #endif
 
 GrDirectContext::GrDirectContext(GrBackendApi backend, const GrContextOptions& options)
-        : INHERITED(GrContextThreadSafeProxyPriv::Make(backend, options))
-        , fAtlasManager(nullptr) {
+        : INHERITED(GrContextThreadSafeProxyPriv::Make(backend, options)) {
 }
 
 GrDirectContext::~GrDirectContext() {
@@ -55,22 +55,29 @@ GrDirectContext::~GrDirectContext() {
     if (this->priv().getGpu()) {
         this->flushAndSubmit();
     }
-
-    delete fAtlasManager;
 }
 
 void GrDirectContext::abandonContext() {
     INHERITED::abandonContext();
+    if (fSmallPathAtlasMgr) {
+        fSmallPathAtlasMgr->reset();
+    }
     fAtlasManager->freeAll();
 }
 
 void GrDirectContext::releaseResourcesAndAbandonContext() {
     INHERITED::releaseResourcesAndAbandonContext();
+    if (fSmallPathAtlasMgr) {
+        fSmallPathAtlasMgr->reset();
+    }
     fAtlasManager->freeAll();
 }
 
 void GrDirectContext::freeGpuResources() {
     this->flushAndSubmit();
+    if (fSmallPathAtlasMgr) {
+        fSmallPathAtlasMgr->reset();
+    }
     fAtlasManager->freeAll();
 
     INHERITED::freeGpuResources();
@@ -108,12 +115,26 @@ bool GrDirectContext::init() {
 
     GrProxyProvider* proxyProvider = this->priv().proxyProvider();
 
-    fAtlasManager = new GrAtlasManager(proxyProvider,
-                                       this->options().fGlyphCacheTextureMaximumBytes,
-                                       allowMultitexturing);
-    this->priv().addOnFlushCallbackObject(fAtlasManager);
+    fAtlasManager = std::make_unique<GrAtlasManager>(proxyProvider,
+                                                     this->options().fGlyphCacheTextureMaximumBytes,
+                                                     allowMultitexturing);
+    this->priv().addOnFlushCallbackObject(fAtlasManager.get());
 
     return true;
+}
+
+GrSmallPathAtlasMgr* GrDirectContext::onGetSmallPathAtlasMgr() {
+    if (!fSmallPathAtlasMgr) {
+        fSmallPathAtlasMgr = std::make_unique<GrSmallPathAtlasMgr>();
+
+        this->priv().addOnFlushCallbackObject(fSmallPathAtlasMgr.get());
+    }
+
+    if (!fSmallPathAtlasMgr->initAtlas(this->proxyProvider(), this->caps())) {
+        return nullptr;
+    }
+
+    return fSmallPathAtlasMgr.get();
 }
 
 #ifdef SK_GL

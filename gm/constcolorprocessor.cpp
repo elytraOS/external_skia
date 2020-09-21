@@ -213,11 +213,11 @@ private:
     static constexpr int            kWidth  = 820;
     static constexpr int            kHeight = 500;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 DEF_GM(return new ColorProcessor{ColorProcessor::TestMode::kConstColor};)
 DEF_GM(return new ColorProcessor{ColorProcessor::TestMode::kModulateRGBA};)
 DEF_GM(return new ColorProcessor{ColorProcessor::TestMode::kModulateAlpha};)
 
-}
+}  // namespace skiagm

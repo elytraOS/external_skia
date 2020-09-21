@@ -100,8 +100,8 @@ private:
     static const int kInitialTrackedResourcesCount = 32;
 
 protected:
-    GrD3DCommandList(gr_cp<ID3D12CommandAllocator> allocator,
-                     gr_cp<ID3D12GraphicsCommandList> commandList);
+    GrD3DCommandList(ComPtr<ID3D12CommandAllocator> allocator,
+                     ComPtr<ID3D12GraphicsCommandList> commandList);
 
     // Add ref-counted resource that will be tracked and released when this command buffer finishes
     // execution
@@ -123,7 +123,7 @@ protected:
 
     void submitResourceBarriers();
 
-    gr_cp<ID3D12GraphicsCommandList> fCommandList;
+    ComPtr<ID3D12GraphicsCommandList> fCommandList;
 
     SkSTArray<kInitialTrackedResourcesCount, sk_sp<GrManagedResource>> fTrackedResources;
     SkSTArray<kInitialTrackedResourcesCount, sk_sp<GrRecycledResource>> fTrackedRecycledResources;
@@ -137,7 +137,7 @@ protected:
 private:
     void callFinishedCallbacks() { fFinishedCallbacks.reset(); }
 
-    gr_cp<ID3D12CommandAllocator> fAllocator;
+    ComPtr<ID3D12CommandAllocator> fAllocator;
 
     SkSTArray<4, D3D12_RESOURCE_BARRIER> fResourceBarriers;
 
@@ -152,13 +152,13 @@ public:
 
     void setPipelineState(sk_sp<GrD3DPipelineState> pipelineState);
 
-    void setCurrentConstantBuffer(GrRingBuffer* constantsRingBuffer);
-
     void setStencilRef(unsigned int stencilRef);
     void setBlendFactor(const float blendFactor[4]);
     void setPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY primitiveTopology);
     void setScissorRects(unsigned int numRects, const D3D12_RECT* rects);
     void setViewports(unsigned int numViewports, const D3D12_VIEWPORT* viewports);
+    void setCenteredSamplePositions(unsigned int numSamples);
+    void setDefaultSamplePositions();
     void setGraphicsRootSignature(const sk_sp<GrD3DRootSignature>& rootSignature);
     void setVertexBuffers(unsigned int startSlot,
                           sk_sp<const GrBuffer> vertexBuffer, size_t vertexStride,
@@ -194,8 +194,8 @@ public:
     void addSampledTextureRef(GrD3DTexture*);
 
 private:
-    GrD3DDirectCommandList(gr_cp<ID3D12CommandAllocator> allocator,
-                           gr_cp<ID3D12GraphicsCommandList> commandList);
+    GrD3DDirectCommandList(ComPtr<ID3D12CommandAllocator> allocator,
+                           ComPtr<ID3D12GraphicsCommandList> commandList);
 
     void onReset() override;
 
@@ -206,9 +206,7 @@ private:
     const GrBuffer* fCurrentInstanceBuffer;
     size_t fCurrentInstanceStride;
     const GrBuffer* fCurrentIndexBuffer;
-
-    GrRingBuffer* fCurrentConstantRingBuffer;
-    GrRingBuffer::SubmitData fConstantRingBufferSubmitData;
+    bool fUsingCenteredSamples;
 
     D3D12_GPU_VIRTUAL_ADDRESS fCurrentConstantBufferAddress;
     D3D12_GPU_DESCRIPTOR_HANDLE fCurrentRootDescriptorTable[GrD3DRootSignature::kParamIndexCount];
@@ -221,7 +219,7 @@ public:
     static std::unique_ptr<GrD3DCopyCommandList> Make(ID3D12Device* device);
 
 private:
-    GrD3DCopyCommandList(gr_cp<ID3D12CommandAllocator> allocator,
-                         gr_cp<ID3D12GraphicsCommandList> commandList);
+    GrD3DCopyCommandList(ComPtr<ID3D12CommandAllocator> allocator,
+                         ComPtr<ID3D12GraphicsCommandList> commandList);
 };
 #endif

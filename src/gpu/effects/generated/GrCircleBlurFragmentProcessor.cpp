@@ -273,6 +273,7 @@ std::unique_ptr<GrFragmentProcessor> GrCircleBlurFragmentProcessor::Make(
     return std::unique_ptr<GrFragmentProcessor>(new GrCircleBlurFragmentProcessor(
             std::move(inputFP), circle, solidRadius, textureRadius, std::move(profile)));
 }
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -296,25 +297,24 @@ public:
         circleDataVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                          kHalf4_GrSLType, "circleData");
         fragBuilder->codeAppendf(
-                R"SkSL(;
-half2 vec = half2((sk_FragCoord.xy - float2(%s.xy)) * float(%s.w));
+                R"SkSL(half2 vec = half2((sk_FragCoord.xy - float2(%s.xy)) * float(%s.w));
 half dist = length(vec) + (0.5 - %s.z) * %s.w;)SkSL",
                 args.fUniformHandler->getUniformCStr(circleDataVar),
                 args.fUniformHandler->getUniformCStr(circleDataVar),
                 args.fUniformHandler->getUniformCStr(circleDataVar),
                 args.fUniformHandler->getUniformCStr(circleDataVar));
-        SkString _sample13902 = this->invokeChild(0, args);
+        SkString _sample13901 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(
 half4 inputColor = %s;)SkSL",
-                _sample13902.c_str());
-        SkString _coords13950("float2(half2(dist, 0.5))");
-        SkString _sample13950 = this->invokeChild(1, args, _coords13950.c_str());
+                _sample13901.c_str());
+        SkString _coords13949("float2(half2(dist, 0.5))");
+        SkString _sample13949 = this->invokeChild(1, args, _coords13949.c_str());
         fragBuilder->codeAppendf(
                 R"SkSL(
 %s = inputColor * %s.w;
 )SkSL",
-                args.fOutputColor, _sample13950.c_str());
+                args.fOutputColor, _sample13949.c_str());
     }
 
 private:
@@ -348,6 +348,7 @@ bool GrCircleBlurFragmentProcessor::onIsEqual(const GrFragmentProcessor& other) 
     if (textureRadius != that.textureRadius) return false;
     return true;
 }
+bool GrCircleBlurFragmentProcessor::usesExplicitReturn() const { return false; }
 GrCircleBlurFragmentProcessor::GrCircleBlurFragmentProcessor(
         const GrCircleBlurFragmentProcessor& src)
         : INHERITED(kGrCircleBlurFragmentProcessor_ClassID, src.optimizationFlags())
@@ -357,8 +358,15 @@ GrCircleBlurFragmentProcessor::GrCircleBlurFragmentProcessor(
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrCircleBlurFragmentProcessor::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrCircleBlurFragmentProcessor(*this));
+    return std::make_unique<GrCircleBlurFragmentProcessor>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrCircleBlurFragmentProcessor::onDumpInfo() const {
+    return SkStringPrintf("(circleRect=half4(%f, %f, %f, %f), solidRadius=%f, textureRadius=%f)",
+                          circleRect.left(), circleRect.top(), circleRect.right(),
+                          circleRect.bottom(), solidRadius, textureRadius);
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrCircleBlurFragmentProcessor);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrCircleBlurFragmentProcessor::TestCreate(

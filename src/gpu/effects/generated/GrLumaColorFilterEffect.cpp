@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrLumaColorFilterEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -47,10 +48,14 @@ bool GrLumaColorFilterEffect::onIsEqual(const GrFragmentProcessor& other) const 
     (void)that;
     return true;
 }
+bool GrLumaColorFilterEffect::usesExplicitReturn() const { return false; }
 GrLumaColorFilterEffect::GrLumaColorFilterEffect(const GrLumaColorFilterEffect& src)
         : INHERITED(kGrLumaColorFilterEffect_ClassID, src.optimizationFlags()) {
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrLumaColorFilterEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrLumaColorFilterEffect(*this));
+    return std::make_unique<GrLumaColorFilterEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrLumaColorFilterEffect::onDumpInfo() const { return SkString(); }
+#endif

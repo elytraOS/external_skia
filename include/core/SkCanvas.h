@@ -2795,7 +2795,7 @@ private:
 
     std::unique_ptr<SkGlyphRunBuilder> fScratchGlyphRunBuilder;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 /** \class SkAutoCanvasRestore
@@ -2849,8 +2849,5 @@ private:
     SkAutoCanvasRestore& operator=(SkAutoCanvasRestore&&) = delete;
     SkAutoCanvasRestore& operator=(const SkAutoCanvasRestore&) = delete;
 };
-
-// Private
-#define SkAutoCanvasRestore(...) SK_REQUIRE_LOCAL_VAR(SkAutoCanvasRestore)
 
 #endif

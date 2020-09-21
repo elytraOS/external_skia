@@ -21,13 +21,17 @@ namespace SkSL {
 struct Symbol;
 
 struct Enum : public ProgramElement {
-    Enum(int offset, StringFragment typeName, std::shared_ptr<SymbolTable> symbols)
-    : INHERITED(offset, kEnum_Kind)
+    static constexpr Kind kProgramElementKind = Kind::kEnum;
+
+    Enum(int offset, StringFragment typeName, std::shared_ptr<SymbolTable> symbols,
+         bool isBuiltin = true)
+    : INHERITED(offset, kProgramElementKind)
     , fTypeName(typeName)
-    , fSymbols(std::move(symbols)) {}
+    , fSymbols(std::move(symbols))
+    , fBuiltin(isBuiltin) {}
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new Enum(fOffset, fTypeName, fSymbols));
+        return std::unique_ptr<ProgramElement>(new Enum(fOffset, fTypeName, fSymbols, fBuiltin));
     }
 
     String code() const {
@@ -40,10 +44,9 @@ struct Enum : public ProgramElement {
         std::sort(sortedSymbols.begin(), sortedSymbols.end(),
                   [](const Symbol* a, const Symbol* b) { return a->fName < b->fName; });
         for (const auto& s : sortedSymbols) {
-            const Expression& initialValue = *((Variable*) s)->fInitialValue;
-            SkASSERT(initialValue.fKind == Expression::kIntLiteral_Kind);
+            const Expression& initialValue = *s->as<Variable>().fInitialValue;
             result += separator + "    " + s->fName + " = " +
-                      to_string(((IntLiteral&) initialValue).fValue);
+                      to_string(initialValue.as<IntLiteral>().fValue);
             separator = ",\n";
         }
         result += "\n};";
@@ -54,13 +57,13 @@ struct Enum : public ProgramElement {
         return this->code();
     }
 
-    bool fBuiltin = false;
     const StringFragment fTypeName;
     const std::shared_ptr<SymbolTable> fSymbols;
+    bool fBuiltin;
 
-    typedef ProgramElement INHERITED;
+    using INHERITED = ProgramElement;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

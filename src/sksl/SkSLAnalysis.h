@@ -14,6 +14,7 @@
 namespace SkSL {
 
 struct Expression;
+struct FunctionDefinition;
 struct Program;
 struct ProgramElement;
 struct Statement;
@@ -25,7 +26,14 @@ struct Variable;
 struct Analysis {
     static SampleUsage GetSampleUsage(const Program& program, const Variable& fp);
 
+    static bool ReferencesBuiltin(const Program& program, int builtin);
+
     static bool ReferencesSampleCoords(const Program& program);
+    static bool ReferencesFragCoords(const Program& program);
+
+    static int NodeCount(const FunctionDefinition& function);
+
+    static bool StatementWritesToVariable(const Statement& stmt, const Variable& var);
 };
 
 /**
@@ -45,24 +53,16 @@ struct Analysis {
 
 class ProgramVisitor {
 public:
-    virtual ~ProgramVisitor() { SkASSERT(!fProgram); }
+    virtual ~ProgramVisitor() = default;
 
     bool visit(const Program&);
 
 protected:
-    const Program& program() const {
-        SkASSERT(fProgram);
-        return *fProgram;
-    }
-
     virtual bool visitExpression(const Expression&);
     virtual bool visitStatement(const Statement&);
     virtual bool visitProgramElement(const ProgramElement&);
-
-private:
-    const Program* fProgram;
 };
 
-}
+}  // namespace SkSL
 
 #endif

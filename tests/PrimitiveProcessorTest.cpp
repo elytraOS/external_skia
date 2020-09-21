@@ -7,6 +7,8 @@
 
 // This is a GPU-backend specific test. It relies on static intializers to work
 
+#include <memory>
+
 #include "include/core/SkTypes.h"
 #include "tests/Test.h"
 
@@ -62,7 +64,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         class GP : public GrGeometryProcessor {
         public:
             static GrGeometryProcessor* Make(SkArenaAlloc* arena, int numAttribs) {
@@ -98,8 +101,8 @@ private:
 
             GP(int numAttribs) : INHERITED(kGP_ClassID), fNumAttribs(numAttribs) {
                 SkASSERT(numAttribs > 1);
-                fAttribNames.reset(new SkString[numAttribs]);
-                fAttributes.reset(new Attribute[numAttribs]);
+                fAttribNames = std::make_unique<SkString[]>(numAttribs);
+                fAttributes = std::make_unique<Attribute[]>(numAttribs);
                 for (auto i = 0; i < numAttribs; ++i) {
                     fAttribNames[i].printf("attr%d", i);
                     // This gives us more of a mix of attribute types, and allows the
@@ -119,7 +122,7 @@ private:
             std::unique_ptr<SkString[]> fAttribNames;
             std::unique_ptr<Attribute[]> fAttributes;
 
-            typedef GrGeometryProcessor INHERITED;
+            using INHERITED = GrGeometryProcessor;
         };
 
         GrGeometryProcessor* gp = GP::Make(arena, fNumAttribs);
@@ -132,6 +135,7 @@ private:
                                                                    gp,
                                                                    GrProcessorSet::MakeEmptySet(),
                                                                    GrPrimitiveType::kTriangles,
+                                                                   renderPassXferBarriers,
                                                                    GrPipeline::InputFlags::kNone);
     }
 
@@ -161,9 +165,9 @@ private:
     GrSimpleMesh*  fMesh = nullptr;
     GrProgramInfo* fProgramInfo = nullptr;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
-}
+}  // namespace
 
 DEF_GPUTEST_FOR_ALL_CONTEXTS(VertexAttributeCount, reporter, ctxInfo) {
     auto context = ctxInfo.directContext();

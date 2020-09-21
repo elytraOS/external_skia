@@ -25,8 +25,8 @@
 namespace skiagm {
 namespace verifiers {
 class VerifierList;
-}
-}
+}  // namespace verifiers
+}  // namespace skiagm
 
 namespace DM {
 
@@ -279,7 +279,7 @@ public:
 private:
     SkString fTrail;
 
-    typedef SKPSrc INHERITED;
+    using INHERITED = SKPSrc;
 };
 
 #if defined(SK_ENABLE_SKOTTIE)
@@ -347,7 +347,7 @@ private:
     sk_sp<SkSVGDOM> fDom;
     SkScalar        fScale;
 
-    typedef Src INHERITED;
+    using INHERITED = Src;
 };
 #endif // SK_XML
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -386,7 +386,7 @@ public:
     Result draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     Result onDraw(const Src&, SkBitmap*, SkWStream*, SkString*,
                   const GrContextOptions& baseOptions,
-                  std::function<void(GrContext*)> initContext = nullptr) const;
+                  std::function<void(GrDirectContext*)> initContext = nullptr) const;
 
     sk_gpu_test::GrContextFactory::ContextType contextType() const { return fContextType; }
     const sk_gpu_test::GrContextFactory::ContextOverrides& contextOverrides() const {
@@ -438,7 +438,7 @@ public:
 private:
     std::unique_ptr<SkExecutor> fExecutor;
 
-    typedef GPUSink INHERITED;
+    using INHERITED = GPUSink;
 };
 
 class GPUPersistentCacheTestingSink : public GPUSink {
@@ -455,7 +455,7 @@ public:
 private:
     int fCacheType;
 
-    typedef GPUSink INHERITED;
+    using INHERITED = GPUSink;
 };
 
 class GPUPrecompileTestingSink : public GPUSink {
@@ -470,7 +470,7 @@ public:
     }
 
 private:
-    typedef GPUSink INHERITED;
+    using INHERITED = GPUSink;
 };
 
 // This sink attempts to emulate Chrome's OOP-R behavior. It:
@@ -485,7 +485,7 @@ public:
 private:
     Result ooprDraw(const Src&, sk_sp<SkSurface> dstSurface, GrDirectContext*) const;
 
-    typedef GPUSink INHERITED;
+    using INHERITED = GPUSink;
 };
 
 // This sink attempts to better simulate the Chrome DDL use-case. It:
@@ -513,7 +513,7 @@ private:
     std::unique_ptr<SkExecutor> fRecordingExecutor;
     std::unique_ptr<SkExecutor> fGPUExecutor;
 
-    typedef GPUSink INHERITED;
+    using INHERITED = GPUSink;
 };
 
 class PDFSink : public Sink {

@@ -17,9 +17,11 @@ namespace SkSL {
  * A function invocation.
  */
 struct FunctionCall : public Expression {
-    FunctionCall(int offset, const Type& type, const FunctionDeclaration& function,
+    static constexpr Kind kExpressionKind = Kind::kFunctionCall;
+
+    FunctionCall(int offset, const Type* type, const FunctionDeclaration& function,
                  std::vector<std::unique_ptr<Expression>> arguments)
-    : INHERITED(offset, kFunctionCall_Kind, type)
+    : INHERITED(offset, kExpressionKind, type)
     , fFunction(std::move(function))
     , fArguments(std::move(arguments)) {
         ++fFunction.fCallCount;
@@ -42,20 +44,12 @@ struct FunctionCall : public Expression {
         return false;
     }
 
-    int nodeCount() const override {
-        int result = 1;
-        for (const auto& a : fArguments) {
-            result += a->nodeCount();
-        }
-        return result;
-    }
-
     std::unique_ptr<Expression> clone() const override {
         std::vector<std::unique_ptr<Expression>> cloned;
         for (const auto& arg : fArguments) {
             cloned.push_back(arg->clone());
         }
-        return std::unique_ptr<Expression>(new FunctionCall(fOffset, fType, fFunction,
+        return std::unique_ptr<Expression>(new FunctionCall(fOffset, &this->type(), fFunction,
                                                             std::move(cloned)));
     }
 
@@ -74,9 +68,9 @@ struct FunctionCall : public Expression {
     const FunctionDeclaration& fFunction;
     std::vector<std::unique_ptr<Expression>> fArguments;
 
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

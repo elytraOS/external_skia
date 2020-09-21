@@ -12,7 +12,6 @@
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
@@ -49,13 +48,13 @@ public:
     bool hasPointSize() const { return fProgramInfo.primitiveType() == GrPrimitiveType::kPoints; }
 
     // TODO: stop passing in the renderTarget for just the sampleLocations
-    int effectiveSampleCnt() const {
+    int effectiveSampleCnt() {
         SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
-        return fRenderTarget->renderTargetPriv().getSampleLocations().count();
+        return fRenderTarget->getSampleLocations().count();
     }
-    const SkTArray<SkPoint>& getSampleLocations() const {
+    const SkTArray<SkPoint>& getSampleLocations() {
         SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
-        return fRenderTarget->renderTargetPriv().getSampleLocations();
+        return fRenderTarget->getSampleLocations();
     }
 
     const GrProgramDesc& desc() const { return fDesc; }
@@ -67,10 +66,15 @@ public:
     }
 
     GrSwizzle samplerSwizzle(SamplerHandle handle) const {
-        if (this->caps()->shaderCaps()->textureSwizzleAppliedInShader()) {
-            return this->uniformHandler()->samplerSwizzle(handle);
-        }
-        return GrSwizzle::RGBA();
+        return this->uniformHandler()->samplerSwizzle(handle);
+    }
+
+    const char* inputSamplerVariable(SamplerHandle handle) const {
+        return this->uniformHandler()->inputSamplerVariable(handle);
+    }
+
+    GrSwizzle inputSamplerSwizzle(SamplerHandle handle) const {
+        return this->uniformHandler()->inputSamplerSwizzle(handle);
     }
 
     // Used to add a uniform for the RenderTarget width (used for sk_Width) without mangling
@@ -104,7 +108,7 @@ public:
 
     int fStageIndex;
 
-    const GrRenderTarget*        fRenderTarget; // TODO: remove this
+    GrRenderTarget*              fRenderTarget; // TODO: remove this
     const GrProgramDesc&         fDesc;
     const GrProgramInfo&         fProgramInfo;
 
@@ -161,6 +165,7 @@ private:
     void emitAndInstallXferProc(const SkString& colorIn, const SkString& coverageIn);
     SamplerHandle emitSampler(const GrBackendFormat&, GrSamplerState, const GrSwizzle&,
                               const char* name);
+    SamplerHandle emitInputSampler(const GrSwizzle& swizzle, const char* name);
     bool checkSamplerCounts();
 
 #ifdef SK_DEBUG

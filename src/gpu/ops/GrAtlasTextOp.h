@@ -43,10 +43,6 @@ public:
 
     void visitProxies(const VisitProxyFunc& func) const override;
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override;
-#endif
-
     FixedFunctionFlags fixedFunctionFlags() const override;
 
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
@@ -116,19 +112,25 @@ private:
                              SkArenaAlloc*,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&&,
-                             const GrXferProcessor::DstProxyView&) override {
+                             const GrXferProcessor::DstProxyView&,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         // TODO [PI]: implement
     }
 
     void onPrePrepareDraws(GrRecordingContext*,
                            const GrSurfaceProxyView* writeView,
                            GrAppliedClip*,
-                           const GrXferProcessor::DstProxyView&) override {
+                           const GrXferProcessor::DstProxyView&,
+                           GrXferBarrierFlags renderPassXferBarriers) override {
         // TODO [PI]: implement
     }
 
     void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override;
+#endif
 
     GrMaskFormat maskFormat() const {
         switch (fMaskType) {
@@ -187,7 +189,7 @@ private:
     int fGeoCount;
     int fNumGlyphs;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 #endif

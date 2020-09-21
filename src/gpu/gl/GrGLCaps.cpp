@@ -7,12 +7,13 @@
 
 #include "src/gpu/gl/GrGLCaps.h"
 
+#include <memory>
+
 #include "include/gpu/GrContextOptions.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkTSearch.h"
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrProgramDesc.h"
-#include "src/gpu/GrRenderTargetProxyPriv.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrTextureProxyPriv.h"
@@ -21,6 +22,10 @@
 #include "src/gpu/gl/GrGLRenderTarget.h"
 #include "src/gpu/gl/GrGLTexture.h"
 #include "src/utils/SkJSONWriter.h"
+
+#if defined(SK_BUILD_FOR_IOS)
+#include <TargetConditionals.h>
+#endif
 
 GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
                    const GrGLContextInfo& ctxInfo,
@@ -44,7 +49,8 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fRGBA8888PixelsOpsAreSlow = false;
     fPartialFBOReadIsSlow = false;
     fBindUniformLocationSupport = false;
-    fMipmapLevelAndLodControlSupport = false;
+    fMipmapLevelControlSupport = false;
+    fMipmapLodControlSupport = false;
     fRGBAToBGRAReadbackConversionsAreSlow = false;
     fUseBufferDataNullHint = false;
     fDoManualMipmapping = false;
@@ -61,6 +67,8 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fProgramBinarySupport = false;
     fProgramParameterSupport = false;
     fSamplerObjectSupport = false;
+    fUseSamplerObjects = false;
+    fTextureSwizzleSupport = false;
     fTiledRenderingSupport = false;
     fFBFetchRequiresEnablePerSample = false;
     fSRGBWriteControl = false;
@@ -261,19 +269,21 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
     if (GR_IS_GR_GL(standard)) {
         if (version >= GR_GL_VER(3,3) || ctxInfo.hasExtension("GL_ARB_texture_swizzle")) {
-            this->fShaderCaps->fTextureSwizzleAppliedInShader = false;
+            fTextureSwizzleSupport = true;
         }
     } else if (GR_IS_GR_GL_ES(standard)) {
         if (version >= GR_GL_VER(3,0)) {
-            this->fShaderCaps->fTextureSwizzleAppliedInShader = false;
+            fTextureSwizzleSupport = true;
         }
     } // no WebGL support
 
     if (GR_IS_GR_GL(standard)) {
-        fMipmapLevelAndLodControlSupport = true;
+        fMipmapLevelControlSupport = true;
+        fMipmapLodControlSupport = true;
     } else if (GR_IS_GR_GL_ES(standard)) {
         if (version >= GR_GL_VER(3,0)) {
-            fMipmapLevelAndLodControlSupport = true;
+            fMipmapLevelControlSupport = true;
+            fMipmapLodControlSupport = true;
         }
     } // no WebGL support
 
@@ -710,6 +720,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     } else if (GR_IS_GR_WEBGL(standard)) {
         fSamplerObjectSupport = version >= GR_GL_VER(2,0);
     }
+    // We currently use sampler objects whenever they are available.
+    fUseSamplerObjects = fSamplerObjectSupport;
 
     if (GR_IS_GR_GL_ES(standard)) {
         fTiledRenderingSupport = ctxInfo.hasExtension("GL_QCOM_tiled_rendering");
@@ -726,8 +738,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                                                 &formatWorkarounds);
     }
 
-    // Requires fTextureSwizzleSupport, msaa support, ES compatibility have
-    // already been detected.
+    // Requires msaa support, ES compatibility have already been detected.
     this->initFormatTable(ctxInfo, gli, formatWorkarounds);
 
     this->finishInitialization(contextOptions);
@@ -1083,7 +1094,7 @@ void GrGLCaps::initBlendEqationSupport(const GrGLContextInfo& ctxInfo) {
 
 namespace {
 const GrGLuint kUnknownBitCount = GrGLStencilAttachment::kUnknownBitCount;
-}
+}  // namespace
 
 void GrGLCaps::initStencilSupport(const GrGLContextInfo& ctxInfo) {
 
@@ -1211,6 +1222,8 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Program binary support", fProgramBinarySupport);
     writer->appendBool("Program parameters support", fProgramParameterSupport);
     writer->appendBool("Sampler object support", fSamplerObjectSupport);
+    writer->appendBool("Using sampler objects", fUseSamplerObjects);
+    writer->appendBool("Texture swizzle support", fTextureSwizzleSupport);
     writer->appendBool("Tiled rendering support", fTiledRenderingSupport);
     writer->appendBool("FB fetch requires enable per sample", fFBFetchRequiresEnablePerSample);
     writer->appendBool("sRGB Write Control", fSRGBWriteControl);
@@ -1409,7 +1422,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         bool supportsBGRAColorType = GR_IS_GR_GL(standard) &&
                 (version >= GR_GL_VER(1, 2) || ctxInfo.hasExtension("GL_EXT_bgra"));
         info.fColorTypeInfoCount = supportsBGRAColorType ? 3 : 2;
-        info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+        info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
         int ctIdx = 0;
         // Format: RGBA8, Surface: kRGBA_8888
         {
@@ -1420,8 +1433,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
             // External IO ColorTypes:
             ctInfo.fExternalIOFormatCount = 2;
-            ctInfo.fExternalIOFormats.reset(
-                    new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+            ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                    ctInfo.fExternalIOFormatCount);
             int ioIdx = 0;
             // Format: RGBA8, Surface: kRGBA_8888, Data: kRGBA_8888
             {
@@ -1453,8 +1466,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
             // External IO ColorTypes:
             ctInfo.fExternalIOFormatCount = 2;
-            ctInfo.fExternalIOFormats.reset(
-                    new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+            ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                    ctInfo.fExternalIOFormatCount);
             int ioIdx = 0;
             // Format: RGBA8, Surface: kBGRA_8888, Data: kBGRA_8888
             {
@@ -1487,8 +1500,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
             // External IO ColorTypes:
             ctInfo.fExternalIOFormatCount = 1;
-            ctInfo.fExternalIOFormats.reset(
-                    new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+            ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                    ctInfo.fExternalIOFormatCount);
             int ioIdx = 0;
             // Format: RGBA8, Surface: kRGB_888x, Data: kRGBA_888x
             {
@@ -1533,7 +1546,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (r8Support) {
             info.fColorTypeInfoCount = 2;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: R8, Surface: kAlpha_8
             {
@@ -1546,8 +1559,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: R8, Surface: kAlpha_8, Data: kAlpha_8
                 {
@@ -1580,8 +1593,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: R8, Surface: kGray_8, Data: kGray_8
                 {
@@ -1659,7 +1672,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (alpha8IsValidForGL || alpha8IsValidForGLES || alpha8IsValidForWebGL) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: ALPHA8, Surface: kAlpha_8
             {
@@ -1676,8 +1689,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                     // External IO ColorTypes:
                     ctInfo.fExternalIOFormatCount = 2;
-                    ctInfo.fExternalIOFormats.reset(
-                            new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                    ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                            ctInfo.fExternalIOFormatCount);
                     int ioIdx = 0;
                     // Format: ALPHA8, Surface: kAlpha_8, Data: kAlpha_8
                     {
@@ -1746,7 +1759,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (lum8Supported) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: LUMINANCE8, Surface: kGray_8
             {
@@ -1760,8 +1773,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: LUMINANCE8, Surface: kGray_8, Data: kGray_8
                 {
@@ -1874,7 +1887,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (SkToBool(info.fFlags & FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: BGRA8, Surface: kBGRA_8888
             {
@@ -1885,8 +1898,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: BGRA8, Surface: kBGRA_8888, Data: kBGRA_8888
                 {
@@ -1948,7 +1961,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (SkToBool(info.fFlags &FormatInfo::kTexturable_Flag)) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: RGB565, Surface: kBGR_565
             {
@@ -1959,8 +1972,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: RGB565, Surface: kBGR_565, Data: kBGR_565
                 {
@@ -2054,7 +2067,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             uint32_t flags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
 
             info.fColorTypeInfoCount = 2;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: RGBA16F, Surface: kRGBA_F16
             {
@@ -2065,8 +2078,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: RGBA16F, Surface: kRGBA_F16, Data: kRGBA_F16
                 {
@@ -2098,8 +2111,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: RGBA16F, Surface: kRGBA_F16_Clamped, Data: kRGBA_F16_Clamped
                 {
@@ -2178,7 +2191,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         if (r16FTextureSupport) {
             // Format: R16F, Surface: kAlpha_F16
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             {
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
@@ -2190,8 +2203,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: R16F, Surface: kAlpha_F16, Data: kAlpha_F16
                 {
@@ -2261,7 +2274,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             }
 
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: LUMINANCE16F, Surface: kAlpha_F16
             {
@@ -2278,8 +2291,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: LUMINANCE16F, Surface: kAlpha_F16, Data: kAlpha_F16
                 {
@@ -2342,7 +2355,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         }
 
         info.fColorTypeInfoCount = 1;
-        info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+        info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
         int ctIdx = 0;
         // Format: RGB8, Surface: kRGB_888x
         {
@@ -2353,8 +2366,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
             // External IO ColorTypes:
             ctInfo.fExternalIOFormatCount = 2;
-            ctInfo.fExternalIOFormats.reset(
-                    new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+            ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                    ctInfo.fExternalIOFormatCount);
             int ioIdx = 0;
             // Format: RGB8, Surface: kRGB_888x, Data: kRGB_888x
             {
@@ -2412,7 +2425,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         }
         if (rg8Support) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: RG8, Surface: kRG_88
             {
@@ -2423,8 +2436,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: RG8, Surface: kRG_88, Data: kRG_88
                 {
@@ -2480,7 +2493,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                     (version >= GR_GL_VER(1, 2) || ctxInfo.hasExtension("GL_EXT_bgra"));
 
             info.fColorTypeInfoCount = supportsBGRAColorType ? 2 : 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: RGB10_A2, Surface: kRGBA_1010102
             {
@@ -2491,8 +2504,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: RGB10_A2, Surface: kRGBA_1010102, Data: kRGBA_1010102
                 {
@@ -2524,8 +2537,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: RGB10_A2, Surface: kBGRA_1010102, Data: kBGRA_1010102
                 {
@@ -2579,7 +2592,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         }
 
         info.fColorTypeInfoCount = 1;
-        info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+        info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
         int ctIdx = 0;
         // Format: RGBA4, Surface: kABGR_4444
         {
@@ -2590,8 +2603,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
             // External IO ColorTypes:
             ctInfo.fExternalIOFormatCount = 2;
-            ctInfo.fExternalIOFormats.reset(
-                    new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+            ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                    ctInfo.fExternalIOFormatCount);
             int ioIdx = 0;
             // Format: RGBA4, Surface: kABGR_4444, Data: kABGR_4444
             {
@@ -2685,7 +2698,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (srgb8Alpha8TextureSupport) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: SRGB8_ALPHA8, Surface: kRGBA_8888_SRGB
             {
@@ -2696,8 +2709,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 1;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
 
                 // Format: SRGB8_ALPHA8, Surface: kRGBA_8888_SRGB, Data: kRGBA_8888_SRGB
@@ -2816,7 +2829,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (r16Supported) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: R16, Surface: kAlpha_16
             {
@@ -2829,8 +2842,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: R16, Surface: kAlpha_16, Data: kAlpha_16
                 {
@@ -2887,7 +2900,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (rg16Supported) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: GR_GL_RG16, Surface: kRG_1616
             {
@@ -2898,8 +2911,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: GR_GL_RG16, Surface: kRG_1616, Data: kRG_1616
                 {
@@ -2956,7 +2969,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         if (rgba16Support) {
             // Format: GR_GL_RGBA16, Surface: kRGBA_16161616
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             {
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
@@ -2966,8 +2979,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: GR_GL_RGBA16, Surface: kRGBA_16161616, Data: kRGBA_16161616
                 {
@@ -3047,7 +3060,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (rg16FTextureSupport) {
             info.fColorTypeInfoCount = 1;
-            info.fColorTypeInfos.reset(new ColorTypeInfo[info.fColorTypeInfoCount]());
+            info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
             // Format: GR_GL_RG16F, Surface: kRG_F16
             {
@@ -3058,8 +3071,8 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
                 // External IO ColorTypes:
                 ctInfo.fExternalIOFormatCount = 2;
-                ctInfo.fExternalIOFormats.reset(
-                        new ColorTypeInfo::ExternalIOFormats[ctInfo.fExternalIOFormatCount]());
+                ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
+                        ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
                 // Format: GR_GL_RG16F, Surface: kRG_F16, Data: kRG_F16
                 {
@@ -3148,7 +3161,7 @@ void GrGLCaps::setupSampleCounts(const GrGLContextInfo& ctxInfo, const GrGLInter
                     // returned by GL so that the array is ascending.
                     fFormatTable[i].fColorSampleCounts[0] = 1;
                     for (int j = 0; j < count; ++j) {
-#if TARGET_OS_SIMULATOR
+#if defined(SK_BUILD_FOR_IOS) && TARGET_OS_SIMULATOR
                         // The iOS simulator is reporting incorrect values for sample counts,
                         // so force them to be a power of 2.
                         fFormatTable[i].fColorSampleCounts[j+1] = SkPrevPow2(temp[count - j - 1]);
@@ -3292,7 +3305,7 @@ static bool has_msaa_render_buffer(const GrSurfaceProxy* surf, const GrGLCaps& g
     // 3) It's not FBO 0, which is special and always auto-resolves
     return rt->numSamples() > 1 &&
            glCaps.usesMSAARenderBuffers() &&
-           !rt->rtPriv().glRTFBOIDIs0();
+           !rt->glRTFBOIDIs0();
 }
 
 bool GrGLCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
@@ -3595,11 +3608,23 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     static constexpr bool isMAC = false;
 #endif
 
+#ifdef SK_BUILD_FOR_ANDROID
+    // Older versions of Android have problems with setting GL_TEXTURE_BASE_LEVEL or
+    // GL_TEXTURE_MAX_LEVEL on GL_TEXTURE_EXTERTNAL_OES textures. We just leave them as is and hope
+    // the client never changes them either.
+    fDontSetBaseOrMaxLevelForExternalTextures = true;
+    // PowerVR can crash setting the levels on Android up to Q for any texture?
+    // https://crbug.com/1123874
+    if (ctxInfo.vendor() == kImagination_GrGLVendor) {
+        fMipmapLevelControlSupport =  false;
+    }
+#endif
+
     // We support manual mip-map generation (via iterative downsampling draw calls). This fixes
     // bugs on some cards/drivers that produce incorrect mip-maps for sRGB textures when using
     // glGenerateMipmap. Our implementation requires mip-level sampling control. Additionally,
     // it can be much slower (especially on mobile GPUs), so we opt-in only when necessary:
-    if (fMipmapLevelAndLodControlSupport &&
+    if (fMipmapLevelControlSupport &&
         (contextOptions.fDoManualMipmapping ||
          (kIntel_GrGLVendor == ctxInfo.vendor()) ||
          (kNVIDIA_GrGLDriver == ctxInfo.driver() && isMAC) ||
@@ -3901,13 +3926,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     }
 #endif
 
-#ifdef SK_BUILD_FOR_ANDROID
-    // Older versions of Android have problems with setting GL_TEXTURE_BASE_LEVEL or
-    // GL_TEXTURE_MAX_LEVEL on GL_TEXTURE_EXTERTNAL_OES textures. We just leave them as is and hope
-    // the client never changes them either.
-    fDontSetBaseOrMaxLevelForExternalTextures = true;
-#endif
-
     // PowerVRGX6250 drops every pixel if we modify the sample mask while color writes are disabled.
     if (kPowerVRRogue_GrGLRenderer == ctxInfo.renderer()) {
         fNeverDisableColorWrites = true;
@@ -4046,9 +4064,6 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fDontSetBaseOrMaxLevelForExternalTextures);
         SkASSERT(!fNeverDisableColorWrites);
         SkASSERT(!fShaderCaps->fCanOnlyUseSampleMaskWithStencil);
-    }
-    if (options.fDoManualMipmapping) {
-        fDoManualMipmapping = true;
     }
     if (options.fShaderCacheStrategy < GrContextOptions::ShaderCacheStrategy::kBackendBinary) {
         fProgramBinarySupport = false;
@@ -4441,12 +4456,19 @@ GrSwizzle GrGLCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType c
     return {};
 }
 
+GrDstSampleType GrGLCaps::onGetDstSampleTypeForProxy(const GrRenderTargetProxy* rt) const {
+    if (rt->asTextureProxy()) {
+        return GrDstSampleType::kAsSelfTexture;
+    }
+    return GrDstSampleType::kAsTextureCopy;
+}
+
 uint64_t GrGLCaps::computeFormatKey(const GrBackendFormat& format) const {
     auto glFormat = format.asGLFormat();
     return (uint64_t)(glFormat);
 }
 
-GrProgramDesc GrGLCaps::makeDesc(const GrRenderTarget* rt, const GrProgramInfo& programInfo) const {
+GrProgramDesc GrGLCaps::makeDesc(GrRenderTarget* rt, const GrProgramInfo& programInfo) const {
     GrProgramDesc desc;
     SkDEBUGCODE(bool result =) GrProgramDesc::Build(&desc, rt, programInfo, *this);
     SkASSERT(result == desc.isValid());

@@ -53,7 +53,8 @@ static DEFINE_string(gamut ,   "srgb", "The color gamut for any raster backend."
 static DEFINE_string(tf    ,   "srgb", "The transfer function for any raster backend.");
 static DEFINE_bool  (legacy,    false, "Use a null SkColorSpace instead of --gamut and --tf?");
 static DEFINE_bool  (skvm  ,    false, "Use SkVMBlitter when supported?");
-static DEFINE_bool  (dylib ,    false, "Use SkVM via dylib?");
+static DEFINE_bool  (jit   ,     true, "JIT SkVM?");
+static DEFINE_bool  (dylib ,    false, "JIT SkVM via dylib?");
 
 static DEFINE_int   (samples ,         0, "Samples per pixel in GPU backends.");
 static DEFINE_bool  (stencils,      true, "If false, avoid stencil buffers in GPU backends.");
@@ -206,8 +207,8 @@ static void init(Source* source, sk_sp<skottie::Animation> animation) {
         for (int x : order) {
             SkRect dst = {x*dim, y*dim, (x+1)*dim, (y+1)*dim};
 
-            SkAutoCanvasRestore _(canvas, true/*save now*/);
-            canvas->clipRect(dst, /*aa=*/true);
+            SkAutoCanvasRestore _(canvas, /*doSave=*/true);
+            canvas->clipRect(dst, /*doAntiAlias=*/true);
             canvas->concat(SkMatrix::MakeRectToRect(SkRect::MakeSize(animation->size()),
                                                     dst,
                                                     SkMatrix::kCenter_ScaleToFit));
@@ -384,6 +385,7 @@ static sk_sp<SkImage> draw_with_gpu(std::function<bool(SkCanvas*)> draw,
 }
 
 extern bool gUseSkVMBlitter;
+extern bool gSkVMAllowJIT;
 extern bool gSkVMJITViaDylib;
 
 int main(int argc, char** argv) {
@@ -394,6 +396,7 @@ int main(int argc, char** argv) {
         SkGraphics::Init();
     }
     gUseSkVMBlitter  = FLAGS_skvm;
+    gSkVMAllowJIT    = FLAGS_jit;
     gSkVMJITViaDylib = FLAGS_dylib;
 
     initializeEventTracingForTools();

@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrTwoPointConicalGradientLayout.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -149,12 +150,12 @@ GrGLSLFragmentProcessor* GrTwoPointConicalGradientLayout::onCreateGLSLInstance()
 }
 void GrTwoPointConicalGradientLayout::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                             GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)type);
-    b->add32((int32_t)isRadiusIncreasing);
-    b->add32((int32_t)isFocalOnCircle);
-    b->add32((int32_t)isWellBehaved);
-    b->add32((int32_t)isSwapped);
-    b->add32((int32_t)isNativelyFocal);
+    b->add32((uint32_t)type);
+    b->add32((uint32_t)isRadiusIncreasing);
+    b->add32((uint32_t)isFocalOnCircle);
+    b->add32((uint32_t)isWellBehaved);
+    b->add32((uint32_t)isSwapped);
+    b->add32((uint32_t)isNativelyFocal);
 }
 bool GrTwoPointConicalGradientLayout::onIsEqual(const GrFragmentProcessor& other) const {
     const GrTwoPointConicalGradientLayout& that = other.cast<GrTwoPointConicalGradientLayout>();
@@ -168,6 +169,7 @@ bool GrTwoPointConicalGradientLayout::onIsEqual(const GrFragmentProcessor& other
     if (focalParams != that.focalParams) return false;
     return true;
 }
+bool GrTwoPointConicalGradientLayout::usesExplicitReturn() const { return false; }
 GrTwoPointConicalGradientLayout::GrTwoPointConicalGradientLayout(
         const GrTwoPointConicalGradientLayout& src)
         : INHERITED(kGrTwoPointConicalGradientLayout_ClassID, src.optimizationFlags())
@@ -182,8 +184,19 @@ GrTwoPointConicalGradientLayout::GrTwoPointConicalGradientLayout(
     this->setUsesSampleCoordsDirectly();
 }
 std::unique_ptr<GrFragmentProcessor> GrTwoPointConicalGradientLayout::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrTwoPointConicalGradientLayout(*this));
+    return std::make_unique<GrTwoPointConicalGradientLayout>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrTwoPointConicalGradientLayout::onDumpInfo() const {
+    return SkStringPrintf(
+            "(type=%d, isRadiusIncreasing=%s, isFocalOnCircle=%s, isWellBehaved=%s, isSwapped=%s, "
+            "isNativelyFocal=%s, focalParams=half2(%f, %f))",
+            (int)type, (isRadiusIncreasing ? "true" : "false"),
+            (isFocalOnCircle ? "true" : "false"), (isWellBehaved ? "true" : "false"),
+            (isSwapped ? "true" : "false"), (isNativelyFocal ? "true" : "false"), focalParams.fX,
+            focalParams.fY);
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrTwoPointConicalGradientLayout);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrTwoPointConicalGradientLayout::TestCreate(

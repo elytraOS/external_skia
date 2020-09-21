@@ -38,7 +38,7 @@ public:
     void disconnect(DisconnectType) override;
 
     GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
-    void takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer>) override;
+    void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) override;
 
     const wgpu::Device& device() const { return fDevice; }
     const wgpu::Queue&  queue() const { return fQueue; }
@@ -68,7 +68,8 @@ public:
             GrSurfaceOrigin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+            GrXferBarrierFlags renderPassXferBarriers) override;
 
     SkSL::Compiler* shaderCompiler() const {
         return fCompiler.get();
@@ -226,7 +227,7 @@ private:
 
     GrFinishCallbacks         fFinishCallbacks;
 
-    typedef GrGpu INHERITED;
+    using INHERITED = GrGpu;
 };
 
 #endif

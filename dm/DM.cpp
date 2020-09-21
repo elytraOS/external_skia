@@ -40,6 +40,7 @@
 #include "tools/trace/EventTracingPriv.h"
 #include "tools/trace/SkDebugfTracer.h"
 
+#include <memory>
 #include <vector>
 
 #include <stdlib.h>
@@ -59,6 +60,7 @@
 
 extern bool gSkForceRasterPipelineBlitter;
 extern bool gUseSkVMBlitter;
+extern bool gSkVMAllowJIT;
 
 static DEFINE_string(src, "tests gm skp mskp lottie rive svg image colorImage",
                      "Source types to test.");
@@ -93,6 +95,7 @@ static DEFINE_int(shard,  0, "Which shard do I run?");
 static DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
 static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
 static DEFINE_bool(skvm, false, "sets gUseSkVMBlitter");
+static DEFINE_bool(jit,  true,  "sets gSkVMAllowJIT");
 
 static DEFINE_string(bisect, "",
         "Pair of: SKP file to bisect, followed by an l/r bisect trail string (e.g., 'lrll'). The "
@@ -110,8 +113,8 @@ static DEFINE_string(colorImages, "",
 
 static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.");
 
-static DEFINE_bool(cpu, true, "master switch for running CPU-bound work.");
-static DEFINE_bool(gpu, true, "master switch for running GPU-bound work.");
+static DEFINE_bool(cpu, true, "Run CPU-bound work?");
+static DEFINE_bool(gpu, true, "Run GPU-bound work?");
 
 static DEFINE_bool(dryRun, false,
                    "just print the tests that would be run, without actually running them.");
@@ -680,7 +683,7 @@ static void push_codec_srcs(Path path) {
         return;
     }
     std::unique_ptr<SkCodec> codec = SkCodec::MakeFromData(encoded);
-    if (nullptr == codec.get()) {
+    if (nullptr == codec) {
         info("Couldn't create codec for %s.", path.c_str());
         return;
     }
@@ -835,6 +838,8 @@ static void push_codec_srcs(Path path) {
         {
             push_image_gen_src(path, ImageGenSrc::kPlatform_Mode, alphaType, false);
         }
+#elif defined(SK_ENABLE_NDK_IMAGES)
+        push_image_gen_src(path, ImageGenSrc::kPlatform_Mode, alphaType, false);
 #endif
     }
 }
@@ -888,7 +893,7 @@ static bool gather_srcs() {
         return false;
     }
 
-    for (auto image : images) {
+    for (const SkString& image : images) {
         push_codec_srcs(image);
     }
 
@@ -897,7 +902,7 @@ static bool gather_srcs() {
         return false;
     }
 
-    for (auto colorImage : colorImages) {
+    for (const SkString& colorImage : colorImages) {
         push_src("colorImage", "decode_native", new ColorCodecSrc(colorImage, false));
         push_src("colorImage", "decode_to_dst", new ColorCodecSrc(colorImage,  true));
     }
@@ -1168,7 +1173,7 @@ struct Task {
                         hash.writeStream(data, data->getLength());
                         data->rewind();
                     } else {
-                        hashAndEncode.reset(new HashAndEncode(bitmap));
+                        hashAndEncode = std::make_unique<HashAndEncode>(bitmap);
                         hashAndEncode->write(&hash);
                     }
                     SkMD5::Digest digest = hash.finish();
@@ -1227,7 +1232,7 @@ struct Task {
                         CGContextDrawPDFPage(ctx.get(), page);
 
                         // Skip calling hashAndEncode->write(SkMD5*)... we want the .pdf's hash.
-                        hashAndEncode.reset(new HashAndEncode(rasterized));
+                        hashAndEncode = std::make_unique<HashAndEncode>(rasterized);
                         WriteToDisk(task, md5, "png", nullptr,0, &rasterized, hashAndEncode.get());
                     } else
                 #endif
@@ -1377,7 +1382,7 @@ struct Task {
             sk_mkdir(path.c_str());
             path = SkOSPath::Join(path.c_str(), task.src.tag.c_str());
             sk_mkdir(path.c_str());
-            if (strcmp(task.src.options.c_str(), "") != 0) {
+            if (0 != strcmp(task.src.options.c_str(), "")) {
               path = SkOSPath::Join(path.c_str(), task.src.options.c_str());
               sk_mkdir(path.c_str());
             }
@@ -1499,6 +1504,7 @@ int main(int argc, char** argv) {
 
     gSkForceRasterPipelineBlitter = FLAGS_forceRasterPipeline;
     gUseSkVMBlitter               = FLAGS_skvm;
+    gSkVMAllowJIT                 = FLAGS_jit;
 
     // The bots like having a verbose.log to upload, so always touch the file even if --verbose.
     if (!FLAGS_writePath.isEmpty()) {

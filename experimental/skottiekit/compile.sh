@@ -34,7 +34,8 @@ if [[ $@ == *full-build* ]]; then
   # Full Skottie with all bells and whistles.
   BUILD_TYPE="full"
   BUILD_CFG="\
-    skia_enable_fontmgr_custom_empty=true \
+    skia_enable_fontmgr_custom_embedded=true \
+    skia_enable_fontmgr_custom_empty=false \
     skia_use_freetype=true \
     skia_use_libgifcodec=true \
     skia_use_harfbuzz=true \
@@ -53,7 +54,8 @@ else
   # Smallest usable Skottie.
   BUILD_TYPE="minimal"
   BUILD_CFG="\
-    skia_enable_fontmgr_custom_empty=false \
+    skia_enable_fontmgr_custom_embedded=false \
+    skia_enable_fontmgr_custom_empty=true \
     skia_use_freetype=false \
     skia_use_libgifcodec=false \
     skia_use_harfbuzz=false \
@@ -85,7 +87,7 @@ rm -f $BUILD_DIR/*.a
 
 GN_GPU="skia_enable_gpu=true skia_gl_standard = \"webgl\""
 GN_GPU_FLAGS="\"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
-WASM_GPU="-lEGL -lGLESv2 -DSK_SUPPORT_GPU=1 -DSK_GL \
+WASM_GPU="-lEGL -lGL -lGLESv2 -DSK_SUPPORT_GPU=1 -DSK_GL \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/gpu.js\
           -s USE_WEBGL2=1"
 if [[ $@ == *cpu* ]]; then
@@ -156,9 +158,7 @@ echo "Compiling bitcode"
   skia_use_piex=false \
   skia_use_system_libjpeg_turbo=false \
   skia_use_vulkan=false \
-  skia_enable_fontmgr_empty=true \
   skia_enable_fontmgr_custom_directory=false \
-  skia_enable_fontmgr_custom_embedded=false \
   skia_enable_sksl_interpreter=false \
   \
   ${GN_GPU} \

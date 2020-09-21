@@ -40,14 +40,6 @@ public:
 
     const char* name() const override { return "GaussianConvolution"; }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString str;
-        str.appendf("dir: %s radius: %d", Direction::kX == fDirection ? "X" : "Y", fRadius);
-        return str;
-    }
-#endif
-
     std::unique_ptr<GrFragmentProcessor> clone() const override {
         return std::unique_ptr<GrFragmentProcessor>(
                 new GrGaussianConvolutionFragmentProcessor(*this));
@@ -67,6 +59,13 @@ private:
 
     explicit GrGaussianConvolutionFragmentProcessor(const GrGaussianConvolutionFragmentProcessor&);
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        return SkStringPrintf("(dir=%s, radius=%d)",
+                              Direction::kX == fDirection ? "X" : "Y", fRadius);
+    }
+#endif
+
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
@@ -85,7 +84,7 @@ private:
 
     class Impl;
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 #endif

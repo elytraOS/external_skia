@@ -34,7 +34,7 @@ private:
     GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const final;
     class Impl;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 // This processor draws pixel-aligned rectangles directly on top of every path in the atlas.
@@ -65,7 +65,7 @@ GrGLSLPrimitiveProcessor* StencilResolveProcessor::createGLSLInstance(const GrSh
     return new Impl();
 }
 
-}
+}  // namespace
 
 std::unique_ptr<GrDrawOp> GrStencilAtlasOp::Make(
         GrRecordingContext* context, sk_sp<const GrCCPerFlushResources> resources,
@@ -188,7 +188,8 @@ void GrStencilAtlasOp::drawResolve(GrOpFlushState* flushState, const GrPipeline&
                               flushState->proxy()->numStencilSamples(),
                               flushState->proxy()->backendFormat(),
                               flushState->writeView()->origin(), &resolvePipeline, &primProc,
-                              GrPrimitiveType::kTriangleStrip);
+                              GrPrimitiveType::kTriangleStrip, 0,
+                              flushState->renderPassBarriers());
     flushState->bindPipeline(programInfo, SkRect::Make(drawBounds));
     flushState->setScissorRect(drawBounds);
     flushState->bindBuffers(nullptr, fResources->stencilResolveBuffer(), nullptr);

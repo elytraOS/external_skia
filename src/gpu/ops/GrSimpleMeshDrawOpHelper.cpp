@@ -164,6 +164,7 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(
             GrGeometryProcessor* geometryProcessor,
             GrProcessorSet&& processorSet,
             GrPrimitiveType primitiveType,
+            GrXferBarrierFlags renderPassXferBarriers,
             GrPipeline::InputFlags pipelineFlags,
             const GrUserStencilSettings* stencilSettings) {
     auto pipeline = CreatePipeline(caps,
@@ -175,14 +176,16 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(
                                    pipelineFlags,
                                    stencilSettings);
 
-    return CreateProgramInfo(arena, pipeline, writeView, geometryProcessor, primitiveType);
+    return CreateProgramInfo(arena, pipeline, writeView, geometryProcessor, primitiveType,
+                             renderPassXferBarriers);
 }
 
 GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(SkArenaAlloc* arena,
                                                            const GrPipeline* pipeline,
                                                            const GrSurfaceProxyView* writeView,
                                                            GrGeometryProcessor* geometryProcessor,
-                                                           GrPrimitiveType primitiveType) {
+                                                           GrPrimitiveType primitiveType,
+                                                           GrXferBarrierFlags renderPassXferBarriers) {
     GrRenderTargetProxy* outputProxy = writeView->asRenderTargetProxy();
 
     auto tmp = arena->make<GrProgramInfo>(outputProxy->numSamples(),
@@ -191,7 +194,9 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(SkArenaAlloc* arena,
                                           writeView->origin(),
                                           pipeline,
                                           geometryProcessor,
-                                          primitiveType);
+                                          primitiveType,
+                                          0,
+                                          renderPassXferBarriers);
     return tmp;
 }
 
@@ -202,7 +207,8 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::createProgramInfo(
                                             GrAppliedClip&& appliedClip,
                                             const GrXferProcessor::DstProxyView& dstProxyView,
                                             GrGeometryProcessor* gp,
-                                            GrPrimitiveType primType) {
+                                            GrPrimitiveType primType,
+                                            GrXferBarrierFlags renderPassXferBarriers) {
     return CreateProgramInfo(caps,
                              arena,
                              writeView,
@@ -211,10 +217,11 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::createProgramInfo(
                              gp,
                              this->detachProcessorSet(),
                              primType,
+                             renderPassXferBarriers,
                              this->pipelineFlags());
 }
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
 static void dump_pipeline_flags(GrPipeline::InputFlags flags, SkString* result) {
     if (GrPipeline::InputFlags::kNone != flags) {
         if (flags & GrPipeline::InputFlags::kSnapVerticesToPixelCenters) {

@@ -17,12 +17,10 @@ namespace SkSL {
  * A 'break' statement.
  */
 struct BreakStatement : public Statement {
-    BreakStatement(int offset)
-    : INHERITED(offset, kBreak_Kind) {}
+    static constexpr Kind kStatementKind = Kind::kBreak;
 
-    int nodeCount() const override {
-        return 1;
-    }
+    BreakStatement(int offset)
+    : INHERITED(offset, kStatementKind) {}
 
     std::unique_ptr<Statement> clone() const override {
         return std::unique_ptr<Statement>(new BreakStatement(fOffset));
@@ -32,9 +30,9 @@ struct BreakStatement : public Statement {
         return String("break;");
     }
 
-    typedef Statement INHERITED;
+    using INHERITED = Statement;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

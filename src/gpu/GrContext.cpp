@@ -17,6 +17,7 @@
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDrawingManager.h"
 #include "src/gpu/GrGpu.h"
+#include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrPathRendererChain.h"
 #include "src/gpu/GrProxyProvider.h"
@@ -26,6 +27,7 @@
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrSoftwarePathRenderer.h"
+#include "src/gpu/GrThreadSafeUniquelyKeyedProxyViewCache.h"
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
@@ -36,6 +38,7 @@
 #include "src/image/SkImage_GpuBase.h"
 #include "src/image/SkSurface_Gpu.h"
 #include <atomic>
+#include <memory>
 
 #define ASSERT_OWNED_PROXY(P) \
     SkASSERT(!(P) || !((P)->peekTexture()) || (P)->peekTexture()->getContext() == this)
@@ -71,9 +74,10 @@ bool GrContext::init() {
     }
 
     SkASSERT(this->getTextBlobCache());
+    SkASSERT(this->threadSafeViewCache());
 
     if (fGpu) {
-        fStrikeCache.reset(new GrStrikeCache{});
+        fStrikeCache = std::make_unique<GrStrikeCache>();
         fResourceCache = new GrResourceCache(this->caps(), this->singleOwner(), this->contextID());
         fResourceProvider = new GrResourceProvider(fGpu.get(), fResourceCache, this->singleOwner());
         fMappedBufferManager = std::make_unique<GrClientMappedBufferManager>(this->contextID());
@@ -81,6 +85,7 @@ bool GrContext::init() {
 
     if (fResourceCache) {
         fResourceCache->setProxyProvider(this->proxyProvider());
+        fResourceCache->setThreadSafeViewCache(this->threadSafeViewCache());
     }
 
     fDidTestPMConversions = false;
@@ -211,6 +216,7 @@ void GrContext::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
         return;
     }
 
+    this->checkAsyncWorkCompletion();
     fMappedBufferManager->process();
     auto purgeTime = GrStdSteadyClock::now() - msNotUsed;
 
@@ -269,20 +275,6 @@ size_t GrContext::ComputeImageSize(sk_sp<SkImage> image, GrMipmapped mipMapped, 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-int GrContext::maxTextureSize() const { return this->caps()->maxTextureSize(); }
-
-int GrContext::maxRenderTargetSize() const { return this->caps()->maxRenderTargetSize(); }
-
-bool GrContext::colorTypeSupportedAsImage(SkColorType colorType) const {
-    GrBackendFormat format =
-            this->caps()->getDefaultBackendFormat(SkColorTypeToGrColorType(colorType),
-                                                  GrRenderable::kNo);
-    return format.isValid();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 bool GrContext::wait(int numSemaphores, const GrBackendSemaphore waitSemaphores[],
                      bool deleteSemaphoresAfterWait) {
     if (!fGpu || fGpu->caps()->semaphoreSupport()) {
@@ -432,37 +424,6 @@ GrBackendTexture GrContext::createBackendTexture(int width, int height,
     return this->createBackendTexture(width, height, format, mipMapped, renderable, isProtected);
 }
 
-GrBackendTexture GrContext::createBackendTexture(const SkSurfaceCharacterization& c) {
-    if (!this->asDirectContext() || !c.isValid()) {
-        return GrBackendTexture();
-    }
-
-    if (this->abandoned()) {
-        return GrBackendTexture();
-    }
-
-    if (c.usesGLFBO0()) {
-        // If we are making the surface we will never use FBO0.
-        return GrBackendTexture();
-    }
-
-    if (c.vulkanSecondaryCBCompatible()) {
-        return {};
-    }
-
-    const GrBackendFormat format = this->defaultBackendFormat(c.colorType(), GrRenderable::kYes);
-    if (!format.isValid()) {
-        return GrBackendTexture();
-    }
-
-    GrBackendTexture result = this->createBackendTexture(c.width(), c.height(), format,
-                                                         GrMipmapped(c.isMipMapped()),
-                                                         GrRenderable::kYes,
-                                                         c.isProtected());
-    SkASSERT(c.isCompatible(result));
-    return result;
-}
-
 static GrBackendTexture create_and_update_backend_texture(
         GrDirectContext* context,
         SkISize dimensions,
@@ -485,47 +446,6 @@ static GrBackendTexture create_and_update_backend_texture(
         return {};
     }
     return beTex;
-}
-
-
-GrBackendTexture GrContext::createBackendTexture(const SkSurfaceCharacterization& c,
-                                                 const SkColor4f& color,
-                                                 GrGpuFinishedProc finishedProc,
-                                                 GrGpuFinishedContext finishedContext) {
-    sk_sp<GrRefCntedCallback> finishedCallback;
-    if (finishedProc) {
-        finishedCallback.reset(new GrRefCntedCallback(finishedProc, finishedContext));
-    }
-
-    if (!this->asDirectContext() || !c.isValid()) {
-        return {};
-    }
-
-    if (this->abandoned()) {
-        return {};
-    }
-
-    if (c.usesGLFBO0()) {
-        // If we are making the surface we will never use FBO0.
-        return {};
-    }
-
-    if (c.vulkanSecondaryCBCompatible()) {
-        return {};
-    }
-
-    const GrBackendFormat format = this->defaultBackendFormat(c.colorType(), GrRenderable::kYes);
-    if (!format.isValid()) {
-        return {};
-    }
-
-    GrGpu::BackendTextureData data(color);
-    GrBackendTexture result = create_and_update_backend_texture(
-            this->asDirectContext(), {c.width(), c.height()}, format, GrMipmapped(c.isMipMapped()),
-            GrRenderable::kYes, c.isProtected(), std::move(finishedCallback), &data);
-
-    SkASSERT(c.isCompatible(result));
-    return result;
 }
 
 GrBackendTexture GrContext::createBackendTexture(int width, int height,

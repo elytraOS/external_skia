@@ -42,6 +42,7 @@ public:
             : INHERITED(gpu)
             , fRenderPass(renderPass)
             , fAttachmentFlags(kExternal_AttachmentFlag)
+            , fSelfDepFlags(SelfDependencyFlags::kNone)
             , fClearValueCount(0)
             , fColorAttachmentIndex(colorAttachmentIndex) {}
 
@@ -83,7 +84,17 @@ public:
     };
     GR_DECL_BITFIELD_OPS_FRIENDS(AttachmentFlags);
 
-    static GrVkRenderPass* CreateSimple(GrVkGpu*, AttachmentsDescriptor*, AttachmentFlags);
+    enum class SelfDependencyFlags {
+        kNone =                   0,
+        kForInputAttachment =     1 << 0,
+        kForNonCoherentAdvBlend = 1 << 1,
+    };
+    GR_DECL_BITFIELD_CLASS_OPS_FRIENDS(SelfDependencyFlags);
+
+    static GrVkRenderPass* CreateSimple(GrVkGpu*,
+                                        AttachmentsDescriptor*,
+                                        AttachmentFlags,
+                                        SelfDependencyFlags selfDepFlags);
     static GrVkRenderPass* Create(GrVkGpu*,
                                   const GrVkRenderPass& compatibleRenderPass,
                                   const LoadStoreOps& colorOp,
@@ -96,15 +107,19 @@ public:
     bool stencilAttachmentIndex(uint32_t* index) const;
     bool hasStencilAttachment() const { return fAttachmentFlags & kStencil_AttachmentFlag; }
 
+    SelfDependencyFlags selfDependencyFlags() const { return fSelfDepFlags; }
+
     // Returns whether or not the structure of a RenderTarget matches that of the VkRenderPass in
     // this object. Specifically this compares that the number of attachments, format of
     // attachments, and sample counts are all the same. This function is used in the creation of
     // basic RenderPasses that can be used when creating a VkFrameBuffer object.
-    bool isCompatible(const GrVkRenderTarget& target) const;
+    bool isCompatible(const GrVkRenderTarget& target, SelfDependencyFlags selfDepFlags) const;
 
     bool isCompatible(const GrVkRenderPass& renderPass) const;
 
-    bool isCompatible(const AttachmentsDescriptor&, const AttachmentFlags&) const;
+    bool isCompatible(const AttachmentsDescriptor&,
+                      const AttachmentFlags&,
+                      SelfDependencyFlags selfDepFlags) const;
 
     bool isCompatibleExternalRP(VkRenderPass) const;
 
@@ -127,6 +142,7 @@ public:
     static void GenKey(GrProcessorKeyBuilder*,
                        AttachmentFlags,
                        const AttachmentsDescriptor&,
+                       SelfDependencyFlags selfDepFlags,
                        uint64_t externalRenderPass);
 
 #ifdef SK_TRACE_MANAGED_RESOURCES
@@ -137,27 +153,31 @@ public:
 
 private:
     GrVkRenderPass(const GrVkGpu*, VkRenderPass, AttachmentFlags, const AttachmentsDescriptor&,
-                   const VkExtent2D& granularity, uint32_t clearValueCount);
+                   SelfDependencyFlags selfDepFlags, const VkExtent2D& granularity,
+                   uint32_t clearValueCount);
 
     static GrVkRenderPass* Create(GrVkGpu* gpu,
                                   AttachmentFlags,
                                   AttachmentsDescriptor*,
                                   const LoadStoreOps& colorOps,
-                                  const LoadStoreOps& stencilOps);
+                                  const LoadStoreOps& stencilOps,
+                                  SelfDependencyFlags selfDepFlags);
 
     void freeGPUData() const override;
 
     VkRenderPass          fRenderPass;
     AttachmentFlags       fAttachmentFlags;
     AttachmentsDescriptor fAttachmentsDescriptor;
+    SelfDependencyFlags   fSelfDepFlags;
     VkExtent2D            fGranularity;
     uint32_t              fClearValueCount;
     // For internally created render passes we assume the color attachment index is always 0.
     uint32_t              fColorAttachmentIndex = 0;
 
-    typedef GrVkManagedResource INHERITED;
+    using INHERITED = GrVkManagedResource;
 };
 
 GR_MAKE_BITFIELD_OPS(GrVkRenderPass::AttachmentFlags);
+GR_MAKE_BITFIELD_CLASS_OPS(GrVkRenderPass::SelfDependencyFlags);
 
 #endif

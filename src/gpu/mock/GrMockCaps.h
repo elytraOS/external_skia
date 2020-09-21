@@ -158,7 +158,7 @@ public:
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
-    GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const override;
+    GrProgramDesc makeDesc(GrRenderTarget*, const GrProgramInfo&) const override;
 
 #if GR_TEST_UTILS
     std::vector<GrCaps::TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -205,7 +205,7 @@ private:
     static const int kMaxSampleCnt = 16;
 
     GrMockOptions fOptions;
-    typedef GrCaps INHERITED;
+    using INHERITED = GrCaps;
 };
 
 #endif

@@ -14,6 +14,9 @@
 #include "src/image/SkImage_Base.h"
 
 #if SK_SUPPORT_GPU
+#include "include/core/SkYUVAIndex.h"
+#include "include/core/SkYUVAPixmaps.h"
+#include "include/core/SkYUVASizeInfo.h"
 #include "src/gpu/GrTextureMaker.h"
 #endif
 
@@ -22,36 +25,26 @@ class SharedGenerator;
 class SkImage_Lazy : public SkImage_Base {
 public:
     struct Validator {
-        Validator(sk_sp<SharedGenerator>, const SkIRect* subset, const SkColorType* colorType,
-                  sk_sp<SkColorSpace> colorSpace);
+        Validator(sk_sp<SharedGenerator>, const SkColorType*, sk_sp<SkColorSpace>);
 
         operator bool() const { return fSharedGenerator.get(); }
 
         sk_sp<SharedGenerator> fSharedGenerator;
         SkImageInfo            fInfo;
-        SkIPoint               fOrigin;
         sk_sp<SkColorSpace>    fColorSpace;
         uint32_t               fUniqueID;
     };
 
     SkImage_Lazy(Validator* validator);
 
-    SkIRect onGetSubset() const override {
-        return SkIRect::MakeXYWH(fOrigin.fX, fOrigin.fY, this->width(), this->height());
-    }
-
-    bool onReadPixels(const SkImageInfo&, void*, size_t, int srcX, int srcY,
+    bool onReadPixels(GrDirectContext*, const SkImageInfo&, void*, size_t, int srcX, int srcY,
                       CachingHint) const override;
 #if SK_SUPPORT_GPU
     GrSurfaceProxyView refView(GrRecordingContext*, GrMipmapped) const override;
-    sk_sp<SkCachedData> getPlanes(SkYUVASizeInfo*,
-                                  SkYUVAIndex[4],
-                                  SkYUVColorSpace*,
-                                  const void* planes[4]) const override;
 #endif
     sk_sp<SkData> onRefEncoded() const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&, GrDirectContext*) const override;
-    bool getROPixels(SkBitmap*, CachingHint) const override;
+    bool getROPixels(GrDirectContext*, SkBitmap*, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
     sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
                                                 GrDirectContext*) const override;
@@ -76,6 +69,11 @@ public:
 private:
     void addUniqueIDListener(sk_sp<SkIDChangeListener>) const;
 #if SK_SUPPORT_GPU
+    sk_sp<SkCachedData> getPlanes(const SkYUVAPixmapInfo::SupportedDataTypes& supportedDataTypes,
+                                  SkYUVASizeInfo* yuvaSizeInfo,
+                                  SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount],
+                                  SkYUVColorSpace* yuvColorSpace,
+                                  SkPixmap planes[SkYUVASizeInfo::kMaxCount]) const;
     GrSurfaceProxyView textureProxyViewFromPlanes(GrRecordingContext*, SkBudgeted) const;
 #endif
 
@@ -85,7 +83,6 @@ private:
     // cropped by onMakeSubset and its color type/space may be changed by
     // onMakeColorTypeAndColorSpace.
     sk_sp<SharedGenerator> fSharedGenerator;
-    const SkIPoint         fOrigin;
 
     // Repeated calls to onMakeColorTypeAndColorSpace will result in a proliferation of unique IDs
     // and SkImage_Lazy instances. Cache the result of the last successful call.
@@ -98,7 +95,7 @@ private:
     mutable SkIDChangeListener::List fUniqueIDListeners;
 #endif
 
-    typedef SkImage_Base INHERITED;
+    using INHERITED = SkImage_Base;
 };
 
 #endif

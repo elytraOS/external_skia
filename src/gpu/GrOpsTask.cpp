@@ -20,7 +20,6 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetContext.h"
-#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrResourceAllocator.h"
 #include "src/gpu/GrStencilAttachment.h"
 #include "src/gpu/GrTexture.h"
@@ -417,7 +416,8 @@ void GrOpsTask::onPrePrepare(GrRecordingContext* context) {
             chain.head()->prePrepare(context,
                                      &fTargets[0],
                                      chain.appliedClip(),
-                                     chain.dstProxyView());
+                                     chain.dstProxyView(),
+                                     fRenderPassXferBarriers);
         }
     }
 }
@@ -446,7 +446,8 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
             GrOpFlushState::OpArgs opArgs(chain.head(),
                                           &fTargets[0],
                                           chain.appliedClip(),
-                                          chain.dstProxyView());
+                                          chain.dstProxyView(),
+                                          fRenderPassXferBarriers);
 
             flushState->setOpArgs(&opArgs);
 
@@ -467,7 +468,8 @@ static GrOpsRenderPass* create_render_pass(
         GrGpu* gpu, GrRenderTarget* rt, GrStencilAttachment* stencil, GrSurfaceOrigin origin,
         const SkIRect& bounds, GrLoadOp colorLoadOp, const SkPMColor4f& loadClearColor,
         GrLoadOp stencilLoadOp, GrStoreOp stencilStoreOp,
-        const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
+        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+        GrXferBarrierFlags renderPassXferBarriers) {
     const GrOpsRenderPass::LoadAndStoreInfo kColorLoadStoreInfo {
         colorLoadOp,
         GrStoreOp::kStore,
@@ -485,7 +487,8 @@ static GrOpsRenderPass* create_render_pass(
     };
 
     return gpu->getOpsRenderPass(rt, stencil, origin, bounds,
-                                 kColorLoadStoreInfo, stencilLoadAndStoreInfo, sampledProxies);
+                                 kColorLoadStoreInfo, stencilLoadAndStoreInfo, sampledProxies,
+                                 renderPassXferBarriers);
 }
 
 // TODO: this is where GrOp::renderTarget is used (which is fine since it
@@ -520,7 +523,7 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
             SkDebugf("WARNING: failed to attach a stencil buffer. Rendering will be skipped.\n");
             return false;
         }
-        stencil = renderTarget->renderTargetPriv().getStencilAttachment();
+        stencil = renderTarget->getStencilAttachment();
     }
 
     SkASSERT(!stencil || stencil->numSamples() == proxy->numStencilSamples());
@@ -570,7 +573,8 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
     GrOpsRenderPass* renderPass = create_render_pass(
             flushState->gpu(), proxy->peekRenderTarget(), stencil, this->target(0).origin(),
             fClippedContentBounds, fColorLoadOp, fLoadClearColor, stencilLoadOp, stencilStoreOp,
-            fSampledProxies);
+            fSampledProxies, fRenderPassXferBarriers);
+
     if (!renderPass) {
         return false;
     }
@@ -589,7 +593,8 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
         GrOpFlushState::OpArgs opArgs(chain.head(),
                                       &fTargets[0],
                                       chain.appliedClip(),
-                                      chain.dstProxyView());
+                                      chain.dstProxyView(),
+                                      fRenderPassXferBarriers);
 
         flushState->setOpArgs(&opArgs);
         chain.head()->execute(flushState, chain.bounds());
@@ -614,12 +619,6 @@ void GrOpsTask::setColorLoadOp(GrLoadOp op, const SkPMColor4f& color) {
 }
 
 bool GrOpsTask::resetForFullscreenClear(CanDiscardPreviousOps canDiscardPreviousOps) {
-    // If we previously recorded a wait op, we cannot delete the wait op. Until we track the wait
-    // ops separately from normal ops, we have to avoid clearing out any ops in this case as well.
-    if (fHasWaitOp) {
-        canDiscardPreviousOps = CanDiscardPreviousOps::kNo;
-    }
-
     if (CanDiscardPreviousOps::kYes == canDiscardPreviousOps || this->isEmpty()) {
         this->deleteOps();
         fDeferredProxies.reset();
@@ -647,7 +646,7 @@ void GrOpsTask::discard() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
 void GrOpsTask::dump(bool printDependencies) const {
     GrRenderTask::dump(printDependencies);
 
@@ -697,7 +696,9 @@ void GrOpsTask::dump(bool printDependencies) const {
         }
     }
 }
+#endif
 
+#ifdef SK_DEBUG
 void GrOpsTask::visitProxies_debugOnly(const GrOp::VisitProxyFunc& func) const {
     auto textureFunc = [ func ] (GrSurfaceProxy* tex, GrMipmapped mipmapped) {
         func(tex, mipmapped);

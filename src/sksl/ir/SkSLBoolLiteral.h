@@ -17,8 +17,10 @@ namespace SkSL {
  * Represents 'true' or 'false'.
  */
 struct BoolLiteral : public Expression {
+    static constexpr Kind kExpressionKind = Kind::kBoolLiteral;
+
     BoolLiteral(const Context& context, int offset, bool value)
-    : INHERITED(offset, kBoolLiteral_Kind, *context.fBool_Type)
+    : INHERITED(offset, kExpressionKind, context.fBool_Type.get())
     , fValue(value) {}
 
     String description() const override {
@@ -38,24 +40,20 @@ struct BoolLiteral : public Expression {
         return fValue == b.fValue;
     }
 
-    int nodeCount() const override {
-        return 1;
-    }
-
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new BoolLiteral(fOffset, fValue, &fType));
+        return std::unique_ptr<Expression>(new BoolLiteral(fOffset, fValue, &this->type()));
     }
 
     const bool fValue;
 
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 
 private:
     BoolLiteral(int offset, bool value, const Type* type)
-    : INHERITED(offset, kBoolLiteral_Kind, *type)
+    : INHERITED(offset, kExpressionKind, type)
     , fValue(value) {}
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

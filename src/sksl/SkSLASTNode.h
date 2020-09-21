@@ -107,6 +107,8 @@ struct ASTNode {
         kPrefix,
         // children: value
         kReturn,
+        // data: field(StringFragment), children: base
+        kScope,
         // ...
         kSection,
         // children: value, statement 1, statement 2...
@@ -382,6 +384,7 @@ struct ASTNode {
             case Kind::kExtension:
             case Kind::kField:
             case Kind::kIdentifier:
+            case Kind::kScope:
                 fData.fKind = NodeData::Kind::kStringFragment;
                 break;
 
@@ -632,6 +635,6 @@ struct ASTNode {
     ID fNext;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

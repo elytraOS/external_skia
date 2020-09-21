@@ -10,7 +10,6 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/GrSurfacePriv.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/gl/GrGLGpu.h"
@@ -83,7 +82,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
 
     ///////////////////////////////// CONTEXT 1 ///////////////////////////////////
 
-    // Use GL Context 1 to create a texture unknown to GrContext.
+    // Use GL Context 1 to create a texture unknown to context 0.
     context1->flushAndSubmit();
     static const int kSize = 100;
 
@@ -135,7 +134,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     GR_GL_CALL(glCtx1->gl(), TexSubImage2D(texInfo.fTarget, 0, 0, 0, kSize, kSize,
                                            GR_GL_RGBA, GR_GL_UNSIGNED_BYTE, pixels.get()));
     GR_GL_CALL(glCtx1->gl(), Finish());
-    // We've been making direct GL calls in GL context 1, let GrContext 1 know its internal
+    // We've been making direct GL calls in GL context 1, let GrDirectContext 1 know its internal
     // state is invalid.
     context1->resetContext();
 
@@ -197,10 +196,10 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
         }
     }
 
-    TestReadPixels(reporter, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
+    TestReadPixels(reporter, context0, surfaceContext.get(), pixels.get(), "EGLImageTest-read");
 
-    // We should not be able to write to a EXTERNAL texture
-    TestWritePixels(reporter, surfaceContext.get(), false, "EGLImageTest-write");
+    // We should not be able to write to an EXTERNAL texture
+    TestWritePixels(reporter, context0, surfaceContext.get(), false, "EGLImageTest-write");
 
     // Only test RT-config
     // TODO: why do we always need to draw to copy from an external texture?

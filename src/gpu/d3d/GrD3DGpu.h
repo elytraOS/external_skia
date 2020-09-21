@@ -40,16 +40,15 @@ public:
 
     GrD3DResourceProvider& resourceProvider() { return fResourceProvider; }
 
-    ID3D12Device* device() const { return fDevice.get(); }
-    ID3D12CommandQueue* queue() const { return fQueue.get(); }
+    ID3D12Device* device() const { return fDevice.Get(); }
+    ID3D12CommandQueue* queue() const { return fQueue.Get(); }
 
     GrD3DDirectCommandList* currentCommandList() const { return fCurrentDirectCommandList.get(); }
 
     GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
-    void takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer>) override;
+    void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) override;
 
-    // TODO: hoist up to GrGpu
-    GrRingBuffer* constantsRingBuffer() { return &fConstantsRingBuffer; }
+    GrRingBuffer* uniformsRingBuffer() override { return &fConstantsRingBuffer; }
 
     bool protectedContext() const { return false; }
 
@@ -85,7 +84,8 @@ public:
             GrSurfaceOrigin, const SkIRect&,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+            GrXferBarrierFlags renderPassXferBarriers) override;
 
     void addResourceBarriers(sk_sp<GrManagedResource> resource,
                              int numBarriers,
@@ -258,14 +258,14 @@ private:
                                                 GrD3DTextureResourceInfo* info,
                                                 GrProtected isProtected);
 
-    gr_cp<ID3D12Device> fDevice;
-    gr_cp<ID3D12CommandQueue> fQueue;
+    ComPtr<ID3D12Device> fDevice;
+    ComPtr<ID3D12CommandQueue> fQueue;
 
     GrD3DResourceProvider fResourceProvider;
     GrStagingBufferManager fStagingBufferManager;
     GrRingBuffer fConstantsRingBuffer;
 
-    gr_cp<ID3D12Fence> fFence;
+    ComPtr<ID3D12Fence> fFence;
     uint64_t fCurrentFenceValue = 0;
 
     std::unique_ptr<GrD3DDirectCommandList> fCurrentDirectCommandList;
@@ -289,7 +289,7 @@ private:
 
     std::unique_ptr<SkSL::Compiler> fCompiler;
 
-    typedef GrGpu INHERITED;
+    using INHERITED = GrGpu;
 };
 
 #endif

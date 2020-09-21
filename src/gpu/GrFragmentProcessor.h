@@ -49,14 +49,14 @@ public:
 
     /**
      *  Returns a fragment processor that generates the passed-in color, modulated by the child's
-     *  alpha channel. (Pass a null FP to use the alpha from sk_InColor instead of a child FP.)
+     *  alpha channel. (Pass a null FP to use the alpha from fInputColor instead of a child FP.)
      */
     static std::unique_ptr<GrFragmentProcessor> ModulateAlpha(
             std::unique_ptr<GrFragmentProcessor> child, const SkPMColor4f& color);
 
     /**
      *  Returns a fragment processor that generates the passed-in color, modulated by the child's
-     *  RGBA color. (Pass a null FP to use the color from sk_InColor instead of a child FP.)
+     *  RGBA color. (Pass a null FP to use the color from fInputColor instead of a child FP.)
      */
     static std::unique_ptr<GrFragmentProcessor> ModulateRGBA(
             std::unique_ptr<GrFragmentProcessor> child, const SkPMColor4f& color);
@@ -189,6 +189,11 @@ public:
         return SkToBool(fFlags & kNetTransformHasPerspective_Flag);
     }
 
+    // True if emitted code returns the output color, rather than assigning it to sk_OutColor.
+    virtual bool usesExplicitReturn() const {
+        return false;
+    }
+
     // The SampleUsage describing how this FP is invoked by its parent using 'sample(matrix)'
     // This only reflects the immediate sampling from parent to this FP
     const SkSL::SampleUsage& sampleUsage() const {
@@ -249,6 +254,12 @@ public:
 
     GrTextureEffect* asTextureEffect();
     const GrTextureEffect* asTextureEffect() const;
+
+#if GR_TEST_UTILS
+    // Generates debug info for this processor tree by recursively calling dumpInfo() on this
+    // processor and its children.
+    SkString dumpTreeInfo() const;
+#endif
 
     // A pre-order traversal iterator over a hierarchy of FPs. It can also iterate over all the FP
     // hierarchies rooted in a GrPaint, GrProcessorSet, or GrPipeline. For these collections it
@@ -417,7 +428,7 @@ private:
     uint32_t fFlags = 0;
     SkSL::SampleUsage fUsage;
 
-    typedef GrProcessor INHERITED;
+    using INHERITED = GrProcessor;
 };
 
 //////////////////////////////////////////////////////////////////////////////

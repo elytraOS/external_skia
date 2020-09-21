@@ -43,10 +43,10 @@ private:
 
     PipelineStageArgs* fArgs;
 
-    typedef GLSLCodeGenerator INHERITED;
+    using INHERITED = GLSLCodeGenerator;
 };
 
-}
+}  // namespace SkSL
 
 #endif
 

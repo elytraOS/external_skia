@@ -76,7 +76,8 @@ GrProgramInfo* GrSimpleMeshDrawOpHelperWithStencil::createProgramInfoWithStencil
                                             GrAppliedClip&& appliedClip,
                                             const GrXferProcessor::DstProxyView& dstProxyView,
                                             GrGeometryProcessor* gp,
-                                            GrPrimitiveType primType) {
+                                            GrPrimitiveType primType,
+                                            GrXferBarrierFlags renderPassXferBarriers) {
     return CreateProgramInfo(caps,
                              arena,
                              writeViewSwizzle,
@@ -85,11 +86,12 @@ GrProgramInfo* GrSimpleMeshDrawOpHelperWithStencil::createProgramInfoWithStencil
                              gp,
                              this->detachProcessorSet(),
                              primType,
+                             renderPassXferBarriers,
                              this->pipelineFlags(),
                              this->stencilSettings());
 }
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
 SkString GrSimpleMeshDrawOpHelperWithStencil::dumpInfo() const {
     SkString result = INHERITED::dumpInfo();
     result.appendf("Stencil settings: %s\n", (fStencilSettings ? "yes" : "no"));

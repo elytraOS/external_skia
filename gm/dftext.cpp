@@ -52,7 +52,7 @@ protected:
         return SkISize::Make(1024, 768);
     }
 
-    virtual void onDraw(SkCanvas* inputCanvas) override {
+    void onDraw(SkCanvas* inputCanvas) override {
         SkScalar textSizes[] = { 9.0f, 9.0f*2.0f, 9.0f*5.0f, 9.0f*2.0f*5.0f };
         SkScalar scales[] = { 2.0f*5.0f, 5.0f, 2.0f, 1.0f };
 
@@ -242,7 +242,7 @@ private:
     sk_sp<SkTypeface> fEmojiTypeface;
     const char* fEmojiText;
 
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 DEF_GM(return new DFTextGM;)

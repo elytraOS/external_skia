@@ -52,7 +52,9 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
                                   this->writeView()->origin(),
                                   pipeline,
                                   fCurrDraw->fGeometryProcessor,
-                                  fCurrDraw->fPrimitiveType);
+                                  fCurrDraw->fPrimitiveType,
+                                  0,
+                                  this->renderPassBarriers());
 
         this->bindPipelineAndScissorClip(programInfo, chainBounds);
         this->bindTextures(programInfo.primProc(), fCurrDraw->fPrimProcProxies,
@@ -204,6 +206,10 @@ GrStrikeCache* GrOpFlushState::strikeCache() const {
 
 GrAtlasManager* GrOpFlushState::atlasManager() const {
     return fGpu->getContext()->priv().getAtlasManager();
+}
+
+GrSmallPathAtlasMgr* GrOpFlushState::smallPathAtlasManager() const {
+    return fGpu->getContext()->priv().getSmallPathAtlasMgr();
 }
 
 void GrOpFlushState::drawMesh(const GrSimpleMesh& mesh) {

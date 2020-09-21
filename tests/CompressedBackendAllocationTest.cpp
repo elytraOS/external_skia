@@ -36,14 +36,14 @@ static void check_solid_pixmap(skiatest::Reporter* reporter,
 }
 
 // Create an SkImage to wrap 'backendTex'
-sk_sp<SkImage> create_image(GrContext* context, const GrBackendTexture& backendTex) {
+sk_sp<SkImage> create_image(GrDirectContext* dContext, const GrBackendTexture& backendTex) {
     SkImage::CompressionType compression =
             GrBackendFormatToCompressionType(backendTex.getBackendFormat());
 
     SkAlphaType at = SkCompressionTypeIsOpaque(compression) ? kOpaque_SkAlphaType
                                                             : kPremul_SkAlphaType;
 
-    return SkImage::MakeFromCompressedTexture(context,
+    return SkImage::MakeFromCompressedTexture(dContext,
                                               backendTex,
                                               kTopLeft_GrSurfaceOrigin,
                                               at,
@@ -128,7 +128,7 @@ static void check_readback(GrDirectContext* dContext, sk_sp<SkImage> img,
     SkAssertResult(actual.tryAlloc(readBackII));
     actual.erase(SkColors::kTransparent);
 
-    bool result = img->readPixels(actual, 0, 0);
+    bool result = img->readPixels(dContext, actual, 0, 0);
     REPORTER_ASSERT(reporter, result);
 
     check_solid_pixmap(reporter, expectedColor, actual,

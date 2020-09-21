@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrArithmeticProcessor.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -62,7 +63,7 @@ GrGLSLFragmentProcessor* GrArithmeticProcessor::onCreateGLSLInstance() const {
 }
 void GrArithmeticProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                   GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)enforcePMColor);
+    b->add32((uint32_t)enforcePMColor);
 }
 bool GrArithmeticProcessor::onIsEqual(const GrFragmentProcessor& other) const {
     const GrArithmeticProcessor& that = other.cast<GrArithmeticProcessor>();
@@ -71,6 +72,7 @@ bool GrArithmeticProcessor::onIsEqual(const GrFragmentProcessor& other) const {
     if (enforcePMColor != that.enforcePMColor) return false;
     return true;
 }
+bool GrArithmeticProcessor::usesExplicitReturn() const { return false; }
 GrArithmeticProcessor::GrArithmeticProcessor(const GrArithmeticProcessor& src)
         : INHERITED(kGrArithmeticProcessor_ClassID, src.optimizationFlags())
         , k(src.k)
@@ -78,8 +80,14 @@ GrArithmeticProcessor::GrArithmeticProcessor(const GrArithmeticProcessor& src)
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrArithmeticProcessor::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrArithmeticProcessor(*this));
+    return std::make_unique<GrArithmeticProcessor>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrArithmeticProcessor::onDumpInfo() const {
+    return SkStringPrintf("(k=float4(%f, %f, %f, %f), enforcePMColor=%s)", k.x, k.y, k.z, k.w,
+                          (enforcePMColor ? "true" : "false"));
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrArithmeticProcessor);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrArithmeticProcessor::TestCreate(GrProcessorTestData* d) {

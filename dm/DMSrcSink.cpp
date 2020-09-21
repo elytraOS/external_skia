@@ -24,6 +24,7 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/ports/SkImageGeneratorCG.h"
+#include "include/ports/SkImageGeneratorNDK.h"
 #include "include/ports/SkImageGeneratorWIC.h"
 #include "include/private/SkImageInfoPriv.h"
 #include "include/private/SkTLogic.h"
@@ -193,7 +194,7 @@ Result BRDSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
     }
 
     auto brd = create_brd(fPath);
-    if (nullptr == brd.get()) {
+    if (nullptr == brd) {
         return Result::Skip("Could not create brd for %s.", fPath.c_str());
     }
 
@@ -422,7 +423,7 @@ Result CodecSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
     }
 
     std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(encoded));
-    if (nullptr == codec.get()) {
+    if (nullptr == codec) {
         return Result::Fatal("Couldn't create codec for %s.", fPath.c_str());
     }
 
@@ -923,6 +924,8 @@ Result ImageGenSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             gen = SkImageGeneratorCG::MakeFromEncodedCG(encoded);
 #elif defined(SK_BUILD_FOR_WIN)
             gen = SkImageGeneratorWIC::MakeFromEncodedWIC(encoded);
+#elif defined(SK_ENABLE_NDK_IMAGES)
+            gen = SkImageGeneratorNDK::MakeFromEncodedNDK(encoded);
 #endif
             if (!gen) {
                 return Result::Fatal("Could not create platform image generator.");
@@ -936,7 +939,7 @@ Result ImageGenSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
 
     // Test deferred decoding path on GPU
     if (fIsGpu) {
-        sk_sp<SkImage> image(SkImage::MakeFromGenerator(std::move(gen), nullptr));
+        sk_sp<SkImage> image(SkImage::MakeFromGenerator(std::move(gen)));
         if (!image) {
             return Result::Fatal("Could not create image from codec image generator.");
         }
@@ -1512,7 +1515,7 @@ bool GPUSink::readBack(SkSurface* surface, SkBitmap* dst) const {
 
 Result GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
                        const GrContextOptions& baseOptions,
-                       std::function<void(GrContext*)> initContext) const {
+                       std::function<void(GrDirectContext*)> initContext) const {
     GrContextOptions grOptions = baseOptions;
 
     // We don't expect the src to mess with the persistent cache or the executor.
@@ -1672,9 +1675,11 @@ Result GPUPrecompileTestingSink::draw(const Src& src, SkBitmap* dst, SkWStream* 
         return result;
     }
 
-    auto precompileShaders = [&memoryCache](GrContext* context) {
-        memoryCache.foreach([context](sk_sp<const SkData> key, sk_sp<SkData> data, int /*count*/) {
-            SkAssertResult(context->precompileShader(*key, *data));
+    auto precompileShaders = [&memoryCache](GrDirectContext* dContext) {
+        memoryCache.foreach([dContext](sk_sp<const SkData> key,
+                                       sk_sp<SkData> data,
+                                       int /*count*/) {
+            SkAssertResult(dContext->precompileShader(*key, *data));
         });
     };
 
@@ -1809,7 +1814,8 @@ Result GPUDDLSink::ddlDraw(const Src& src,
     // this is our ultimate final drawing area/rect
     SkIRect viewport = SkIRect::MakeWH(size.fWidth, size.fHeight);
 
-    DDLPromiseImageHelper promiseImageHelper;
+    SkYUVAPixmapInfo::SupportedDataTypes supportedYUVADataTypes(*gpuThreadCtx);
+    DDLPromiseImageHelper promiseImageHelper(supportedYUVADataTypes);
     sk_sp<SkData> compressedPictureData = promiseImageHelper.deflateSKP(inputPicture.get());
     if (!compressedPictureData) {
         return Result::Fatal("GPUDDLSink: Couldn't deflate SkPicture");
@@ -1908,7 +1914,7 @@ Result GPUDDLSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log
     // with the main context
     ContextInfo otherCtxInfo = factory.getSharedContextInfo(mainCtx);
     sk_gpu_test::TestContext* otherTestCtx = otherCtxInfo.testContext();
-    GrContext* otherCtx = otherCtxInfo.grContext();
+    auto otherCtx = otherCtxInfo.directContext();
     if (!otherCtx) {
         return Result::Fatal("Cound not create shared context.");
     }
@@ -2265,7 +2271,7 @@ Result ViaDDL::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStrin
     // this is our ultimate final drawing area/rect
     SkIRect viewport = SkIRect::MakeWH(size.fWidth, size.fHeight);
 
-    DDLPromiseImageHelper promiseImageHelper;
+    DDLPromiseImageHelper promiseImageHelper(SkYUVAPixmapInfo::SupportedDataTypes::All());
     sk_sp<SkData> compressedPictureData = promiseImageHelper.deflateSKP(inputPicture.get());
     if (!compressedPictureData) {
         return Result::Fatal("ViaDDL: Couldn't deflate SkPicture");

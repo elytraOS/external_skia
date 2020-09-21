@@ -155,7 +155,7 @@ DEF_TEST(String, reporter) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
         a.reset();
         a.appendScalar(gRec[i].fValue);
-        REPORTER_ASSERT(reporter, a.size() <= SkStrAppendScalar_MaxSize);
+        REPORTER_ASSERT(reporter, a.size() <= kSkStrAppendScalar_MaxSize);
         if (!a.equals(gRec[i].fString)) {
             ERRORF(reporter, "received <%s> expected <%s>\n", a.c_str(), gRec[i].fString);
         }
@@ -274,7 +274,7 @@ DEF_TEST(String_Threaded, r) {
     std::thread threads[5];
     for (auto& thread : threads) {
         thread = std::thread([&] {
-            SkString copy = str;
+            SkString copy = str;  // NOLINT(performance-unnecessary-copy-initialization)
             (void)copy.equals("test");
         });
     }

@@ -96,7 +96,7 @@ private:
 
     static bool Less(const Pair& a, const Pair& b);
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 /**
@@ -117,7 +117,7 @@ public:
     }
 
 private:
-    typedef SkPtrSet INHERITED;
+    using INHERITED = SkPtrSet;
 };
 
 /**
@@ -131,8 +131,8 @@ public:
 
 protected:
     // overrides
-    virtual void incPtr(void*) override ;
-    virtual void decPtr(void*) override ;
+    void incPtr(void*) override;
+    void decPtr(void*) override;
 };
 
 class SkFactorySet : public SkTPtrSet<SkFlattenable::Factory> {};
@@ -165,7 +165,7 @@ private:
     SkFactorySet           fFactorySet;
     SkTDArray<const char*> fNames;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

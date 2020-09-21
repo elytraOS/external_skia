@@ -43,8 +43,8 @@ public:
 
     SkRect computeFastBounds(const SkRect& src) const override;
 
-    virtual SkIRect onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                   MapDirection, const SkIRect* inputRect) const override;
+    SkIRect onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
+                           MapDirection, const SkIRect* inputRect) const override;
     SkIRect onFilterNodeBounds(const SkIRect&, const SkMatrix& ctm,
                                MapDirection, const SkIRect* inputRect) const override;
 
@@ -64,7 +64,7 @@ private:
     const SkImageFilter* getDisplacementInput() const { return getInput(0); }
     const SkImageFilter* getColorInput() const { return getInput(1); }
 
-    typedef SkImageFilter_Base INHERITED;
+    using INHERITED = SkImageFilter_Base;
 };
 
 // Shift values to extract channels from an SkColor (SkColorGetR, SkColorGetG, etc)
@@ -224,7 +224,7 @@ private:
     SkColorChannel fYChannelSelector;
     SkVector fScale;
 
-    typedef GrFragmentProcessor INHERITED;
+    using INHERITED = GrFragmentProcessor;
 };
 
 }  // anonymous namespace
@@ -441,7 +441,7 @@ private:
 
     UniformHandle fScaleUni;
 
-    typedef GrGLSLFragmentProcessor INHERITED;
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

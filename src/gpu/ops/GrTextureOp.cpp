@@ -151,8 +151,8 @@ static SkRect normalize_and_inset_subset(GrSamplerState::Filter filter,
     ltrb = skvx::min(ltrb*flipHi, mid*flipHi)*flipHi;
 
     // Normalize and offset
-    ltrb = mad(ltrb, {params.fIW, params.fInvH, params.fIW, params.fInvH},
-               {0.f, params.fYOffset, 0.f, params.fYOffset});
+    ltrb = ltrb * skvx::Vec<4, float>{params.fIW, params.fInvH, params.fIW, params.fInvH} +
+               skvx::Vec<4, float>{0.f, params.fYOffset, 0.f, params.fYOffset};
     if (params.fInvH < 0.f) {
         // Flip top and bottom to keep the rect sorted when loaded back to SkRect.
         ltrb = skvx::shuffle<0, 3, 2, 1>(ltrb);
@@ -169,7 +169,7 @@ static void normalize_src_quad(const NormalizationParams& params,
     // The src quad should not have any perspective
     SkASSERT(!srcQuad->hasPerspective());
     skvx::Vec<4, float> xs = srcQuad->x4f() * params.fIW;
-    skvx::Vec<4, float> ys = mad(srcQuad->y4f(), params.fInvH, params.fYOffset);
+    skvx::Vec<4, float> ys = srcQuad->y4f() * params.fInvH + params.fYOffset;
     xs.store(srcQuad->xs());
     ys.store(srcQuad->ys());
 }
@@ -277,38 +277,6 @@ public:
     }
 
 #ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString str;
-        str.appendf("# draws: %d\n", fQuads.count());
-        auto iter = fQuads.iterator();
-        for (unsigned p = 0; p < fMetadata.fProxyCount; ++p) {
-            str.appendf("Proxy ID: %d, Filter: %d, MM: %d\n",
-                        fViewCountPairs[p].fProxy->uniqueID().asUInt(),
-                        static_cast<int>(fMetadata.fFilter),
-                        static_cast<int>(fMetadata.fMipmapMode));
-            int i = 0;
-            while(i < fViewCountPairs[p].fQuadCnt && iter.next()) {
-                const GrQuad* quad = iter.deviceQuad();
-                GrQuad uv = iter.isLocalValid() ? *(iter.localQuad()) : GrQuad();
-                const ColorSubsetAndAA& info = iter.metadata();
-                str.appendf(
-                        "%d: Color: 0x%08x, Subset(%d): [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n"
-                        "  UVs  [(%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f)]\n"
-                        "  Quad [(%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f)]\n",
-                        i, info.fColor.toBytes_RGBA(), fMetadata.fSubset, info.fSubsetRect.fLeft,
-                        info.fSubsetRect.fTop, info.fSubsetRect.fRight, info.fSubsetRect.fBottom,
-                        quad->point(0).fX, quad->point(0).fY, quad->point(1).fX, quad->point(1).fY,
-                        quad->point(2).fX, quad->point(2).fY, quad->point(3).fX, quad->point(3).fY,
-                        uv.point(0).fX, uv.point(0).fY, uv.point(1).fX, uv.point(1).fY,
-                        uv.point(2).fX, uv.point(2).fY, uv.point(3).fX, uv.point(3).fY);
-
-                i++;
-            }
-        }
-        str += INHERITED::dumpInfo();
-        return str;
-    }
-
     static void ValidateResourceLimits() {
         // The op implementation has an upper bound on the number of quads that it can represent.
         // However, the resource manager imposes its own limit on the number of quads, which should
@@ -587,14 +555,16 @@ private:
                 // The only way netFilter != filter is if linear is requested and we haven't yet
                 // found a quad that requires linear (so net is still nearest). Similar for mip
                 // mapping.
-                SkASSERT(netFilter <= filter);
-                SkASSERT(netMM <= mm);
+                SkASSERT(filter == netFilter ||
+                         (netFilter == GrSamplerState::Filter::kNearest && filter > netFilter));
+                SkASSERT(mm == netMM ||
+                         (netMM == GrSamplerState::MipmapMode::kNone && mm > netMM));
                 auto [mustFilter, mustMM] = filter_and_mm_have_effect(quad.fLocal, quad.fDevice);
                 if (mustFilter && filter != GrSamplerState::Filter::kNearest) {
-                    netFilter = GrSamplerState::Filter::kLinear;
+                    netFilter = filter;
                 }
                 if (mustMM && mm != GrSamplerState::MipmapMode::kNone) {
-                    netMM = GrSamplerState::MipmapMode::kLinear;
+                    netMM = mm;
                 }
             }
 
@@ -681,7 +651,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         SkASSERT(fDesc);
 
         GrGeometryProcessor* gp;
@@ -706,13 +677,14 @@ private:
         fDesc->fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(
                 caps, arena, writeView, std::move(appliedClip), dstProxyView, gp,
                 GrProcessorSet::MakeEmptySet(), fDesc->fVertexSpec.primitiveType(),
-                pipelineFlags);
+                renderPassXferBarriers, pipelineFlags);
     }
 
     void onPrePrepareDraws(GrRecordingContext* context,
                            const GrSurfaceProxyView* writeView,
                            GrAppliedClip* clip,
-                           const GrXferProcessor::DstProxyView& dstProxyView) override {
+                           const GrXferProcessor::DstProxyView& dstProxyView,
+                           GrXferBarrierFlags renderPassXferBarriers) override {
         TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
         SkDEBUGCODE(this->validate();)
@@ -726,7 +698,8 @@ private:
         FillInVertices(*context->priv().caps(), this, fDesc, fDesc->fPrePreparedVertices);
 
         // This will call onCreateProgramInfo and register the created program with the DDL.
-        this->INHERITED::onPrePrepareDraws(context, writeView, clip, dstProxyView);
+        this->INHERITED::onPrePrepareDraws(context, writeView, clip, dstProxyView,
+                                           renderPassXferBarriers);
     }
 
     static void FillInVertices(const GrCaps& caps, TextureOp* texOp, Desc* desc, char* vertexData) {
@@ -770,34 +743,45 @@ private:
     }
 
 #ifdef SK_DEBUG
+    static int validate_op(GrTextureType textureType,
+                           GrAAType aaType,
+                           GrSwizzle swizzle,
+                           const TextureOp* op) {
+        SkASSERT(op->fMetadata.fSwizzle == swizzle);
+
+        int quadCount = 0;
+        for (unsigned p = 0; p < op->fMetadata.fProxyCount; ++p) {
+            auto* proxy = op->fViewCountPairs[p].fProxy->asTextureProxy();
+            quadCount += op->fViewCountPairs[p].fQuadCnt;
+            SkASSERT(proxy);
+            SkASSERT(proxy->textureType() == textureType);
+        }
+
+        SkASSERT(aaType == op->fMetadata.aaType());
+        return quadCount;
+    }
+
     void validate() const override {
         // NOTE: Since this is debug-only code, we use the virtual asTextureProxy()
         auto textureType = fViewCountPairs[0].fProxy->asTextureProxy()->textureType();
         GrAAType aaType = fMetadata.aaType();
+        GrSwizzle swizzle = fMetadata.fSwizzle;
 
-        int quadCount = 0;
-        for (const auto& op : ChainRange<TextureOp>(this)) {
-            SkASSERT(op.fMetadata.fSwizzle == fMetadata.fSwizzle);
+        int quadCount = validate_op(textureType, aaType, swizzle, this);
 
-            for (unsigned p = 0; p < op.fMetadata.fProxyCount; ++p) {
-                auto* proxy = op.fViewCountPairs[p].fProxy->asTextureProxy();
-                quadCount += op.fViewCountPairs[p].fQuadCnt;
-                SkASSERT(proxy);
-                SkASSERT(proxy->textureType() == textureType);
-            }
+        for (const GrOp* tmp = this->prevInChain(); tmp; tmp = tmp->prevInChain()) {
+            quadCount += validate_op(textureType, aaType, swizzle,
+                                     static_cast<const TextureOp*>(tmp));
+        }
 
-            // Each individual op must be a single aaType. kCoverage and kNone ops can chain
-            // together but kMSAA ones do not.
-            if (aaType == GrAAType::kCoverage || aaType == GrAAType::kNone) {
-                SkASSERT(op.fMetadata.aaType() == GrAAType::kCoverage ||
-                         op.fMetadata.aaType() == GrAAType::kNone);
-            } else {
-                SkASSERT(aaType == GrAAType::kMSAA && op.fMetadata.aaType() == GrAAType::kMSAA);
-            }
+        for (const GrOp* tmp = this->nextInChain(); tmp; tmp = tmp->nextInChain()) {
+            quadCount += validate_op(textureType, aaType, swizzle,
+                                     static_cast<const TextureOp*>(tmp));
         }
 
         SkASSERT(quadCount == this->numChainedQuads());
     }
+
 #endif
 
 #if GR_TEST_UTILS
@@ -805,6 +789,8 @@ private:
 #endif
 
     void characterize(Desc* desc) const {
+        SkDEBUGCODE(this->validate();)
+
         GrQuad::Type quadType = GrQuad::Type::kAxisAligned;
         ColorType colorType = ColorType::kNone;
         GrQuad::Type srcQuadType = GrQuad::Type::kAxisAligned;
@@ -957,10 +943,31 @@ private:
         SkASSERT(numDraws == fDesc->fNumProxies);
     }
 
+    void propagateCoverageAAThroughoutChain() {
+        fMetadata.fAAType = static_cast<uint16_t>(GrAAType::kCoverage);
+
+        for (GrOp* tmp = this->prevInChain(); tmp; tmp = tmp->prevInChain()) {
+            TextureOp* tex = static_cast<TextureOp*>(tmp);
+            SkASSERT(tex->fMetadata.aaType() == GrAAType::kCoverage ||
+                     tex->fMetadata.aaType() == GrAAType::kNone);
+            tex->fMetadata.fAAType = static_cast<uint16_t>(GrAAType::kCoverage);
+        }
+
+        for (GrOp* tmp = this->nextInChain(); tmp; tmp = tmp->nextInChain()) {
+            TextureOp* tex = static_cast<TextureOp*>(tmp);
+            SkASSERT(tex->fMetadata.aaType() == GrAAType::kCoverage ||
+                     tex->fMetadata.aaType() == GrAAType::kNone);
+            tex->fMetadata.fAAType = static_cast<uint16_t>(GrAAType::kCoverage);
+        }
+    }
+
     CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
                                       const GrCaps& caps) override {
         TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-        const auto* that = t->cast<TextureOp>();
+        auto* that = t->cast<TextureOp>();
+
+        SkDEBUGCODE(this->validate();)
+        SkDEBUGCODE(that->validate();)
 
         if (fDesc || that->fDesc) {
             // This should never happen (since only DDL recorded ops should be prePrepared)
@@ -1010,7 +1017,16 @@ private:
             thisProxy != thatProxy) {
             // We can't merge across different proxies. Check if 'this' can be chained with 'that'.
             if (GrTextureProxy::ProxiesAreCompatibleAsDynamicState(thisProxy, thatProxy) &&
-                caps.dynamicStateArrayGeometryProcessorTextureSupport()) {
+                caps.dynamicStateArrayGeometryProcessorTextureSupport() &&
+                fMetadata.aaType() == that->fMetadata.aaType()) {
+                // We only allow chaining when the aaTypes match bc otherwise the AA type
+                // reported by the chain can be inconsistent. That is, since chaining doesn't
+                // propagate revised AA information throughout the chain, the head of the chain
+                // could have an AA setting of kNone while the chain as a whole could have a
+                // setting of kCoverage. This inconsistency would then interfere with the validity
+                // of the CombinedQuadCountWillOverflow calls.
+                // This problem doesn't occur w/ merging bc we do propagate the AA information
+                // (in propagateCoverageAAThroughoutChain) below.
                 return CombineResult::kMayChain;
             }
             return CombineResult::kCannotCombine;
@@ -1018,17 +1034,61 @@ private:
 
         fMetadata.fSubset |= that->fMetadata.fSubset;
         fMetadata.fColorType = std::max(fMetadata.fColorType, that->fMetadata.fColorType);
-        if (upgradeToCoverageAAOnMerge) {
-            fMetadata.fAAType = static_cast<uint16_t>(GrAAType::kCoverage);
-        }
 
         // Concatenate quad lists together
         fQuads.concat(that->fQuads);
         fViewCountPairs[0].fQuadCnt += that->fQuads.count();
         fMetadata.fTotalQuadCount += that->fQuads.count();
 
+        if (upgradeToCoverageAAOnMerge) {
+            // This merger may be the start of a concatenation of two chains. When one
+            // of the chains mutates its AA the other must follow suit or else the above AA
+            // check may prevent later ops from chaining together. A specific example of this is
+            // when chain2 is prepended onto chain1:
+            //  chain1 (that): opA (non-AA/mergeable) opB (non-AA/non-mergeable)
+            //  chain2 (this): opC (cov-AA/non-mergeable) opD (cov-AA/mergeable)
+            // W/o this propagation, after opD & opA merge, opB and opC would say they couldn't
+            // chain - which would stop the concatenation process.
+            this->propagateCoverageAAThroughoutChain();
+            that->propagateCoverageAAThroughoutChain();
+        }
+
+        SkDEBUGCODE(this->validate();)
+
         return CombineResult::kMerged;
     }
+
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString str = SkStringPrintf("# draws: %d\n", fQuads.count());
+        auto iter = fQuads.iterator();
+        for (unsigned p = 0; p < fMetadata.fProxyCount; ++p) {
+            str.appendf("Proxy ID: %d, Filter: %d, MM: %d\n",
+                        fViewCountPairs[p].fProxy->uniqueID().asUInt(),
+                        static_cast<int>(fMetadata.fFilter),
+                        static_cast<int>(fMetadata.fMipmapMode));
+            int i = 0;
+            while(i < fViewCountPairs[p].fQuadCnt && iter.next()) {
+                const GrQuad* quad = iter.deviceQuad();
+                GrQuad uv = iter.isLocalValid() ? *(iter.localQuad()) : GrQuad();
+                const ColorSubsetAndAA& info = iter.metadata();
+                str.appendf(
+                        "%d: Color: 0x%08x, Subset(%d): [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n"
+                        "  UVs  [(%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f)]\n"
+                        "  Quad [(%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f), (%.2f, %.2f)]\n",
+                        i, info.fColor.toBytes_RGBA(), fMetadata.fSubset, info.fSubsetRect.fLeft,
+                        info.fSubsetRect.fTop, info.fSubsetRect.fRight, info.fSubsetRect.fBottom,
+                        quad->point(0).fX, quad->point(0).fY, quad->point(1).fX, quad->point(1).fY,
+                        quad->point(2).fX, quad->point(2).fY, quad->point(3).fX, quad->point(3).fY,
+                        uv.point(0).fX, uv.point(0).fY, uv.point(1).fX, uv.point(1).fY,
+                        uv.point(2).fX, uv.point(2).fY, uv.point(3).fX, uv.point(3).fY);
+
+                i++;
+            }
+        }
+        return str;
+    }
+#endif
 
     GrQuadBuffer<ColorSubsetAndAA> fQuads;
     sk_sp<GrColorSpaceXform> fTextureColorSpaceXform;
@@ -1043,7 +1103,7 @@ private:
     // as an fProxyCnt-length array.
     ViewCountPair fViewCountPairs[1];
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 }  // anonymous namespace
@@ -1105,8 +1165,8 @@ std::unique_ptr<GrDrawOp> GrTextureOp::Make(GrRecordingContext* context,
         } else {
             fp = GrTextureEffect::Make(std::move(proxyView), alphaType, SkMatrix::I(), filter);
         }
-        fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kModulate);
         fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(textureXform));
+        fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kModulate);
         if (saturate == GrTextureOp::Saturate::kYes) {
             fp = GrClampFragmentProcessor::Make(std::move(fp), /*clampToPremul=*/false);
         }
@@ -1268,7 +1328,8 @@ void GrTextureOp::AddTextureSetOps(GrRenderTargetContext* rtc,
             for (int i = 0; i < state.numLeft(); ++i) {
                 int absIndex = state.baseIndex() + i;
 
-                if (set[absIndex].fAAFlags != GrQuadAAFlags::kNone) {
+                if (set[absIndex].fAAFlags != GrQuadAAFlags::kNone ||
+                    runningAA == GrAAType::kCoverage) {
 
                     if (i >= GrResourceProvider::MaxNumAAQuads()) {
                         // Here we either need to boost the AA type to kCoverage, but doing so with

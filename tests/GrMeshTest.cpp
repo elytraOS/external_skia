@@ -8,6 +8,7 @@
 #include "tests/Test.h"
 
 #include <array>
+#include <memory>
 #include <vector>
 #include "include/core/SkBitmap.h"
 #include "include/gpu/GrDirectContext.h"
@@ -95,7 +96,7 @@ struct Box {
  * produce exact matches.
  */
 
-static void run_test(GrRecordingContext*, const char* testName, skiatest::Reporter*,
+static void run_test(GrDirectContext*, const char* testName, skiatest::Reporter*,
                      const std::unique_ptr<GrRenderTargetContext>&, const SkBitmap& gold,
                      std::function<void(DrawMeshHelper*)> prepareFn,
                      std::function<void(DrawMeshHelper*)> executeFn);
@@ -434,9 +435,10 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView* writeView,
                       GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&) override {}
+                      const GrXferProcessor::DstProxyView&,
+                      GrXferBarrierFlags renderPassXferBarriers) override {}
     void onPrepare(GrOpFlushState* state) override {
-        fHelper.reset(new DrawMeshHelper(state));
+        fHelper = std::make_unique<DrawMeshHelper>(state);
         fPrepareFn(fHelper.get());
     }
     void onExecute(GrOpFlushState* state, const SkRect& chainBounds) override {
@@ -447,7 +449,7 @@ private:
     std::function<void(DrawMeshHelper*)> fPrepareFn;
     std::function<void(DrawMeshHelper*)> fExecuteFn;
 
-    typedef GrDrawOp INHERITED;
+    using INHERITED = GrDrawOp;
 };
 
 class GrMeshTestProcessor : public GrGeometryProcessor {
@@ -496,7 +498,7 @@ private:
     Attribute fInstanceLocation;
     Attribute fInstanceColor;
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
 
 class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
@@ -575,13 +577,13 @@ GrOpsRenderPass* DrawMeshHelper::bindPipeline(GrPrimitiveType primitiveType, boo
 
     GrProgramInfo programInfo(fState->proxy()->numSamples(), fState->proxy()->numStencilSamples(),
                               fState->proxy()->backendFormat(), fState->writeView()->origin(),
-                              pipeline, mtp, primitiveType);
+                              pipeline, mtp, primitiveType, 0, fState->renderPassBarriers());
 
     fState->opsRenderPass()->bindPipeline(programInfo, SkRect::MakeIWH(kImageWidth, kImageHeight));
     return fState->opsRenderPass();
 }
 
-static void run_test(GrRecordingContext* rContext, const char* testName,
+static void run_test(GrDirectContext* dContext, const char* testName,
                      skiatest::Reporter* reporter,
                      const std::unique_ptr<GrRenderTargetContext>& rtc, const SkBitmap& gold,
                      std::function<void(DrawMeshHelper*)> prepareFn,
@@ -599,9 +601,9 @@ static void run_test(GrRecordingContext* rContext, const char* testName,
 
     SkAutoSTMalloc<kImageHeight * kImageWidth, uint32_t> resultPx(h * rowBytes);
     rtc->clear(SkPMColor4f::FromBytes_RGBA(0xbaaaaaad));
-    rtc->priv().testingOnly_addDrawOp(GrMeshTestOp::Make(rContext, prepareFn, executeFn));
+    rtc->priv().testingOnly_addDrawOp(GrMeshTestOp::Make(dContext, prepareFn, executeFn));
 
-    rtc->readPixels(gold.info(), resultPx, rowBytes, {0, 0});
+    rtc->readPixels(dContext, gold.info(), resultPx, rowBytes, {0, 0});
 
 #ifdef WRITE_PNG_CONTEXT_TYPE
 #define STRINGIFY(X) #X

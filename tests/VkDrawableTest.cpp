@@ -87,16 +87,16 @@ public:
         int32_t              fWidth;
         int32_t              fHeight;
 
-        typedef GpuDrawHandler INHERITED;
+        using INHERITED = GpuDrawHandler;
     };
 
     typedef void (*DrawProc)(TestDrawable*, const SkMatrix&, const SkIRect&,
                              const SkImageInfo&, const GrVkDrawableInfo&);
     typedef void (*SubmitProc)(TestDrawable*);
 
-    // Exercises the exporting of a secondary command buffer from one GrContext and then importing
-    // it into a second GrContext. We then draw to the secondary command buffer from the second
-    // GrContext.
+    // Exercises the exporting of a secondary command buffer from one context and then importing
+    // it into a second context. We then draw to the secondary command buffer from the second
+    // context.
     class DrawHandlerImport : public GpuDrawHandler {
     public:
         DrawHandlerImport(TestDrawable* td, DrawProc drawProc, SubmitProc submitProc,
@@ -128,11 +128,11 @@ public:
         const SkIRect     fClipBounds;
         const SkImageInfo fBufferInfo;
 
-        typedef GpuDrawHandler INHERITED;
+        using INHERITED = GpuDrawHandler;
     };
 
     // Helper function to test drawing to a secondary command buffer that we imported into the
-    // GrContext using a GrVkSecondaryCBDrawContext.
+    // context using a GrVkSecondaryCBDrawContext.
     static void ImportDraw(TestDrawable* td, const SkMatrix& matrix, const SkIRect& clipBounds,
                            const SkImageInfo& bufferInfo, const GrVkDrawableInfo& info) {
         td->fDrawContext = GrVkSecondaryCBDrawContext::Make(td->fDContext, bufferInfo,
@@ -164,7 +164,7 @@ public:
     }
 
     // Helper function to test waiting for the imported secondary command buffer to be submitted on
-    // its original context and then cleaning up the GrVkSecondaryCBDrawContext from this GrContext.
+    // its original context and then cleaning up the GrVkSecondaryCBDrawContext from this context.
     static void ImportSubmitted(TestDrawable* td) {
         // Typical use case here would be to create a fence that we submit to the gpu and then wait
         // on before releasing the GrVkSecondaryCBDrawContext resources. To simulate that for this
@@ -173,10 +173,10 @@ public:
         td->fDContext->priv().getGpu()->testingOnly_flushGpuAndSync();
 
         td->fDrawContext->releaseResources();
-        // We release the GrContext here manually to test that we waited long enough before
+        // We release the context here manually to test that we waited long enough before
         // releasing the GrVkSecondaryCBDrawContext. This simulates when a client is able to delete
-        // the GrContext it used to imported the secondary command buffer. If we had released the
-        // GrContext's resources earlier (before waiting on the gpu above), we would get vulkan
+        // the context it used to imported the secondary command buffer. If we had released the
+        // context's resources earlier (before waiting on the gpu above), we would get vulkan
         // validation layer errors saying we freed some vulkan objects while they were still in use
         // on the GPU.
         td->fDContext->releaseResourcesAndAbandonContext();
@@ -192,10 +192,10 @@ public:
         }
         std::unique_ptr<GpuDrawHandler> draw;
         if (fDContext) {
-            draw.reset(new DrawHandlerImport(this, ImportDraw, ImportSubmitted, matrix,
-                                             clipBounds, bufferInfo));
+            draw = std::make_unique<DrawHandlerImport>(this, ImportDraw, ImportSubmitted, matrix,
+                                                       clipBounds, bufferInfo);
         } else {
-            draw.reset(new DrawHandlerBasic(fInterface, fWidth, fHeight));
+            draw = std::make_unique<DrawHandlerBasic>(fInterface, fWidth, fHeight);
         }
         return draw;
     }
@@ -215,7 +215,7 @@ private:
     int32_t              fWidth;
     int32_t              fHeight;
 
-    typedef SkDrawable INHERITED;
+    using INHERITED = SkDrawable;
 };
 
 void draw_drawable_test(skiatest::Reporter* reporter,

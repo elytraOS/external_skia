@@ -221,6 +221,16 @@ public:
      */
     double fps() const { return fFPS; }
 
+    /**
+     * Animation in point, in frame index units.
+     */
+    double inPoint()  const { return fInPoint;  }
+
+    /**
+     * Animation out point, in frame index units.
+     */
+    double outPoint() const { return fOutPoint; }
+
     const SkString& version() const { return fVersion; }
     const SkSize&      size() const { return fSize;    }
 
@@ -244,7 +254,7 @@ private:
                                                  fFPS;
     const uint32_t                               fFlags;
 
-    typedef SkNVRefCnt<Animation> INHERITED;
+    using INHERITED = SkNVRefCnt<Animation>;
 };
 
 } // namespace skottie

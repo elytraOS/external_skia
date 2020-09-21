@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrTiledGradientEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -48,8 +49,8 @@ if (!%s && t.y < 0.0) {
                 _sample453.c_str(),
                 (_outer.childProcessor(1)->preservesOpaqueInput() ? "true" : "false"),
                 args.fOutputColor, (_outer.mirror ? "true" : "false"));
-        SkString _input1464("t");
-        SkString _sample1464 = this->invokeChild(0, _input1464.c_str(), args);
+        SkString _coords1451("float2(half2(t.x, 0.0))");
+        SkString _sample1451 = this->invokeChild(0, args, _coords1451.c_str());
         fragBuilder->codeAppendf(
                 R"SkSL(
     %s = %s;
@@ -58,7 +59,7 @@ if (!%s && t.y < 0.0) {
     %s.xyz *= %s.w;
 }
 )SkSL",
-                args.fOutputColor, _sample1464.c_str(), (_outer.makePremul ? "true" : "false"),
+                args.fOutputColor, _sample1451.c_str(), (_outer.makePremul ? "true" : "false"),
                 args.fOutputColor, args.fOutputColor);
     }
 
@@ -71,8 +72,8 @@ GrGLSLFragmentProcessor* GrTiledGradientEffect::onCreateGLSLInstance() const {
 }
 void GrTiledGradientEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                   GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)mirror);
-    b->add32((int32_t)makePremul);
+    b->add32((uint32_t)mirror);
+    b->add32((uint32_t)makePremul);
 }
 bool GrTiledGradientEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const GrTiledGradientEffect& that = other.cast<GrTiledGradientEffect>();
@@ -82,6 +83,7 @@ bool GrTiledGradientEffect::onIsEqual(const GrFragmentProcessor& other) const {
     if (colorsAreOpaque != that.colorsAreOpaque) return false;
     return true;
 }
+bool GrTiledGradientEffect::usesExplicitReturn() const { return false; }
 GrTiledGradientEffect::GrTiledGradientEffect(const GrTiledGradientEffect& src)
         : INHERITED(kGrTiledGradientEffect_ClassID, src.optimizationFlags())
         , mirror(src.mirror)
@@ -90,5 +92,12 @@ GrTiledGradientEffect::GrTiledGradientEffect(const GrTiledGradientEffect& src)
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrTiledGradientEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrTiledGradientEffect(*this));
+    return std::make_unique<GrTiledGradientEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrTiledGradientEffect::onDumpInfo() const {
+    return SkStringPrintf("(mirror=%s, makePremul=%s, colorsAreOpaque=%s)",
+                          (mirror ? "true" : "false"), (makePremul ? "true" : "false"),
+                          (colorsAreOpaque ? "true" : "false"));
+}
+#endif

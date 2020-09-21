@@ -64,13 +64,6 @@ void GrRecordingContext::setupDrawingManager(bool sortOpsTasks, bool reduceOpsTa
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
     }
 
-    if (!this->proxyProvider()->renderingDirectly()) {
-        // DDL TODO: remove this crippling of the path renderer chain
-        // Disable the small path renderer bc of the proxies in the atlas. They need to be
-        // unified when the opsTasks are added back to the destination drawing manager.
-        prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
-    }
-
     fDrawingManager.reset(new GrDrawingManager(this,
                                                prcOptions,
                                                sortOpsTasks,
@@ -138,8 +131,29 @@ const GrTextBlobCache* GrRecordingContext::getTextBlobCache() const {
     return fThreadSafeProxy->priv().getTextBlobCache();
 }
 
+GrThreadSafeUniquelyKeyedProxyViewCache* GrRecordingContext::threadSafeViewCache() {
+    return fThreadSafeProxy->priv().threadSafeViewCache();
+}
+
+const GrThreadSafeUniquelyKeyedProxyViewCache* GrRecordingContext::threadSafeViewCache() const {
+    return fThreadSafeProxy->priv().threadSafeViewCache();
+}
+
 void GrRecordingContext::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlushCBObject) {
     this->drawingManager()->addOnFlushCallbackObject(onFlushCBObject);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int GrRecordingContext::maxTextureSize() const { return this->caps()->maxTextureSize(); }
+
+int GrRecordingContext::maxRenderTargetSize() const { return this->caps()->maxRenderTargetSize(); }
+
+bool GrRecordingContext::colorTypeSupportedAsImage(SkColorType colorType) const {
+    GrBackendFormat format =
+            this->caps()->getDefaultBackendFormat(SkColorTypeToGrColorType(colorType),
+                                                  GrRenderable::kNo);
+    return format.isValid();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

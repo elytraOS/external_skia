@@ -8,13 +8,16 @@
 #ifndef GrMtlGpu_DEFINED
 #define GrMtlGpu_DEFINED
 
+#include "include/private/SkDeque.h"
 #include "src/gpu/GrFinishCallbacks.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrSemaphore.h"
+#include "src/gpu/GrStagingBufferManager.h"
 #include "src/gpu/GrTexture.h"
 
 #include "src/gpu/mtl/GrMtlCaps.h"
+#include "src/gpu/mtl/GrMtlCommandBuffer.h"
 #include "src/gpu/mtl/GrMtlResourceProvider.h"
 #include "src/gpu/mtl/GrMtlStencilAttachment.h"
 #include "src/gpu/mtl/GrMtlUtil.h"
@@ -45,17 +48,15 @@ public:
 
     GrMtlResourceProvider& resourceProvider() { return fResourceProvider; }
 
-    GrMtlCommandBuffer* commandBuffer();
+    GrMtlCommandBuffer* commandBuffer() {
+        SkASSERT(fCurrentCmdBuffer);
+        return fCurrentCmdBuffer.get();
+     }
 
     enum SyncQueue {
         kForce_SyncQueue,
         kSkip_SyncQueue
     };
-
-    // Commits the current command buffer to the queue and then creates a new command buffer. If
-    // sync is set to kForce_SyncQueue, the function will wait for all work in the committed
-    // command buffer to finish before returning.
-    void submitCommandBuffer(SyncQueue sync);
 
     void deleteBackendTexture(const GrBackendTexture&) override;
 
@@ -87,7 +88,8 @@ public:
             GrSurfaceOrigin, const SkIRect& bounds,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+            GrXferBarrierFlags renderPassXferBarriers) override;
 
     SkSL::Compiler* shaderCompiler() const { return fCompiler.get(); }
 
@@ -104,7 +106,7 @@ public:
             GrWrapOwnership ownership) override;
     void insertSemaphore(GrSemaphore* semaphore) override;
     void waitSemaphore(GrSemaphore* semaphore) override;
-    void checkFinishProcs() override;
+    void checkFinishProcs() override { this->checkForFinishedCommandBuffers(); }
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
     // When the Metal backend actually uses indirect command buffers, this function will actually do
@@ -130,6 +132,9 @@ private:
     }
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
+
+    GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
+    void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) override;
 
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
@@ -211,8 +216,16 @@ private:
 
     void addFinishedProc(GrGpuFinishedProc finishedProc,
                          GrGpuFinishedContext finishedContext) override;
+    void addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback);
 
     bool onSubmitToGpu(bool syncCpu) override;
+
+    // Commits the current command buffer to the queue and then creates a new command buffer. If
+    // sync is set to kForce_SyncQueue, the function will wait for all work in the committed
+    // command buffer to finish before returning.
+    bool submitCommandBuffer(SyncQueue sync);
+
+    void checkForFinishedCommandBuffers();
 
     // Function that uploads data onto textures with private storage mode (GPU access only).
     bool uploadToTexture(GrMtlTexture* tex, int left, int top, int width, int height,
@@ -247,17 +260,25 @@ private:
     id<MTLDevice> fDevice;
     id<MTLCommandQueue> fQueue;
 
-    GrMtlCommandBuffer* fCmdBuffer;
+    sk_sp<GrMtlCommandBuffer> fCurrentCmdBuffer;
+
+    struct OutstandingCommandBuffer {
+        OutstandingCommandBuffer(sk_sp<GrMtlCommandBuffer> commandBuffer, GrFence fence)
+            : fCommandBuffer(std::move(commandBuffer))
+            , fFence(fence) {}
+        sk_sp<GrMtlCommandBuffer> fCommandBuffer;
+        GrFence fFence;
+    };
+    SkDeque fOutstandingCommandBuffers;
 
     std::unique_ptr<SkSL::Compiler> fCompiler;
 
     GrMtlResourceProvider fResourceProvider;
+    GrStagingBufferManager fStagingBufferManager;
 
     bool fDisconnected;
 
-    GrFinishCallbacks fFinishCallbacks;
-
-    typedef GrGpu INHERITED;
+    using INHERITED = GrGpu;
 };
 
 #endif

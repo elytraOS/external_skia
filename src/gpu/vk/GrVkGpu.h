@@ -36,7 +36,7 @@ struct GrVkInterface;
 
 namespace SkSL {
     class Compiler;
-}
+}  // namespace SkSL
 
 class GrVkGpu : public GrGpu {
 public:
@@ -50,10 +50,9 @@ public:
     const GrVkCaps& vkCaps() const { return *fVkCaps; }
 
     GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
-    void takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer>) override;
+    void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) override;
 
     bool isDeviceLost() const override { return fDeviceIsLost; }
-    void setDeviceLost() { fDeviceIsLost = true; }
 
     GrVkMemoryAllocator* memoryAllocator() const { return fMemoryAllocator.get(); }
 
@@ -76,7 +75,7 @@ public:
 
     void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override;
 
-    void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
+    void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 
     bool setBackendTextureState(const GrBackendTexture&,
                                 const GrBackendSurfaceMutableState&,
@@ -111,7 +110,8 @@ public:
             GrSurfaceOrigin, const SkIRect&,
             const GrOpsRenderPass::LoadAndStoreInfo&,
             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+            GrXferBarrierFlags renderPassXferBarriers) override;
 
     void addBufferMemoryBarrier(const GrManagedResource*,
                                 VkPipelineStageFlags srcStageMask,
@@ -175,7 +175,10 @@ public:
                          const SkIRect& bounds, bool forSecondaryCB);
     void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin, const SkIRect& bounds);
 
-    using GrGpu::setOOMed;
+    // Returns true if VkResult indicates success and also checks for device lost or OOM. Every
+    // Vulkan call (and GrVkMemoryAllocator call that returns VkResult) made on behalf of the
+    // GrVkGpu should be processed by this function so that we respond to OOMs and lost devices.
+    bool checkVkResult(VkResult);
 
 private:
     enum SyncQueue {
@@ -183,7 +186,7 @@ private:
         kSkip_SyncQueue
     };
 
-    GrVkGpu(GrDirectContext*, const GrContextOptions&, const GrVkBackendContext&,
+    GrVkGpu(GrDirectContext*, const GrVkBackendContext&, const sk_sp<GrVkCaps> caps,
             sk_sp<const GrVkInterface>, uint32_t instanceVersion, uint32_t physicalDeviceVersion,
             sk_sp<GrVkMemoryAllocator>);
 
@@ -358,7 +361,7 @@ private:
 
     std::unique_ptr<GrVkOpsRenderPass>                    fCachedOpsRenderPass;
 
-    typedef GrGpu INHERITED;
+    using INHERITED = GrGpu;
 };
 
 #endif

@@ -29,9 +29,12 @@ static bool sampler_params_invalid(const GrGLTextureParameters& parameters) {
 }
 
 static bool nonsampler_params_invalid(const GrGLTextureParameters& parameters) {
+    GrGLTextureParameters::NonsamplerState nsState = parameters.nonsamplerState();
     GrGLTextureParameters::NonsamplerState invalidNSState;
     invalidNSState.invalidate();
-    return 0 == memcmp(&parameters.nonsamplerState(), &invalidNSState, sizeof(invalidNSState));
+    return nsState.fBaseMipMapLevel == invalidNSState.fBaseMipMapLevel &&
+           nsState.fMaxMipmapLevel  == invalidNSState.fMaxMipmapLevel  &&
+           nsState.fSwizzleIsRGBA   == invalidNSState.fSwizzleIsRGBA;
 }
 
 static bool params_invalid(const GrGLTextureParameters& parameters) {
@@ -42,14 +45,16 @@ static bool params_valid(const GrGLTextureParameters& parameters, const GrGLCaps
     if (nonsampler_params_invalid(parameters)) {
         return false;
     }
-    // We should only set the sampler parameters to valid if we don't have sampler object support.
-    return caps->samplerObjectSupport() == sampler_params_invalid(parameters);
+    // We should only set the texture params that are equivalent to sampler param to valid if we're
+    // not using sampler objects.
+    return caps->useSamplerObjects() == sampler_params_invalid(parameters);
 }
 
 DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
+    auto dContext = ctxInfo.directContext();
+    auto caps = static_cast<const GrGLCaps*>(dContext->priv().caps());
 
-    GrBackendTexture backendTex = context->createBackendTexture(
+    GrBackendTexture backendTex = dContext->createBackendTexture(
             1, 1, kRGBA_8888_SkColorType, GrMipmapped::kNo, GrRenderable::kNo, GrProtected::kNo);
     REPORTER_ASSERT(reporter, backendTex.isValid());
 
@@ -60,11 +65,11 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, backendTexCopy.isSameTexture(backendTex));
 
     sk_sp<SkImage> wrappedImage =
-            SkImage::MakeFromTexture(context, backendTex, kTopLeft_GrSurfaceOrigin,
+            SkImage::MakeFromTexture(dContext, backendTex, kTopLeft_GrSurfaceOrigin,
                                      kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
     REPORTER_ASSERT(reporter, wrappedImage);
 
-    const GrSurfaceProxyView* view = as_IB(wrappedImage)->view(context);
+    const GrSurfaceProxyView* view = as_IB(wrappedImage)->view(dContext);
     REPORTER_ASSERT(reporter, view);
     REPORTER_ASSERT(reporter, view->proxy()->isInstantiated());
     auto texture = static_cast<GrGLTexture*>(view->proxy()->peekTexture());
@@ -76,19 +81,10 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
     GrGLTextureParameters::NonsamplerState invalidNSState;
     invalidNSState.invalidate();
 
-    // After wrapping we should assume the client's texture can be in any state.
-    REPORTER_ASSERT(reporter, params_invalid(*parameters));
-
     auto surf = SkSurface::MakeRenderTarget(
-            context, SkBudgeted::kYes,
+            dContext, SkBudgeted::kYes,
             SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kPremul_SkAlphaType), 1, nullptr);
     REPORTER_ASSERT(reporter, surf);
-    surf->getCanvas()->drawImage(wrappedImage, 0, 0);
-    surf->flushAndSubmit();
-
-    auto caps = static_cast<const GrGLCaps*>(context->priv().caps());
-    // Now the texture should be in a known state.
-    REPORTER_ASSERT(reporter, params_valid(*parameters, caps));
 
     // Test invalidating from the GL backend texture.
     backendTex.glTextureParametersModified();
@@ -104,8 +100,8 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, params_invalid(*parameters));
 
     // Check that we can do things like assigning the backend texture to invalid one, assign an
-    // invalid one, assin a backend texture to inself etc. Success here is that we don't hit any of
-    // our ref counting asserts.
+    // invalid one, assign a backend texture to itself etc. Success here is that we don't hit any
+    // of our ref counting asserts.
     REPORTER_ASSERT(reporter, GrBackendTexture::TestingOnly_Equals(backendTex, backendTexCopy));
 
     GrBackendTexture invalidTexture;
@@ -127,8 +123,8 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLTextureParameters, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, GrBackendTexture::TestingOnly_Equals(invalidTexture, invalidTexture));
 
     wrappedImage.reset();
-    context->flush();
-    context->submit(true);
-    context->deleteBackendTexture(backendTex);
+    dContext->flush();
+    dContext->submit(true);
+    dContext->deleteBackendTexture(backendTex);
 }
 #endif

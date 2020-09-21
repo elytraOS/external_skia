@@ -75,6 +75,30 @@ const GrTextureEffect* GrFragmentProcessor::asTextureEffect() const {
     return nullptr;
 }
 
+#if GR_TEST_UTILS
+static void recursive_dump_tree_info(const GrFragmentProcessor& fp,
+                                     SkString indent,
+                                     SkString* text) {
+    for (int index = 0; index < fp.numChildProcessors(); ++index) {
+        text->appendf("\n%s(#%d) -> ", indent.c_str(), index);
+        if (const GrFragmentProcessor* childFP = fp.childProcessor(index)) {
+            text->append(childFP->dumpInfo());
+            indent.append("\t");
+            recursive_dump_tree_info(*childFP, indent, text);
+        } else {
+            text->append("null");
+        }
+    }
+}
+
+SkString GrFragmentProcessor::dumpTreeInfo() const {
+    SkString text = this->dumpInfo();
+    recursive_dump_tree_info(*this, SkString("\t"), &text);
+    text.append("\n");
+    return text;
+}
+#endif
+
 GrGLSLFragmentProcessor* GrFragmentProcessor::createGLSLInstance() const {
     GrGLSLFragmentProcessor* glFragProc = this->onCreateGLSLInstance();
     glFragProc->fChildProcessors.push_back_n(fChildProcessors.count());
@@ -176,7 +200,7 @@ void GrFragmentProcessor::registerChild(std::unique_ptr<GrFragmentProcessor> chi
     child->fParent = this;
     fChildProcessors.push_back(std::move(child));
 
-    // Sanity check: our sample strategy comes from a parent we shouldn't have yet.
+    // Validate: our sample strategy comes from a parent we shouldn't have yet.
     SkASSERT(!this->isSampledWithExplicitCoords() && !this->hasPerspectiveTransform() &&
              !fUsage.isSampled() && !fParent);
 }
@@ -287,7 +311,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::SwizzleOutput(
 
         GrSwizzle fSwizzle;
 
-        typedef GrFragmentProcessor INHERITED;
+        using INHERITED = GrFragmentProcessor;
     };
 
     if (!fp) {
@@ -358,7 +382,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::MakeInputPremulAndMulB
             return premulInput * childColor;
         }
 
-        typedef GrFragmentProcessor INHERITED;
+        using INHERITED = GrFragmentProcessor;
     };
     if (!fp) {
         return nullptr;
@@ -431,7 +455,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Compose(
             return color;
         }
 
-        typedef GrFragmentProcessor INHERITED;
+        using INHERITED = GrFragmentProcessor;
     };
 
     // Allow either of the composed functions to be null.

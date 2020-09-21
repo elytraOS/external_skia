@@ -9,7 +9,7 @@
 
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/d3d/GrD3DTypes.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/d3d/GrD3DGpu.h"
 #include "src/gpu/d3d/GrD3DResourceProvider.h"
 #include "src/gpu/d3d/GrD3DTextureResource.h"
@@ -93,12 +93,12 @@ GrD3DRenderTarget::GrD3DRenderTarget(GrD3DGpu* gpu,
 sk_sp<GrD3DRenderTarget> GrD3DRenderTarget::MakeWrappedRenderTarget(
             GrD3DGpu* gpu, SkISize dimensions, int sampleCnt, const GrD3DTextureResourceInfo& info,
             sk_sp<GrD3DResourceState> state) {
-    SkASSERT(info.fResource.get());
+    SkASSERT(info.fResource.Get());
 
     SkASSERT(1 == info.fLevelCount);
 
     GrD3DDescriptorHeap::CPUHandle renderTargetView =
-            gpu->resourceProvider().createRenderTargetView(info.fResource.get());
+            gpu->resourceProvider().createRenderTargetView(info.fResource.Get());
 
     // create msaa surface if necessary
     GrD3DRenderTarget* d3dRT;
@@ -111,7 +111,7 @@ sk_sp<GrD3DRenderTarget> GrD3DRenderTarget::MakeWrappedRenderTarget(
                 GrD3DTextureResource::CreateMSAA(gpu, dimensions, sampleCnt, info, clearColor);
 
         GrD3DDescriptorHeap::CPUHandle msaaRenderTargetView =
-                gpu->resourceProvider().createRenderTargetView(msInfo.fResource.get());
+                gpu->resourceProvider().createRenderTargetView(msInfo.fResource.Get());
 
         d3dRT = new GrD3DRenderTarget(gpu, dimensions, sampleCnt, info, std::move(state), msInfo,
                                       std::move(msState), msaaRenderTargetView,
@@ -164,7 +164,7 @@ GrD3DGpu* GrD3DRenderTarget::getD3DGpu() const {
 }
 
 DXGI_FORMAT GrD3DRenderTarget::stencilDxgiFormat() const {
-    if (auto stencil = this->renderTargetPriv().getStencilAttachment()) {
+    if (auto stencil = this->getStencilAttachment()) {
         auto d3dStencil = static_cast<GrD3DStencilAttachment*>(stencil);
         return d3dStencil->dxgiFormat();
     }
@@ -176,9 +176,9 @@ void GrD3DRenderTarget::genKey(GrProcessorKeyBuilder* b) const {
     b->add32(this->numSamples());
     b->add32(this->stencilDxgiFormat());
 #ifdef SK_DEBUG
-    if (const GrStencilAttachment* stencil = this->renderTargetPriv().getStencilAttachment()) {
+    if (const GrStencilAttachment* stencil = this->getStencilAttachment()) {
         SkASSERT(stencil->numSamples() == this->numSamples());
     }
 #endif
-    b->add32(this->sampleQualityLevel());
+    b->add32(this->sampleQualityPattern());
 }

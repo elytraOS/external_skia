@@ -20,7 +20,7 @@
 #include "src/gpu/GrPath.h"
 #include "src/gpu/GrPathRendering.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrStencilAttachment.h"
@@ -464,9 +464,13 @@ sk_sp<GrGpuBuffer> GrResourceProvider::createBuffer(size_t size, GrGpuBufferType
     if (kDynamic_GrAccessPattern != accessPattern) {
         return this->gpu()->createBuffer(size, intendedType, accessPattern, data);
     }
-    // bin by pow2 with a reasonable min
+    // bin by pow2+midpoint with a reasonable min
     static const size_t MIN_SIZE = 1 << 12;
-    size_t allocSize = std::max(MIN_SIZE, GrNextSizePow2(size));
+    size_t allocSize = std::max(size, MIN_SIZE);
+    size_t ceilPow2 = GrNextSizePow2(allocSize);
+    size_t floorPow2 = ceilPow2 >> 1;
+    size_t mid = floorPow2 + (floorPow2 >> 1);
+    allocSize = (allocSize <= mid) ? mid : ceilPow2;
 
     GrScratchKey key;
     GrGpuBuffer::ComputeScratchKeyForDynamicVBO(allocSize, intendedType, &key);
@@ -487,7 +491,7 @@ sk_sp<GrGpuBuffer> GrResourceProvider::createBuffer(size_t size, GrGpuBufferType
 
 bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt, int numStencilSamples) {
     SkASSERT(rt);
-    GrStencilAttachment* stencil = rt->renderTargetPriv().getStencilAttachment();
+    GrStencilAttachment* stencil = rt->getStencilAttachment();
     if (stencil && stencil->numSamples() == numStencilSamples) {
         return true;
     }
@@ -515,10 +519,10 @@ bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt, int numSten
             }
             this->assignUniqueKeyToResource(sbKey, stencil.get());
         }
-        rt->renderTargetPriv().attachStencilAttachment(std::move(stencil));
+        rt->attachStencilAttachment(std::move(stencil));
     }
 
-    if (GrStencilAttachment* stencil = rt->renderTargetPriv().getStencilAttachment()) {
+    if (GrStencilAttachment* stencil = rt->getStencilAttachment()) {
         return stencil->numSamples() == numStencilSamples;
     }
     return false;

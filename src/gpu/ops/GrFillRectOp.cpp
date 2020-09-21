@@ -29,7 +29,7 @@ namespace {
 using VertexSpec = GrQuadPerEdgeAA::VertexSpec;
 using ColorType = GrQuadPerEdgeAA::ColorType;
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
 static SkString dump_quad_info(int index, const GrQuad* deviceQuad,
                                const GrQuad* localQuad, const SkPMColor4f& color,
                                GrQuadAAFlags aaFlags) {
@@ -120,26 +120,6 @@ public:
         }
     }
 
-#ifdef SK_DEBUG
-    SkString dumpInfo() const override {
-        SkString str;
-        str.appendf("# draws: %u\n", fQuads.count());
-        str.appendf("Device quad type: %u, local quad type: %u\n",
-                    (uint32_t) fQuads.deviceQuadType(), (uint32_t) fQuads.localQuadType());
-        str += fHelper.dumpInfo();
-        int i = 0;
-        auto iter = fQuads.iterator();
-        while(iter.next()) {
-            const ColorAndAA& info = iter.metadata();
-            str += dump_quad_info(i, iter.deviceQuad(), iter.localQuad(),
-                                  info.fColor, info.fAAFlags);
-            i++;
-        }
-        str += INHERITED::dumpInfo();
-        return str;
-    }
-#endif
-
     GrProcessorSet::Analysis finalize(
             const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
             GrClampType clampType) override {
@@ -227,7 +207,8 @@ private:
                              SkArenaAlloc* arena,
                              const GrSurfaceProxyView* writeView,
                              GrAppliedClip&& appliedClip,
-                             const GrXferProcessor::DstProxyView& dstProxyView) override {
+                             const GrXferProcessor::DstProxyView& dstProxyView,
+                             GrXferBarrierFlags renderPassXferBarriers) override {
         const VertexSpec vertexSpec = this->vertexSpec();
 
         GrGeometryProcessor* gp = GrQuadPerEdgeAA::MakeProcessor(arena, vertexSpec);
@@ -236,13 +217,15 @@ private:
         fProgramInfo = fHelper.createProgramInfoWithStencil(caps, arena, writeView,
                                                             std::move(appliedClip),
                                                             dstProxyView, gp,
-                                                            vertexSpec.primitiveType());
+                                                            vertexSpec.primitiveType(),
+                                                            renderPassXferBarriers);
     }
 
     void onPrePrepareDraws(GrRecordingContext* context,
                            const GrSurfaceProxyView* writeView,
                            GrAppliedClip* clip,
-                           const GrXferProcessor::DstProxyView& dstProxyView) override {
+                           const GrXferProcessor::DstProxyView& dstProxyView,
+                           GrXferBarrierFlags renderPassXferBarriers) override {
         TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
         SkASSERT(!fPrePreparedVertices);
@@ -253,7 +236,7 @@ private:
         GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip::Disabled();
 
         this->createProgramInfo(context->priv().caps(), arena, writeView,
-                                std::move(appliedClip), dstProxyView);
+                                std::move(appliedClip), dstProxyView, renderPassXferBarriers);
 
         context->priv().recordProgramInfo(fProgramInfo);
 
@@ -385,6 +368,24 @@ private:
         return CombineResult::kMerged;
     }
 
+#if GR_TEST_UTILS
+    SkString onDumpInfo() const override {
+        SkString str = SkStringPrintf("# draws: %u\n", fQuads.count());
+        str.appendf("Device quad type: %u, local quad type: %u\n",
+                    (uint32_t) fQuads.deviceQuadType(), (uint32_t) fQuads.localQuadType());
+        str += fHelper.dumpInfo();
+        int i = 0;
+        auto iter = fQuads.iterator();
+        while(iter.next()) {
+            const ColorAndAA& info = iter.metadata();
+            str += dump_quad_info(i, iter.deviceQuad(), iter.localQuad(),
+                                  info.fColor, info.fAAFlags);
+            i++;
+        }
+        return str;
+    }
+#endif
+
     bool canAddQuads(int numQuads, GrAAType aaType) {
         // The new quad's aa type should be the same as the first quad's or none, except when the
         // first quad's aa type was already downgraded to none, in which case the stored type must
@@ -458,7 +459,7 @@ private:
     sk_sp<const GrBuffer> fIndexBuffer;
     int fBaseVertex;
 
-    typedef GrMeshDrawOp INHERITED;
+    using INHERITED = GrMeshDrawOp;
 };
 
 } // anonymous namespace

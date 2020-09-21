@@ -117,26 +117,20 @@ DEF_TEST(TypefaceRoundTrip, reporter) {
 
 DEF_TEST(FontDescriptorNegativeVariationSerialize, reporter) {
     SkFontDescriptor desc;
-    SkFixed axis = -SK_Fixed1;
-    auto font = std::make_unique<SkMemoryStream>("a", 1, false);
-    desc.setFontData(std::make_unique<SkFontData>(std::move(font), 0, &axis, 1));
+    SkFontArguments::VariationPosition::Coordinate* variation = desc.setVariationCoordinates(1);
+    variation[0] = { 0, -1.0f };
 
     SkDynamicMemoryWStream stream;
     desc.serialize(&stream);
     SkFontDescriptor descD;
     SkFontDescriptor::Deserialize(stream.detachAsStream().get(), &descD);
-    std::unique_ptr<SkFontData> fontData = descD.detachFontData();
-    if (!fontData) {
-        REPORT_FAILURE(reporter, "fontData", SkString());
+
+    if (descD.getVariationCoordinateCount() != 1) {
+        REPORT_FAILURE(reporter, "descD.getVariationCoordinateCount() != 1", SkString());
         return;
     }
 
-    if (fontData->getAxisCount() != 1) {
-        REPORT_FAILURE(reporter, "fontData->getAxisCount() != 1", SkString());
-        return;
-    }
-
-    REPORTER_ASSERT(reporter, fontData->getAxis()[0] == -SK_Fixed1);
+    REPORTER_ASSERT(reporter, descD.getVariation()[0].value == -1.0f);
 };
 
 DEF_TEST(TypefaceAxes, reporter) {
@@ -168,6 +162,9 @@ DEF_TEST(TypefaceAxes, reporter) {
         return;  // The number of axes is unknown.
     }
     REPORTER_ASSERT(reporter, count == numberOfAxesInDistortable);
+
+    // Variable font conservative bounds don't vary, so ensure they aren't reported.
+    REPORTER_ASSERT(reporter, typeface->getBounds().isEmpty());
 
     SkFontArguments::VariationPosition::Coordinate positionRead[numberOfAxesInDistortable];
     count = typeface->getVariationDesignPosition(positionRead, SK_ARRAY_COUNT(positionRead));

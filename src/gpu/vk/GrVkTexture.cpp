@@ -34,6 +34,7 @@ GrVkTexture::GrVkTexture(GrVkGpu* gpu,
     SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == info.fLevelCount));
     // We don't support creating external GrVkTextures
     SkASSERT(!info.fYcbcrConversionInfo.isValid() || !info.fYcbcrConversionInfo.fExternalFormat);
+    SkASSERT(SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT));
     this->registerWithCache(budgeted);
     if (GrVkFormatIsCompressed(info.fFormat)) {
         this->setReadOnly();
@@ -52,6 +53,7 @@ GrVkTexture::GrVkTexture(GrVkGpu* gpu, SkISize dimensions, const GrVkImageInfo& 
         , fTextureView(view)
         , fDescSetCache(kMaxCachedDescSets) {
     SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == info.fLevelCount));
+    SkASSERT(SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT));
     if (ioType == kRead_GrIOType) {
         this->setReadOnly();
     }
@@ -75,6 +77,7 @@ GrVkTexture::GrVkTexture(GrVkGpu* gpu,
     // Since this ctor is only called from GrVkTextureRenderTarget, we can't have a ycbcr conversion
     // since we don't support that on render targets.
     SkASSERT(!info.fYcbcrConversionInfo.isValid());
+    SkASSERT(SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT));
 }
 
 sk_sp<GrVkTexture> GrVkTexture::MakeNewTexture(GrVkGpu* gpu, SkBudgeted budgeted,
@@ -280,7 +283,5 @@ const GrVkDescriptorSet* GrVkTexture::cachedSingleDescSet(GrSamplerState state) 
 void GrVkTexture::addDescriptorSetToCache(const GrVkDescriptorSet* descSet, GrSamplerState state) {
     SkASSERT(!fDescSetCache.find(state));
     descSet->ref();
-    fDescSetCache.insert(state,
-                         std::unique_ptr<DescriptorCacheEntry>(
-                                 new DescriptorCacheEntry(descSet, this->getVkGpu())));
+    fDescSetCache.insert(state, std::make_unique<DescriptorCacheEntry>(descSet, this->getVkGpu()));
 }

@@ -33,6 +33,7 @@ class GrPath;
 class GrRenderTargetContext;
 class GrResourceCache;
 class GrResourceProvider;
+class GrSmallPathAtlasMgr;
 class GrStrikeCache;
 class GrSurfaceProxy;
 class GrSwizzle;
@@ -286,17 +287,17 @@ public:
     /**
      * Gets the maximum supported texture size.
      */
-    int maxTextureSize() const;
+    using GrRecordingContext::maxTextureSize;
 
     /**
      * Gets the maximum supported render target size.
      */
-    int maxRenderTargetSize() const;
+    using GrRecordingContext::maxRenderTargetSize;
 
     /**
      * Can a SkImage be created with the given color type.
      */
-    bool colorTypeSupportedAsImage(SkColorType) const;
+    using GrRecordingContext::colorTypeSupportedAsImage;
 
     /**
      * Can a SkSurface be created with the given color type. To check whether MSAA is supported
@@ -389,7 +390,7 @@ public:
 
     // Provides access to functions that aren't part of the public API.
     GrContextPriv priv();
-    const GrContextPriv priv() const;
+    const GrContextPriv priv() const;  // NOLINT(readability-const-return-type)
 
     /** Enumerates all cached GPU resources and dumps their memory to traceMemoryDump. */
     // Chrome is using this!
@@ -456,16 +457,6 @@ public:
                                           GrRenderable,
                                           GrProtected = GrProtected::kNo);
 
-
-    /**
-     * If possible, create an uninitialized backend texture that is compatible with the
-     * provided characterization. The client should ensure that the returned backend texture
-     * is valid.
-     * For the Vulkan backend the layout of the created VkImage will be:
-     *      VK_IMAGE_LAYOUT_UNDEFINED.
-     */
-    GrBackendTexture createBackendTexture(const SkSurfaceCharacterization& characterization);
-
     /**
      * If possible, create a backend texture initialized to a particular color. The client should
      * ensure that the returned backend texture is valid. The client can pass in a finishedProc
@@ -501,22 +492,6 @@ public:
                                           GrMipmapped,
                                           GrRenderable,
                                           GrProtected = GrProtected::kNo,
-                                          GrGpuFinishedProc finishedProc = nullptr,
-                                          GrGpuFinishedContext finishedContext = nullptr);
-
-    /**
-     * If possible, create a backend texture initialized to a particular color that is
-     * compatible with the provided characterization. The client should ensure that the
-     * returned backend texture is valid. The client can pass in a finishedProc to be notified when
-     * the data has been uploaded by the gpu and the texture can be deleted. The client is required
-     * to call GrContext::submit to send the upload work to the gpu. The finishedProc will always
-     * get called even if we failed to create the GrBackendTexture.
-     * For the Vulkan backend the layout of the created VkImage will be:
-     *      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL if texturaeble
-     *      VK_IMAGE_LAYOUT_UNDEFINED                if not textureable
-     */
-    GrBackendTexture createBackendTexture(const SkSurfaceCharacterization& characterization,
-                                          const SkColor4f& color,
                                           GrGpuFinishedProc finishedProc = nullptr,
                                           GrGpuFinishedContext finishedContext = nullptr);
 
@@ -755,6 +730,7 @@ protected:
     bool init() override;
 
     virtual GrAtlasManager* onGetAtlasManager() = 0;
+    virtual GrSmallPathAtlasMgr* onGetSmallPathAtlasMgr() = 0;
 
 private:
     friend class GrDirectContext; // for access to fGpu
@@ -781,7 +757,7 @@ private:
     // TODO: have the GrClipStackClip use renderTargetContexts and rm this friending
     friend class GrContextPriv;
 
-    typedef GrRecordingContext INHERITED;
+    using INHERITED = GrRecordingContext;
 };
 
 #endif

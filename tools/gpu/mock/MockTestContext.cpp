@@ -19,7 +19,7 @@ public:
     MockTestContext() {}
     ~MockTestContext() override {}
 
-    virtual GrBackendApi backend() override { return GrBackendApi::kMock; }
+    GrBackendApi backend() override { return GrBackendApi::kMock; }
 
     void testAbandon() override {}
     void finish() override {}
@@ -35,7 +35,7 @@ protected:
     std::function<void()> onPlatformGetAutoContextRestore() const override { return nullptr; }
 
 private:
-    typedef sk_gpu_test::TestContext INHERITED;
+    using INHERITED = sk_gpu_test::TestContext;
 };
 
 } // anonymous namespace

@@ -23,6 +23,8 @@ struct Expression;
  * read or write that storage location.
  */
 struct Variable : public Symbol {
+    static constexpr Kind kSymbolKind = Kind::kVariable;
+
     enum Storage {
         kGlobal_Storage,
         kInterfaceBlock_Storage,
@@ -30,11 +32,10 @@ struct Variable : public Symbol {
         kParameter_Storage
     };
 
-    Variable(int offset, Modifiers modifiers, StringFragment name, const Type& type,
+    Variable(int offset, Modifiers modifiers, StringFragment name, const Type* type,
              Storage storage, Expression* initialValue = nullptr)
-    : INHERITED(offset, kVariable_Kind, name)
+    : INHERITED(offset, kSymbolKind, name, type)
     , fModifiers(modifiers)
-    , fType(type)
     , fStorage(storage)
     , fInitialValue(initialValue)
     , fReadCount(0)
@@ -48,8 +49,8 @@ struct Variable : public Symbol {
         SkASSERT(!fReadCount && !fWriteCount);
     }
 
-    virtual String description() const override {
-        return fModifiers.description() + fType.fName + " " + fName;
+    String description() const override {
+        return fModifiers.description() + this->type().fName + " " + fName;
     }
 
     bool dead() const {
@@ -64,10 +65,9 @@ struct Variable : public Symbol {
     }
 
     mutable Modifiers fModifiers;
-    const Type& fType;
     const Storage fStorage;
 
-    Expression* fInitialValue = nullptr;
+    const Expression* fInitialValue = nullptr;
 
     // Tracks how many sites read from the variable. If this is zero for a non-out variable (or
     // becomes zero during optimization), the variable is dead and may be eliminated.
@@ -76,7 +76,7 @@ struct Variable : public Symbol {
     // eliminated.
     mutable int fWriteCount;
 
-    typedef Symbol INHERITED;
+    using INHERITED = Symbol;
 };
 
 } // namespace SkSL

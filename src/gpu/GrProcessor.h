@@ -140,7 +140,6 @@ public:
         kGrSampleMaskProcessor_ClassID,
         kGrSweepGradientLayout_ClassID,
         kGrTextureEffect_ClassID,
-        kGrTextureGradientColorizer_ClassID,
         kGrTiledGradientEffect_ClassID,
         kGrTwoPointConicalGradientLayout_ClassID,
         kGrUnrolledBinaryGradientColorizer_ClassID,
@@ -159,16 +158,16 @@ public:
         kStencilResolveProcessor_ClassID,
         kFwidthSquircleTestProcessor_ClassID,
         kSwizzleFragmentProcessor_ClassID,
-        kTessellationTestTriShader_ClassID,
-        kTessellationTestRectShader_ClassID,
+        kTessellate_GrCubicTessellateShader_ClassID,
         kTessellate_GrFillBoundingBoxShader_ClassID,
         kTessellate_GrFillCubicHullShader_ClassID,
         kTessellate_GrFillTriangleShader_ClassID,
         kTessellate_GrMiddleOutCubicShader_ClassID,
         kTessellate_GrStencilTriangleShader_ClassID,
-        kTessellate_GrTessellateCubicShader_ClassID,
-        kTessellate_GrTessellateStrokeShader_ClassID,
-        kTessellate_GrTessellateWedgeShader_ClassID,
+        kTessellate_GrStrokeTessellateShader_ClassID,
+        kTessellate_GrWedgeTessellateShader_ClassID,
+        kTessellationTestTriShader_ClassID,
+        kTessellationTestRectShader_ClassID,
         kTestFP_ClassID,
         kTestRectOp_ClassID,
         kFlatNormalsFP_ClassID,
@@ -185,14 +184,14 @@ public:
     virtual const char* name() const = 0;
 
     /** Human-readable dump of all information */
-#ifdef SK_DEBUG
-    virtual SkString dumpInfo() const {
-        SkString str;
-        str.appendf("Missing data");
-        return str;
+#if GR_TEST_UTILS
+    virtual SkString onDumpInfo() const { return SkString(); }
+
+    virtual SkString dumpInfo() const final {
+        SkString info(name());
+        info.append(this->onDumpInfo());
+        return info;
     }
-#else
-    SkString dumpInfo() const { return SkString("<Processor information unavailable>"); }
 #endif
 
     /**

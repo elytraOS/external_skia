@@ -37,11 +37,11 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 // having unknown values in our arrays can throw off the timing a lot, perhaps
-// handling NaN values is a lot slower. Anyway, this guy is just meant to put
+// handling NaN values is a lot slower. Anyway, this is just meant to put
 // reasonable values in our arrays.
 template <typename T> void init9(T array[9]) {
     SkRandom rand;
@@ -65,7 +65,7 @@ protected:
     }
 private:
     float fArray[9];
-    typedef ScalarBench INHERITED;
+    using INHERITED = ScalarBench;
 };
 
 class ForcedIntComparisonBench : public ScalarBench {
@@ -88,7 +88,7 @@ protected:
 private:
     static const int32_t kPersp1Int = 0x3f800000;
     SkScalar fArray[9];
-    typedef ScalarBench INHERITED;
+    using INHERITED = ScalarBench;
 };
 
 class IsFiniteScalarBench : public ScalarBench {
@@ -119,7 +119,7 @@ private:
     };
     SkScalar fArray[ARRAY_N];
 
-    typedef ScalarBench INHERITED;
+    using INHERITED = ScalarBench;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -158,7 +158,7 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

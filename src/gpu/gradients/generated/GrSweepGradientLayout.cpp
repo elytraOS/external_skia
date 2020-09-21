@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrSweepGradientLayout.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -80,6 +81,7 @@ bool GrSweepGradientLayout::onIsEqual(const GrFragmentProcessor& other) const {
     if (scale != that.scale) return false;
     return true;
 }
+bool GrSweepGradientLayout::usesExplicitReturn() const { return false; }
 GrSweepGradientLayout::GrSweepGradientLayout(const GrSweepGradientLayout& src)
         : INHERITED(kGrSweepGradientLayout_ClassID, src.optimizationFlags())
         , bias(src.bias)
@@ -88,8 +90,13 @@ GrSweepGradientLayout::GrSweepGradientLayout(const GrSweepGradientLayout& src)
     this->setUsesSampleCoordsDirectly();
 }
 std::unique_ptr<GrFragmentProcessor> GrSweepGradientLayout::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrSweepGradientLayout(*this));
+    return std::make_unique<GrSweepGradientLayout>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrSweepGradientLayout::onDumpInfo() const {
+    return SkStringPrintf("(bias=%f, scale=%f)", bias, scale);
+}
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrSweepGradientLayout);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrSweepGradientLayout::TestCreate(GrProcessorTestData* d) {

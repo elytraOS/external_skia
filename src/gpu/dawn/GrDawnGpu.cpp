@@ -16,7 +16,7 @@
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrPipeline.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/GrTexture.h"
@@ -136,11 +136,12 @@ void GrDawnGpu::disconnect(DisconnectType type) {
 ///////////////////////////////////////////////////////////////////////////////
 
 GrOpsRenderPass* GrDawnGpu::getOpsRenderPass(
-            GrRenderTarget* rt, GrStencilAttachment*,
-            GrSurfaceOrigin origin, const SkIRect& bounds,
-            const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
-            const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
+        GrRenderTarget* rt, GrStencilAttachment*,
+        GrSurfaceOrigin origin, const SkIRect& bounds,
+        const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
+        const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
+        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+        GrXferBarrierFlags renderPassXferBarriers) {
     fOpsRenderPass.reset(new GrDawnOpsRenderPass(this, rt, origin, colorInfo, stencilInfo));
     return fOpsRenderPass.get();
 }
@@ -384,9 +385,8 @@ bool GrDawnGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
                 src += origRowBytes;
             }
         }
-        wgpu::BufferCopyView srcBuffer;
+        wgpu::BufferCopyView srcBuffer = {};
         srcBuffer.buffer = static_cast<GrDawnBuffer*>(stagingBuffer.fBuffer)->get();
-        srcBuffer.bytesPerRow = 0; // TODO: remove this once the deprecated fields are gone.
         srcBuffer.layout.offset = stagingBuffer.fOffset;
         srcBuffer.layout.bytesPerRow = rowBytes;
         srcBuffer.layout.rowsPerImage = h;
@@ -497,7 +497,7 @@ void GrDawnGpu::waitOnAllBusyStagingBuffers() {
     }
 }
 
-void GrDawnGpu::takeOwnershipOfStagingBuffer(sk_sp<GrGpuBuffer> buffer) {
+void GrDawnGpu::takeOwnershipOfBuffer(sk_sp<GrGpuBuffer> buffer) {
     fSubmittedStagingBuffers.push_back(std::move(buffer));
 }
 
@@ -561,9 +561,8 @@ bool GrDawnGpu::onCopySurface(GrSurface* dst,
     return true;
 }
 
-static void callback(WGPUBufferMapAsyncStatus status, const void* data, uint64_t dataLength,
-                     void* userdata) {
-    (*reinterpret_cast<const void**>(userdata)) = data;
+static void callback(WGPUBufferMapAsyncStatus status, void* userdata) {
+    *static_cast<bool*>(userdata) = true;
 }
 
 bool GrDawnGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int height,
@@ -589,9 +588,8 @@ bool GrDawnGpu::onReadPixels(GrSurface* surface, int left, int top, int width, i
     srcTexture.texture = tex;
     srcTexture.origin = {(uint32_t) left, (uint32_t) top, 0};
 
-    wgpu::BufferCopyView dstBuffer;
+    wgpu::BufferCopyView dstBuffer = {};
     dstBuffer.buffer = buf;
-    dstBuffer.bytesPerRow = 0; // TODO: remove this once the deprecated fields are gone.
     dstBuffer.layout.offset = 0;
     dstBuffer.layout.bytesPerRow = rowBytes;
     dstBuffer.layout.rowsPerImage = height;
@@ -600,11 +598,12 @@ bool GrDawnGpu::onReadPixels(GrSurface* surface, int left, int top, int width, i
     this->getCopyEncoder().CopyTextureToBuffer(&srcTexture, &dstBuffer, &copySize);
     this->submitToGpu(true);
 
-    const void *readPixelsPtr = nullptr;
-    buf.MapReadAsync(callback, &readPixelsPtr);
-    while (!readPixelsPtr) {
+    bool mapped = false;
+    buf.MapAsync(wgpu::MapMode::Read, 0, 0, callback, &mapped);
+    while (!mapped) {
         device().Tick();
     }
+    const void* readPixelsPtr = buf.GetConstMappedRange();
 
     if (rowBytes == origRowBytes) {
         memcpy(buffer, readPixelsPtr, origSizeInBytes);
@@ -691,7 +690,7 @@ sk_sp<GrDawnProgram> GrDawnGpu::getOrCreateRenderPipeline(
     SkAssertResult(programInfo.backendFormat().asDawnFormat(&colorFormat));
 
     wgpu::TextureFormat stencilFormat = wgpu::TextureFormat::Depth24PlusStencil8;
-    bool hasDepthStencil = rt->renderTargetPriv().getStencilAttachment() != nullptr;
+    bool hasDepthStencil = rt->getStencilAttachment() != nullptr;
 
     sk_sp<GrDawnProgram> program = GrDawnProgramBuilder::Build(
         this, rt, programInfo, colorFormat,

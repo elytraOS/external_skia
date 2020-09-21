@@ -29,6 +29,7 @@
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
+#include "src/sksl/ir/SkSLInlineMarker.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
@@ -194,6 +195,9 @@ protected:
 
     bool matrixConstructHelperIsNeeded(const Constructor& c);
     String getMatrixConstructHelper(const Constructor& c);
+    void assembleMatrixFromMatrix(const Type& sourceMatrix, int rows, int columns);
+    void assembleMatrixFromExpressions(const std::vector<std::unique_ptr<Expression>>& args,
+                                       int rows, int columns);
 
     void writeMatrixTimesEqualHelper(const Type& left, const Type& right, const Type& result);
 
@@ -283,9 +287,9 @@ protected:
     int fUniformBuffer = -1;
     String fRTHeightName;
 
-    typedef CodeGenerator INHERITED;
+    using INHERITED = CodeGenerator;
 };
 
-}
+}  // namespace SkSL
 
 #endif

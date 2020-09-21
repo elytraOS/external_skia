@@ -24,12 +24,6 @@ class GrVkStencilAttachment;
 
 struct GrVkImageInfo;
 
-#ifdef SK_BUILD_FOR_WIN
-// Windows gives bogus warnings about inheriting asTexture/asRenderTarget via dominance.
-#pragma warning(push)
-#pragma warning(disable: 4250)
-#endif
-
 class GrVkRenderTarget: public GrRenderTarget, public virtual GrVkImage {
 public:
     static sk_sp<GrVkRenderTarget> MakeWrappedRenderTarget(GrVkGpu*, SkISize, int sampleCnt,
@@ -43,7 +37,9 @@ public:
 
     GrBackendFormat backendFormat() const override { return this->getBackendFormat(); }
 
-    const GrVkFramebuffer* getFramebuffer(bool withStencil);
+    using SelfDependencyFlags = GrVkRenderPass::SelfDependencyFlags;
+
+    const GrVkFramebuffer* getFramebuffer(bool withStencil, SelfDependencyFlags);
     const GrVkImageView* colorAttachmentView() const { return fColorAttachmentView; }
     const GrManagedResource* msaaImageResource() const {
         if (fMSAAImage) {
@@ -56,32 +52,10 @@ public:
     const GrManagedResource* stencilImageResource() const;
     const GrVkImageView* stencilAttachmentView() const;
 
-    const GrVkRenderPass* getSimpleRenderPass(bool withStencil);
-    GrVkResourceProvider::CompatibleRPHandle compatibleRenderPassHandle(bool withStencil) {
-        SkASSERT(!this->wrapsSecondaryCommandBuffer());
-
-        auto pRPHandle = withStencil ? &fCompatibleStencilRPHandle : &fCompatibleRPHandle;
-        if (!pRPHandle->isValid()) {
-            this->createSimpleRenderPass(withStencil);
-        }
-
-#ifdef SK_DEBUG
-        if (withStencil) {
-            SkASSERT(pRPHandle->isValid() == SkToBool(fCachedStencilRenderPass));
-            SkASSERT(fCachedStencilRenderPass->hasStencilAttachment());
-        } else {
-            SkASSERT(pRPHandle->isValid() == SkToBool(fCachedSimpleRenderPass));
-            SkASSERT(!fCachedSimpleRenderPass->hasStencilAttachment());
-        }
-#endif
-
-        return *pRPHandle;
-    }
-    const GrVkRenderPass* externalRenderPass() const {
-        SkASSERT(this->wrapsSecondaryCommandBuffer());
-        // We use the cached simple render pass to hold the external render pass.
-        return fCachedSimpleRenderPass;
-    }
+    const GrVkRenderPass* getSimpleRenderPass(bool withStencil, SelfDependencyFlags);
+    GrVkResourceProvider::CompatibleRPHandle compatibleRenderPassHandle(bool withStencil,
+                                                                        SelfDependencyFlags);
+    const GrVkRenderPass* externalRenderPass() const;
 
     bool wrapsSecondaryCommandBuffer() const { return fSecondaryCommandBuffer != VK_NULL_HANDLE; }
     VkCommandBuffer getExternalSecondaryCommandBuffer() const {
@@ -108,7 +82,13 @@ public:
                                                  GrVkRenderPass::AttachmentsDescriptor* desc,
                                                  GrVkRenderPass::AttachmentFlags* flags);
 
-    void addResources(GrVkCommandBuffer& commandBuffer, bool withStencil);
+    // So that we don't need to rewrite descriptor sets each time, we keep a cached input descriptor
+    // set on the the RT and simply reuse that descriptor set for this render target only. This call
+    // will not ref the GrVkDescriptorSet so the caller must manually ref it if it wants to keep it
+    // alive.
+    const GrVkDescriptorSet* inputDescSet(GrVkGpu*);
+
+    void addResources(GrVkCommandBuffer& commandBuffer, bool withStencil, SelfDependencyFlags);
 
     void addWrappedGrSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer> cmdBuffer) {
         fGrSecondaryCommandBuffers.push_back(std::move(cmdBuffer));
@@ -172,10 +152,12 @@ private:
                      const GrVkRenderPass* renderPass,
                      VkCommandBuffer secondaryCommandBuffer);
 
+    void setFlags(const GrVkImageInfo& info);
+
     GrVkGpu* getVkGpu() const;
 
-    const GrVkRenderPass* createSimpleRenderPass(bool withStencil);
-    const GrVkFramebuffer* createFramebuffer(bool withStencil);
+    const GrVkRenderPass* createSimpleRenderPass(bool withStencil, SelfDependencyFlags);
+    const GrVkFramebuffer* createFramebuffer(bool withStencil, SelfDependencyFlags);
 
     bool completeStencilAttachment() override;
 
@@ -192,19 +174,16 @@ private:
     std::unique_ptr<GrVkImage> fMSAAImage;
     const GrVkImageView*       fResolveAttachmentView;
 
-    const GrVkFramebuffer*     fCachedFramebuffer;
-    const GrVkFramebuffer*     fCachedStencilFramebuffer;
+    // We can have a renderpass with and without stencil, input attachment dependency, and advanced
+    // blend dependency. All three being completely orthogonal. Thus we have a total of 8 types of
+    // render passes.
+    static constexpr int kNumCachedRenderPasses = 8;
 
-    // Cached pointers to a simple and stencil render passes. The render target should unref them
-    // once it is done with them.
-    const GrVkRenderPass*      fCachedSimpleRenderPass;
-    const GrVkRenderPass*      fCachedStencilRenderPass;
+    const GrVkFramebuffer*                   fCachedFramebuffers[kNumCachedRenderPasses];
+    const GrVkRenderPass*                    fCachedRenderPasses[kNumCachedRenderPasses];
+    GrVkResourceProvider::CompatibleRPHandle fCompatibleRPHandles[kNumCachedRenderPasses];
 
-    // This is a handle to be used to quickly get a GrVkRenderPass that is compatible with
-    // this render target if its stencil buffer is ignored.
-    GrVkResourceProvider::CompatibleRPHandle fCompatibleRPHandle;
-    // Same as above but taking the render target's stencil buffer into account
-    GrVkResourceProvider::CompatibleRPHandle fCompatibleStencilRPHandle;
+    const GrVkDescriptorSet* fCachedInputDescriptorSet = nullptr;
 
     // If this render target wraps an external VkCommandBuffer, then this handle will be that
     // VkCommandBuffer and not VK_NULL_HANDLE. In this case the render target will not be backed by

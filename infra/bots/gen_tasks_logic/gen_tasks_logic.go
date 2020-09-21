@@ -392,10 +392,7 @@ func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	}
 
 	// Attempts.
-	if b.extraConfig("Framework") && b.extraConfig("Android", "G3") {
-		// Both bots can be long running. No need to retry them.
-		b.attempts(1)
-	} else if !b.role("Build", "Upload") && b.extraConfig("ASAN", "MSAN", "TSAN", "Valgrind") {
+	if !b.role("Build", "Upload") && b.extraConfig("ASAN", "MSAN", "TSAN", "Valgrind") {
 		// Sanitizers often find non-deterministic issues that retries would hide.
 		b.attempts(1)
 	} else {
@@ -445,7 +442,7 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "OOPRDDL", "T8888",
 				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
 				"GpuTess", "NonNVPR", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
-				"SkottieFrames", "RenderSKP"}
+				"SkottieFrames", "RenderSKP", "CanvasPerf"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -575,6 +572,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 		if b.parts["model"] == "iPhone11" {
 			d["os"] = "iOS-13.6"
 		}
+		if b.parts["model"] == "iPadPro" {
+			d["os"] = "iOS-13.6"
+		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
 	}
@@ -586,7 +586,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				"AndroidOne":      {"sprout", "MOB30Q"},
 				"GalaxyS6":        {"zerofltetmo", "NRD90M_G920TUVS6FRC1"},
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
-				"GalaxyS9":        {"starlte", "R16NW_G960FXXU2BRJ8"}, // This is Oreo.
+				"GalaxyS9":        {"starlte", "QP1A.190711.020"}, // This is Android10.
 				"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
 				"MotoG4":          {"athene", "NPJS25.93-14.7-8"},
 				"NVIDIA_Shield":   {"foster", "OPR6.170623.010_3507953_1441.7411"},
@@ -1135,6 +1135,23 @@ func (b *jobBuilder) checkGeneratedFiles() {
 	})
 }
 
+// checkGnToBp verifies that the gn_to_bp.py script continues to work.
+func (b *jobBuilder) checkGnToBp() {
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.isolate("compile.isolate")
+		b.dep(b.buildTaskDrivers())
+		b.cmd("./run_gn_to_bp",
+			"--local=false",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--alsologtostderr")
+		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
+		b.usesPython()
+		b.serviceAccount(b.cfg.ServiceAccountHousekeeper)
+	})
+}
+
 // housekeeper generates a Housekeeper task.
 func (b *jobBuilder) housekeeper() {
 	b.addTask(b.Name, func(b *taskBuilder) {
@@ -1147,33 +1164,28 @@ func (b *jobBuilder) housekeeper() {
 	})
 }
 
-// androidFrameworkCompile generates an Android Framework Compile task. Returns
-// the name of the last task in the generated chain of tasks, which the Job
-// should add as a dependency.
-func (b *jobBuilder) androidFrameworkCompile() {
-	b.addTask(b.Name, func(b *taskBuilder) {
-		b.recipeProps(EXTRA_PROPS)
-		b.kitchenTask("android_compile", OUTPUT_NONE)
-		b.isolate("compile_android_framework.isolate")
-		b.serviceAccount("skia-android-framework-compile@skia-swarming-bots.iam.gserviceaccount.com")
-		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
-		b.timeout(2 * time.Hour)
-		b.usesGit()
-	})
-}
-
 // g3FrameworkCanary generates a G3 Framework Canary task. Returns
 // the name of the last task in the generated chain of tasks, which the Job
 // should add as a dependency.
 func (b *jobBuilder) g3FrameworkCanary() {
 	b.addTask(b.Name, func(b *taskBuilder) {
-		b.recipeProps(EXTRA_PROPS)
-		b.kitchenTask("g3_canary", OUTPUT_NONE)
-		b.isolate("canary.isolate")
-		b.serviceAccount("skia-g3-framework-compile@skia-swarming-bots.iam.gserviceaccount.com")
+		b.isolate("empty.isolate")
+		b.dep(b.buildTaskDrivers())
+		b.cmd("./g3_canary",
+			"--local=false",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--repo", specs.PLACEHOLDER_REPO,
+			"--revision", specs.PLACEHOLDER_REVISION,
+			"--patch_issue", specs.PLACEHOLDER_ISSUE,
+			"--patch_set", specs.PLACEHOLDER_PATCHSET,
+			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--alsologtostderr")
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
+		b.cipd(CIPD_PKG_LUCI_AUTH)
+		b.serviceAccount("skia-g3-framework-compile@skia-swarming-bots.iam.gserviceaccount.com")
 		b.timeout(3 * time.Hour)
-		b.usesGit()
 		b.attempts(1)
 	})
 }
@@ -1457,7 +1469,7 @@ func (b *jobBuilder) puppeteer() {
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 
 		webglversion := "2"
-		if (b.extraConfig("WebGL1")) {
+		if b.extraConfig("WebGL1") {
 			webglversion = "1"
 		}
 
@@ -1500,6 +1512,25 @@ func (b *jobBuilder) puppeteer() {
 				"--task_name", b.Name,
 				"--canvaskit_bin_path", "./build",
 				"--skps_path", "./skp",
+				"--node_bin_path", "./node/node/bin",
+				"--benchmark_path", "./tools/perf-canvaskit-puppeteer",
+				"--output_path", OUTPUT_PERF,
+				"--os_trace", b.parts["os"],
+				"--model_trace", b.parts["model"],
+				"--cpu_or_gpu_trace", b.parts["cpu_or_gpu"],
+				"--cpu_or_gpu_value_trace", b.parts["cpu_or_gpu_value"],
+				"--webgl_version", webglversion,
+				"--alsologtostderr",
+			)
+			b.asset("skp")
+		} else if b.extraConfig("CanvasPerf") { // refers to the canvas_perf.js test suite
+			b.cmd(
+				"./perf_puppeteer_canvas",
+				"--project_id", "skia-swarming-bots",
+				"--git_hash", specs.PLACEHOLDER_REVISION,
+				"--task_id", specs.PLACEHOLDER_TASK_ID,
+				"--task_name", b.Name,
+				"--canvaskit_bin_path", "./build",
 				"--node_bin_path", "./node/node/bin",
 				"--benchmark_path", "./tools/perf-canvaskit-puppeteer",
 				"--output_path", OUTPUT_PERF,

@@ -7,6 +7,52 @@
 #include "include/private/SkVx.h"
 #include "src/core/SkVM.h"
 
+// Ideally this is (x*y + 0x2000)>>14,
+// but to let use vpmulhrsw we'll approximate that as ((x*y + 0x4000)>>15)<<1.
+template <int N>
+static inline skvx::Vec<N,int16_t> mul_q14(const skvx::Vec<N,int16_t>& x,
+                                           const skvx::Vec<N,int16_t>& y) {
+#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_AVX2
+    if constexpr (N == 16) {
+        return skvx::bit_pun<skvx::Vec<N,int16_t>>(_mm256_mulhrs_epi16(skvx::bit_pun<__m256i>(x),
+                                                                       skvx::bit_pun<__m256i>(y)))
+            << 1;
+    }
+#endif
+#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
+    if constexpr (N == 8) {
+        return skvx::bit_pun<skvx::Vec<N,int16_t>>(_mm_mulhrs_epi16(skvx::bit_pun<__m128i>(x),
+                                                                    skvx::bit_pun<__m128i>(y)))
+            << 1;
+    }
+#endif
+    // TODO: NEON specialization with vqrdmulh.s16?
+
+    // Try to recurse onto the specializations above.
+    if constexpr (N > 8) {
+        return join(mul_q14(x.lo, y.lo),
+                    mul_q14(x.hi, y.hi));
+    }
+    return skvx::cast<int16_t>((skvx::cast<int>(x) *
+                                skvx::cast<int>(y) + 0x4000)>>15 ) <<1;
+}
+
+template <int N>
+static inline skvx::Vec<N,int> gather32(const int* ptr, const skvx::Vec<N,int>& ix) {
+#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_AVX2
+    if constexpr (N == 8) {
+        return skvx::bit_pun<skvx::Vec<N,int>>(
+                _mm256_i32gather_epi32(ptr, skvx::bit_pun<__m256i>(ix), 4));
+    }
+#endif
+    // Try to recurse on specializations, falling back on standard scalar map()-based impl.
+    if constexpr (N > 8) {
+        return join(gather32(ptr, ix.lo),
+                    gather32(ptr, ix.hi));
+    }
+    return map(ix, [&](int i) { return ptr[i]; });
+}
+
 namespace SK_OPTS_NS {
 
     inline void interpret_skvm(const skvm::InterpreterInstruction insts[], const int ninsts,
@@ -16,11 +62,10 @@ namespace SK_OPTS_NS {
         using namespace skvm;
 
         // We'll operate in SIMT style, knocking off K-size chunks from n while possible.
-        // We noticed quad-pumping is slower than single-pumping and both were slower than double.
     #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_AVX2
-        constexpr int K = 16;
+        constexpr int K = 32;  // 1024-bit: 4 ymm or 2 zmm at a time
     #else
-        constexpr int K = 8;
+        constexpr int K = 8;   // 256-bit: 2 xmm, 2 v-registers, etc.
     #endif
         using I32 = skvx::Vec<K, int>;
         using F32 = skvx::Vec<K, float>;
@@ -29,10 +74,15 @@ namespace SK_OPTS_NS {
         using U16 = skvx::Vec<K, uint16_t>;
         using  U8 = skvx::Vec<K, uint8_t>;
 
+        using I16x2 = skvx::Vec<2*K,  int16_t>;
+        using U16x2 = skvx::Vec<2*K, uint16_t>;
+
         union Slot {
             F32   f32;
             I32   i32;
             U32   u32;
+            I16x2 i16x2;
+            U16x2 u16x2;
         };
 
         Slot                     few_regs[16];
@@ -100,18 +150,15 @@ namespace SK_OPTS_NS {
                     STRIDE_1(Op::load8 ): r[d].i32 = 0; memcpy(&r[d].i32, args[immy], 1); break;
                     STRIDE_1(Op::load16): r[d].i32 = 0; memcpy(&r[d].i32, args[immy], 2); break;
                     STRIDE_1(Op::load32): r[d].i32 = 0; memcpy(&r[d].i32, args[immy], 4); break;
-                    STRIDE_1(Op::load64_lo):
-                        r[d].i32 = 0; memcpy(&r[d].i32, (char*)args[immy] + 0, 4); break;
-                    STRIDE_1(Op::load64_hi):
-                        r[d].i32 = 0; memcpy(&r[d].i32, (char*)args[immy] + 4, 4); break;
+                    STRIDE_1(Op::load64):
+                        r[d].i32 = 0; memcpy(&r[d].i32, (char*)args[immy] + 4*immz, 4); break;
 
                     STRIDE_K(Op::load8 ): r[d].i32= skvx::cast<int>(U8 ::Load(args[immy])); break;
                     STRIDE_K(Op::load16): r[d].i32= skvx::cast<int>(U16::Load(args[immy])); break;
                     STRIDE_K(Op::load32): r[d].i32=                 I32::Load(args[immy]) ; break;
-                    STRIDE_K(Op::load64_lo):
-                        r[d].i32 = skvx::cast<int>(U64::Load(args[immy]) & 0xffff'ffff); break;
-                    STRIDE_K(Op::load64_hi):
-                        r[d].i32 = skvx::cast<int>(U64::Load(args[immy]) >> 32); break;
+                    STRIDE_K(Op::load64):
+                        // Low 32 bits if immz=0, or high 32 bits if immz=1.
+                        r[d].i32 = skvx::cast<int>(U64::Load(args[immy]) >> (32*immz)); break;
 
                     // The pointer we base our gather on is loaded indirectly from a uniform:
                     //     - args[immy] is the uniform holding our gather base pointer somewhere;
@@ -119,49 +166,60 @@ namespace SK_OPTS_NS {
                     //     - memcpy() loads the gather base and into a pointer of the right type.
                     // After all that we have an ordinary (uniform) pointer `ptr` to load from,
                     // and we then gather from it using the varying indices in r[x].
-                    STRIDE_1(Op::gather8):
-                        for (int i = 0; i < K; i++) {
-                            const uint8_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
-                            r[d].i32[i] = (i==0) ? ptr[ r[x].i32[i] ] : 0;
-                        } break;
-                    STRIDE_1(Op::gather16):
-                        for (int i = 0; i < K; i++) {
-                            const uint16_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
-                            r[d].i32[i] = (i==0) ? ptr[ r[x].i32[i] ] : 0;
-                        } break;
-                    STRIDE_1(Op::gather32):
-                        for (int i = 0; i < K; i++) {
-                            const int* ptr;
-                            memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
-                            r[d].i32[i] = (i==0) ? ptr[ r[x].i32[i] ] : 0;
-                        } break;
+                    STRIDE_1(Op::gather8): {
+                        const uint8_t* ptr;
+                        memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
+                        r[d].i32 = ptr[ r[x].i32[0] ];
+                    } break;
+                    STRIDE_1(Op::gather16): {
+                        const uint16_t* ptr;
+                        memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
+                        r[d].i32 = ptr[ r[x].i32[0] ];
+                    } break;
+                    STRIDE_1(Op::gather32): {
+                        const int* ptr;
+                        memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
+                        r[d].i32 = ptr[ r[x].i32[0] ];
+                    } break;
 
-                    STRIDE_K(Op::gather8):
-                        for (int i = 0; i < K; i++) {
-                            const uint8_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
-                            r[d].i32[i] = ptr[ r[x].i32[i] ];
-                        } break;
-                    STRIDE_K(Op::gather16):
-                        for (int i = 0; i < K; i++) {
-                            const uint16_t* ptr;
-                            memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
-                            r[d].i32[i] = ptr[ r[x].i32[i] ];
-                        } break;
-                    STRIDE_K(Op::gather32):
-                        for (int i = 0; i < K; i++) {
-                            const int* ptr;
-                            memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
-                            r[d].i32[i] = ptr[ r[x].i32[i] ];
-                        } break;
+                    STRIDE_K(Op::gather8): {
+                        const uint8_t* ptr;
+                        memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
+                        r[d].i32 = map(r[x].i32, [&](int ix) { return (int)ptr[ix]; });
+                    } break;
+                    STRIDE_K(Op::gather16): {
+                        const uint16_t* ptr;
+                        memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
+                        r[d].i32 = map(r[x].i32, [&](int ix) { return (int)ptr[ix]; });
+                    } break;
+                    STRIDE_K(Op::gather32): {
+                        const int* ptr;
+                        memcpy(&ptr, (const uint8_t*)args[immy] + immz, sizeof(ptr));
+                        r[d].i32 = gather32(ptr, r[x].i32);
+                    } break;
 
                 #undef STRIDE_1
                 #undef STRIDE_K
 
                     // Ops that don't interact with memory should never care about the stride.
                 #define CASE(op) case 2*(int)op: /*fallthrough*/ case 2*(int)op+1
+
+                    // These 128-bit ops are implemented serially for simplicity.
+                    CASE(Op::store128): {
+                        int ptr = immz>>1,
+                            lane = immz&1;
+                        U64 src = (skvx::cast<uint64_t>(r[x].u32) << 0 |
+                                   skvx::cast<uint64_t>(r[y].u32) << 32);
+                        for (int i = 0; i < stride; i++) {
+                            memcpy((char*)args[ptr] + 16*i + 8*lane, &src[i], 8);
+                        }
+                    } break;
+
+                    CASE(Op::load128):
+                        r[d].i32 = 0;
+                        for (int i = 0; i < stride; i++) {
+                            memcpy(&r[d].i32[i], (const char*)args[immy] + 16*i+ 4*immz, 4);
+                        } break;
 
                     CASE(Op::assert_true):
                     #ifdef SK_DEBUG
@@ -170,14 +228,16 @@ namespace SK_OPTS_NS {
                             for (int i = 0; i < K; i++) {
                                 SkDebugf("\t%2d: %08x (%g)\n", i, r[y].i32[i], r[y].f32[i]);
                             }
+                            SkASSERT(false);
                         }
-                        SkASSERT(all(r[x].i32));
                     #endif
                     break;
 
                     CASE(Op::index): {
                         const int iota[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,
-                                            16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31};
+                                            16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,
+                                            32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,
+                                            48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 };
                         static_assert(K <= SK_ARRAY_COUNT(iota), "");
 
                         r[d].i32 = n - I32::Load(iota);
@@ -246,12 +306,34 @@ namespace SK_OPTS_NS {
                     CASE(Op::from_half):
                         r[d].f32 = skvx::from_half(skvx::cast<uint16_t>(r[x].i32));
                         break;
+
+                    CASE(Op::add_q14x2): r[d].i16x2 = r[x].i16x2 + r[y].i16x2; break;
+                    CASE(Op::sub_q14x2): r[d].i16x2 = r[x].i16x2 - r[y].i16x2; break;
+                    CASE(Op::mul_q14x2): r[d].i16x2 = mul_q14(r[x].i16x2, r[y].i16x2); break;
+
+                    CASE(Op::shl_q14x2): r[d].i16x2 = r[x].i16x2 << immy; break;
+                    CASE(Op::sra_q14x2): r[d].i16x2 = r[x].i16x2 >> immy; break;
+                    CASE(Op::shr_q14x2): r[d].u16x2 = r[x].u16x2 >> immy; break;
+
+                    CASE(Op::eq_q14x2): r[d].i16x2 = r[x].i16x2 == r[y].i16x2; break;
+                    CASE(Op::gt_q14x2): r[d].i16x2 = r[x].i16x2 >  r[y].i16x2; break;
+
+                    CASE(Op:: min_q14x2): r[d].i16x2 = min(r[x].i16x2, r[y].i16x2); break;
+                    CASE(Op:: max_q14x2): r[d].i16x2 = max(r[x].i16x2, r[y].i16x2); break;
+                    CASE(Op::umin_q14x2): r[d].u16x2 = min(r[x].u16x2, r[y].u16x2); break;
+
+                    // Happily, Clang can see through this one and generates perfect code
+                    // using vpavgw without any help from us!
+                    CASE(Op::uavg_q14x2):
+                        r[d].u16x2 = skvx::cast<uint16_t>( (skvx::cast<int>(r[x].u16x2) +
+                                                            skvx::cast<int>(r[y].u16x2) + 1)>>1 );
+                        break;
                 #undef CASE
                 }
             }
         }
     }
 
-}
+}  // namespace SK_OPTS_NS
 
 #endif//SkVM_opts_DEFINED

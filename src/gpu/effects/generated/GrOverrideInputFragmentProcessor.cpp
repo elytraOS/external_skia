@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrOverrideInputFragmentProcessor.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -73,7 +74,7 @@ GrGLSLFragmentProcessor* GrOverrideInputFragmentProcessor::onCreateGLSLInstance(
 }
 void GrOverrideInputFragmentProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                              GrProcessorKeyBuilder* b) const {
-    b->add32((int32_t)useUniform);
+    b->add32((uint32_t)useUniform);
     if (!useUniform) {
         uint16_t red = SkFloatToHalf(literalColor.fR);
         uint16_t green = SkFloatToHalf(literalColor.fG);
@@ -91,6 +92,7 @@ bool GrOverrideInputFragmentProcessor::onIsEqual(const GrFragmentProcessor& othe
     if (literalColor != that.literalColor) return false;
     return true;
 }
+bool GrOverrideInputFragmentProcessor::usesExplicitReturn() const { return false; }
 GrOverrideInputFragmentProcessor::GrOverrideInputFragmentProcessor(
         const GrOverrideInputFragmentProcessor& src)
         : INHERITED(kGrOverrideInputFragmentProcessor_ClassID, src.optimizationFlags())
@@ -100,5 +102,14 @@ GrOverrideInputFragmentProcessor::GrOverrideInputFragmentProcessor(
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrOverrideInputFragmentProcessor::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrOverrideInputFragmentProcessor(*this));
+    return std::make_unique<GrOverrideInputFragmentProcessor>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrOverrideInputFragmentProcessor::onDumpInfo() const {
+    return SkStringPrintf(
+            "(useUniform=%s, uniformColor=half4(%f, %f, %f, %f), literalColor=half4(%f, %f, %f, "
+            "%f))",
+            (useUniform ? "true" : "false"), uniformColor.fR, uniformColor.fG, uniformColor.fB,
+            uniformColor.fA, literalColor.fR, literalColor.fG, literalColor.fB, literalColor.fA);
+}
+#endif

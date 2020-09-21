@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrMixerEffect.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -61,10 +62,14 @@ bool GrMixerEffect::onIsEqual(const GrFragmentProcessor& other) const {
     if (weight != that.weight) return false;
     return true;
 }
+bool GrMixerEffect::usesExplicitReturn() const { return false; }
 GrMixerEffect::GrMixerEffect(const GrMixerEffect& src)
         : INHERITED(kGrMixerEffect_ClassID, src.optimizationFlags()), weight(src.weight) {
     this->cloneAndRegisterAllChildProcessors(src);
 }
 std::unique_ptr<GrFragmentProcessor> GrMixerEffect::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrMixerEffect(*this));
+    return std::make_unique<GrMixerEffect>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrMixerEffect::onDumpInfo() const { return SkStringPrintf("(weight=%f)", weight); }
+#endif

@@ -10,25 +10,10 @@
 #include "include/core/SkYUVAIndex.h"
 #include "src/core/SkNextID.h"
 
-#if SK_SUPPORT_GPU
-#include "include/gpu/GrDirectContext.h"
-#endif
-
 SkImageGenerator::SkImageGenerator(const SkImageInfo& info, uint32_t uniqueID)
     : fInfo(info)
     , fUniqueID(kNeedNewImageUniqueID == uniqueID ? SkNextID::ImageID() : uniqueID)
 {}
-
-bool SkImageGenerator::isValid(GrContext* context) const {
-#if SK_SUPPORT_GPU
-    return this->isValid(static_cast<GrRecordingContext*>(context));
-#else
-    if (context) {
-        return false;
-    }
-    return this->isValid(static_cast<GrRecordingContext*>(nullptr));
-#endif
-}
 
 bool SkImageGenerator::getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes) {
     if (kUnknown_SkColorType == info.colorType()) {
@@ -43,6 +28,18 @@ bool SkImageGenerator::getPixels(const SkImageInfo& info, void* pixels, size_t r
 
     Options defaultOpts;
     return this->onGetPixels(info, pixels, rowBytes, defaultOpts);
+}
+
+bool SkImageGenerator::queryYUVAInfo(const SkYUVAPixmapInfo::SupportedDataTypes& supportedDataTypes,
+                                     SkYUVAPixmapInfo* yuvaPixmapInfo) const {
+    SkASSERT(yuvaPixmapInfo);
+
+    return this->onQueryYUVAInfo(supportedDataTypes, yuvaPixmapInfo) &&
+           yuvaPixmapInfo->isSupported(supportedDataTypes);
+}
+
+bool SkImageGenerator::getYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) {
+    return this->onGetYUVAPlanes(yuvaPixmaps);
 }
 
 bool SkImageGenerator::queryYUVA8(SkYUVASizeInfo* sizeInfo,

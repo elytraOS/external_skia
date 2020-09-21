@@ -9,6 +9,7 @@
 #define SKSL_VARIABLEREFERENCE
 
 #include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLVariable.h"
 
 namespace SkSL {
 
@@ -22,6 +23,8 @@ class IRGenerator;
  * there is only one Variable 'x', but two VariableReferences to it.
  */
 struct VariableReference : public Expression {
+    static constexpr Kind kExpressionKind = Kind::kVariableReference;
+
     enum RefKind {
         kRead_RefKind,
         kWrite_RefKind,
@@ -58,10 +61,6 @@ struct VariableReference : public Expression {
         return (fVariable.fModifiers.fFlags & Modifiers::kUniform_Flag) != 0;
     }
 
-    int nodeCount() const override {
-        return 1;
-    }
-
     std::unique_ptr<Expression> clone() const override {
         return std::unique_ptr<Expression>(new VariableReference(fOffset, fVariable, fRefKind));
     }
@@ -80,9 +79,9 @@ struct VariableReference : public Expression {
     RefKind fRefKind;
 
 private:
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

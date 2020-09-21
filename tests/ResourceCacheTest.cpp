@@ -13,7 +13,8 @@
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrTexture.h"
@@ -84,9 +85,7 @@ static bool is_rendering_and_not_angle_es3(sk_gpu_test::GrContextFactory::Contex
     return sk_gpu_test::GrContextFactory::IsRenderingContext(type);
 }
 
-static GrStencilAttachment* get_SB(GrRenderTarget* rt) {
-    return rt->renderTargetPriv().getStencilAttachment();
-}
+static GrStencilAttachment* get_SB(GrRenderTarget* rt) { return rt->getStencilAttachment(); }
 
 static sk_sp<GrRenderTarget> create_RT_with_SB(GrResourceProvider* provider,
                                                int size, int sampleCount, SkBudgeted budgeted) {
@@ -330,7 +329,7 @@ private:
     static int fNumAlive;
     SimulatedProperty fProperty;
     bool fIsScratch;
-    typedef GrGpuResource INHERITED;
+    using INHERITED = GrGpuResource;
 };
 int TestResource::fNumAlive = 0;
 
@@ -1246,7 +1245,7 @@ static void test_time_purge(skiatest::Reporter* reporter) {
 
         REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
 
-        // Verify that calling flush() on a GrContext with nothing to do will not trigger resource
+        // Verify that calling flush() on a context with nothing to do will not trigger resource
         // eviction
         dContext->flushAndSubmit();
         for (int i = 0; i < 10; ++i) {
@@ -1600,12 +1599,12 @@ static sk_sp<GrTexture> make_normal_texture(GrResourceProvider* provider,
                                    SkBudgeted::kYes, GrProtected::kNo);
 }
 
-static sk_sp<GrTextureProxy> make_mipmap_proxy(GrContext* context,
+static sk_sp<GrTextureProxy> make_mipmap_proxy(GrRecordingContext* rContext,
                                                GrRenderable renderable,
                                                SkISize dims,
                                                int sampleCnt) {
-    GrProxyProvider* proxyProvider = context->priv().proxyProvider();
-    const GrCaps* caps = context->priv().caps();
+    GrProxyProvider* proxyProvider = rContext->priv().proxyProvider();
+    const GrCaps* caps = rContext->priv().caps();
 
 
     const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,

@@ -18,9 +18,11 @@ namespace SkSL {
  * An external function invocation.
  */
 struct ExternalFunctionCall : public Expression {
-    ExternalFunctionCall(int offset, const Type& type, ExternalValue* function,
+    static constexpr Kind kExpressionKind = Kind::kExternalFunctionCall;
+
+    ExternalFunctionCall(int offset, const Type* type, const ExternalValue* function,
                          std::vector<std::unique_ptr<Expression>> arguments)
-    : INHERITED(offset, kExternalFunctionCall_Kind, type)
+    : INHERITED(offset, kExpressionKind, type)
     , fFunction(function)
     , fArguments(std::move(arguments)) {}
 
@@ -36,21 +38,13 @@ struct ExternalFunctionCall : public Expression {
         return false;
     }
 
-    int nodeCount() const override {
-        int result = 1;
-        for (const auto& a : fArguments) {
-            result += a->nodeCount();
-        }
-        return result;
-    }
-
     std::unique_ptr<Expression> clone() const override {
         std::vector<std::unique_ptr<Expression>> cloned;
         for (const auto& arg : fArguments) {
             cloned.push_back(arg->clone());
         }
         return std::unique_ptr<Expression>(new ExternalFunctionCall(fOffset,
-                                                                    fType,
+                                                                    &this->type(),
                                                                     fFunction,
                                                                     std::move(cloned)));
     }
@@ -67,12 +61,12 @@ struct ExternalFunctionCall : public Expression {
         return result;
     }
 
-    ExternalValue* fFunction;
+    const ExternalValue* fFunction;
     std::vector<std::unique_ptr<Expression>> fArguments;
 
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif

@@ -72,7 +72,8 @@ public:
             , fShouldCreateMipMaps(true)
             , fUsesGLFBO0(false)
             , fIsTextureable(true)
-            , fIsProtected(GrProtected::kNo) {
+            , fIsProtected(GrProtected::kNo)
+            , fVkRTSupportsInputAttachment(false) {
 #ifdef SK_VULKAN
         if (GrBackendApi::kVulkan == rContext->backend()) {
             const GrVkCaps* vkCaps = (const GrVkCaps*) rContext->priv().caps();
@@ -90,6 +91,9 @@ public:
     void setTextureable(bool isTextureable) { fIsTextureable = isTextureable; }
     void setShouldCreateMipMaps(bool shouldCreateMipMaps) {
         fShouldCreateMipMaps = shouldCreateMipMaps;
+    }
+    void setVkRTInputAttachmentSupport(bool inputSupport) {
+        fVkRTSupportsInputAttachment = inputSupport;
     }
 
     // Modify the SurfaceParameters in just one way
@@ -163,7 +167,8 @@ public:
         SkSurfaceCharacterization c = dContext->threadSafeProxy()->createCharacterization(
                                                 maxResourceBytes, ii, backendFormat, fSampleCount,
                                                 fOrigin, fSurfaceProps, fShouldCreateMipMaps,
-                                                fUsesGLFBO0, fIsTextureable, fIsProtected);
+                                                fUsesGLFBO0, fIsTextureable, fIsProtected,
+                                                fVkRTSupportsInputAttachment);
         return c;
     }
 
@@ -264,6 +269,7 @@ private:
     bool                fUsesGLFBO0;
     bool                fIsTextureable;
     GrProtected         fIsProtected;
+    bool                fVkRTSupportsInputAttachment;
 };
 
 // Test out operator== && operator!=
@@ -342,7 +348,9 @@ void DDLSurfaceCharacterizationTestImpl(GrDirectContext* dContext, skiatest::Rep
     // First, create a DDL using the stock SkSurface parameters
     {
         SurfaceParameters params(dContext);
-
+        if (dContext->backend() == GrBackendApi::kVulkan) {
+            params.setVkRTInputAttachmentSupport(true);
+        }
         ddl = params.createDDL(dContext);
         SkAssertResult(ddl);
 
@@ -603,6 +611,10 @@ void DDLSurfaceCharacterizationTestImpl(GrDirectContext* dContext, skiatest::Rep
     // Exercise the createFBO0 method
     if (dContext->backend() == GrBackendApi::kOpenGL) {
         SurfaceParameters params(dContext);
+        // If the original characterization is textureable then we will fail trying to make an
+        // FBO0 characterization
+        params.setTextureable(false);
+        params.setShouldCreateMipMaps(false);
         GrBackendTexture backend;
 
         sk_sp<SkSurface> s = params.make(dContext, &backend);
@@ -736,6 +748,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLNonTextureabilityTest, reporter, ctxInfo) 
             SurfaceParameters params(context);
             params.setShouldCreateMipMaps(false);
             params.setTextureable(false);
+            if (context->backend() == GrBackendApi::kVulkan) {
+                params.setVkRTInputAttachmentSupport(true);
+            }
 
             ddl = params.createDDL(context);
             SkAssertResult(ddl);
@@ -745,6 +760,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLNonTextureabilityTest, reporter, ctxInfo) 
         SurfaceParameters params(context);
         params.setShouldCreateMipMaps(textureability);
         params.setTextureable(textureability);
+        if (context->backend() == GrBackendApi::kVulkan) {
+            params.setVkRTInputAttachmentSupport(true);
+        }
 
         GrBackendTexture backend;
         sk_sp<SkSurface> s = params.make(context, &backend);
@@ -803,13 +821,6 @@ static void test_make_render_target(skiatest::Reporter* reporter,
     // Make an SkSurface from scratch
     {
         sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(dContext, c, SkBudgeted::kYes);
-        REPORTER_ASSERT(reporter, s);
-        REPORTER_ASSERT(reporter, s->isCompatible(c));
-    }
-
-    // Make an SkSurface that wraps the existing backend texture
-    {
-        sk_sp<SkSurface> s = SkSurface::MakeFromBackendTexture(dContext, c, backend);
         REPORTER_ASSERT(reporter, s);
         REPORTER_ASSERT(reporter, s->isCompatible(c));
     }
@@ -877,61 +888,52 @@ enum class DDLStage { kMakeImage, kDrawImage, kDetach, kDrawDDL };
 
 // This tests the ability to create and use wrapped textures in a DDL world
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
+    auto dContext = ctxInfo.directContext();
 
     GrBackendTexture backendTex;
-    CreateBackendTexture(context, &backendTex, kSize, kSize, kRGBA_8888_SkColorType,
+    CreateBackendTexture(dContext, &backendTex, kSize, kSize, kRGBA_8888_SkColorType,
             SkColors::kTransparent, GrMipmapped::kNo, GrRenderable::kNo, GrProtected::kNo);
     if (!backendTex.isValid()) {
         return;
     }
 
-    SurfaceParameters params(context);
+    SurfaceParameters params(dContext);
     GrBackendTexture backend;
 
-    sk_sp<SkSurface> s = params.make(context, &backend);
+    sk_sp<SkSurface> s = params.make(dContext, &backend);
     if (!s) {
-        context->deleteBackendTexture(backendTex);
+        dContext->deleteBackendTexture(backendTex);
         return;
     }
 
     SkSurfaceCharacterization c;
     SkAssertResult(s->characterize(&c));
 
-    std::unique_ptr<SkDeferredDisplayListRecorder> recorder(new SkDeferredDisplayListRecorder(c));
+    SkDeferredDisplayListRecorder recorder(c);
 
-    SkCanvas* canvas = recorder->getCanvas();
-    if (!canvas) {
-        s = nullptr;
-        params.cleanUpBackEnd(context, backend);
-        context->deleteBackendTexture(backendTex);
-        return;
-    }
+    SkCanvas* canvas = recorder.getCanvas();
+    SkASSERT(canvas);
 
-    GrContext* deferredContext = canvas->getGrContext();
-    if (!deferredContext) {
+    auto rContext = canvas->recordingContext();
+    if (!rContext) {
         s = nullptr;
-        params.cleanUpBackEnd(context, backend);
-        context->deleteBackendTexture(backendTex);
+        params.cleanUpBackEnd(dContext, backend);
+        dContext->deleteBackendTexture(backendTex);
         return;
     }
 
     // Wrapped Backend Textures are not supported in DDL
-    sk_sp<SkImage> image =
-            SkImage::MakeFromAdoptedTexture(deferredContext, backendTex, kTopLeft_GrSurfaceOrigin,
-                                            kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
-    REPORTER_ASSERT(reporter, !image);
-
     TextureReleaseChecker releaseChecker;
-    image = SkImage::MakeFromTexture(deferredContext, backendTex, kTopLeft_GrSurfaceOrigin,
+    sk_sp<SkImage> image =
+            SkImage::MakeFromTexture(rContext, backendTex, kTopLeft_GrSurfaceOrigin,
                                      kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr,
                                      TextureReleaseChecker::Release, &releaseChecker);
     REPORTER_ASSERT(reporter, !image);
 
-    context->deleteBackendTexture(backendTex);
+    dContext->deleteBackendTexture(backendTex);
 
     s = nullptr;
-    params.cleanUpBackEnd(context, backend);
+    params.cleanUpBackEnd(dContext, backend);
 }
 
 static sk_sp<SkPromiseImageTexture> dummy_fulfill_proc(void*) {
@@ -944,11 +946,11 @@ static void dummy_done_proc(void*) {}
 ////////////////////////////////////////////////////////////////////////////////
 // Test out the behavior of an invalid DDLRecorder
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLInvalidRecorder, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
+    auto dContext = ctxInfo.directContext();
 
     {
         SkImageInfo ii = SkImageInfo::MakeN32Premul(32, 32);
-        sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, ii);
+        sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(dContext, SkBudgeted::kNo, ii);
 
         SkSurfaceCharacterization characterization;
         SkAssertResult(s->characterize(&characterization));
@@ -967,8 +969,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLInvalidRecorder, reporter, ctxInfo) {
         REPORTER_ASSERT(reporter, !recorder.getCanvas());
         REPORTER_ASSERT(reporter, !recorder.detach());
 
-        GrBackendFormat format = context->defaultBackendFormat(kRGBA_8888_SkColorType,
-                                                               GrRenderable::kNo);
+        GrBackendFormat format = dContext->defaultBackendFormat(kRGBA_8888_SkColorType,
+                                                                GrRenderable::kNo);
         SkASSERT(format.isValid());
 
         sk_sp<SkImage> image = recorder.makePromiseTexture(
@@ -983,7 +985,81 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLInvalidRecorder, reporter, ctxInfo) {
                 SkDeferredDisplayListRecorder::PromiseImageApiVersion::kNew);
         REPORTER_ASSERT(reporter, !image);
     }
+}
 
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLCreateCharacterizationFailures, reporter, ctxInfo) {
+    auto dContext = ctxInfo.directContext();
+    size_t maxResourceBytes = dContext->getResourceCacheLimit();
+    auto proxy = dContext->threadSafeProxy().get();
+
+    auto check_create_fails =
+            [proxy, reporter, maxResourceBytes](const GrBackendFormat& backendFormat,
+                                                int width, int height,
+                                                SkColorType ct, bool willUseGLFBO0,
+                                                GrProtected prot,
+                                                bool vkRTSupportsInputAttachment) {
+        const SkSurfaceProps surfaceProps(0x0, kRGB_H_SkPixelGeometry);
+
+        SkImageInfo ii = SkImageInfo::Make(width, height, ct,
+                                           kPremul_SkAlphaType, nullptr);
+
+        SkSurfaceCharacterization c = proxy->createCharacterization(
+                                                maxResourceBytes, ii, backendFormat, 1,
+                                                kBottomLeft_GrSurfaceOrigin, surfaceProps, false,
+                                                willUseGLFBO0, true, prot,
+                                                vkRTSupportsInputAttachment);
+        REPORTER_ASSERT(reporter, !c.isValid());
+    };
+
+    GrBackendFormat goodBackendFormat = dContext->defaultBackendFormat(kRGBA_8888_SkColorType,
+                                                                       GrRenderable::kYes);
+    SkASSERT(goodBackendFormat.isValid());
+
+    GrBackendFormat badBackendFormat;
+    SkASSERT(!badBackendFormat.isValid());
+
+    SkColorType kGoodCT = kRGBA_8888_SkColorType;
+    SkColorType kBadCT = kUnknown_SkColorType;
+
+    static const bool kGoodUseFBO0 = false;
+    static const bool kBadUseFBO0 = true;
+
+    static const bool kGoodVkInputAttachment = false;
+    static const bool kBadVkInputAttachment = true;
+
+    int goodWidth = 64;
+    int goodHeight = 64;
+    int badWidths[] = { 0, 1048576 };
+    int badHeights[] = { 0, 1048576 };
+
+
+    // In each of the check_create_fails calls there is one bad parameter that should cause the
+    // creation of the characterization to fail.
+    check_create_fails(goodBackendFormat, goodWidth, badHeights[0], kGoodCT, kGoodUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    check_create_fails(goodBackendFormat, goodWidth, badHeights[1], kGoodCT, kGoodUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    check_create_fails(goodBackendFormat, badWidths[0], goodHeight, kGoodCT, kGoodUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    check_create_fails(goodBackendFormat, badWidths[1], goodHeight, kGoodCT, kGoodUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    check_create_fails(badBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    check_create_fails(goodBackendFormat, goodWidth, goodHeight, kBadCT, kGoodUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    // This fails because we always try to make a characterization that is textureable and we can't
+    // have UseFBO0 be true and textureable.
+    check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kBadUseFBO0,
+                       GrProtected::kNo, kGoodVkInputAttachment);
+    if (dContext->backend() == GrBackendApi::kVulkan) {
+        // The bad parameter in this case is the GrProtected::kYes since none of our test contexts
+        // are made protected we can't have a protected surface.
+        check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
+                           GrProtected::kYes, kGoodVkInputAttachment);
+    } else {
+        check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
+                           GrProtected::kNo, kBadVkInputAttachment);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -10,6 +10,7 @@
  **************************************************************************************************/
 #include "GrRadialGradientLayout.h"
 
+#include "src/core/SkUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -44,14 +45,18 @@ bool GrRadialGradientLayout::onIsEqual(const GrFragmentProcessor& other) const {
     (void)that;
     return true;
 }
+bool GrRadialGradientLayout::usesExplicitReturn() const { return false; }
 GrRadialGradientLayout::GrRadialGradientLayout(const GrRadialGradientLayout& src)
         : INHERITED(kGrRadialGradientLayout_ClassID, src.optimizationFlags()) {
     this->cloneAndRegisterAllChildProcessors(src);
     this->setUsesSampleCoordsDirectly();
 }
 std::unique_ptr<GrFragmentProcessor> GrRadialGradientLayout::clone() const {
-    return std::unique_ptr<GrFragmentProcessor>(new GrRadialGradientLayout(*this));
+    return std::make_unique<GrRadialGradientLayout>(*this);
 }
+#if GR_TEST_UTILS
+SkString GrRadialGradientLayout::onDumpInfo() const { return SkString(); }
+#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrRadialGradientLayout);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrRadialGradientLayout::TestCreate(GrProcessorTestData* d) {

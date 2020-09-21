@@ -36,7 +36,8 @@ public:
                                                 GrAppliedClip&&,
                                                 const GrXferProcessor::DstProxyView&,
                                                 GrGeometryProcessor*,
-                                                GrPrimitiveType);
+                                                GrPrimitiveType,
+                                                GrXferBarrierFlags renderPassXferBarriers);
 
 
     // using declarations can't be templated, so this is a pass through function instead.
@@ -78,7 +79,7 @@ public:
                       const SkRect& thisBounds, const SkRect& thatBounds,
                       bool ignoreAAType = false) const;
 
-#ifdef SK_DEBUG
+#if GR_TEST_UTILS
     SkString dumpInfo() const;
 #endif
 
@@ -86,7 +87,7 @@ public:
 
 private:
     const GrUserStencilSettings* fStencilSettings;
-    typedef GrSimpleMeshDrawOpHelper INHERITED;
+    using INHERITED = GrSimpleMeshDrawOpHelper;
 };
 
 #endif
