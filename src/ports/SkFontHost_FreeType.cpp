@@ -696,6 +696,23 @@ void SkTypeface_FreeType::getPostScriptGlyphNames(SkString* dstArray) const {
     }
 }
 
+bool SkTypeface_FreeType::onGetPostScriptName(SkString* skPostScriptName) const {
+    AutoFTAccess fta(this);
+    FT_Face face = fta.face();
+    if (!face) {
+        return false;
+    }
+
+    const char* ftPostScriptName = FT_Get_Postscript_Name(face);
+    if (!ftPostScriptName) {
+        return false;
+    }
+    if (skPostScriptName) {
+        *skPostScriptName = ftPostScriptName;
+    }
+    return true;
+}
+
 ///////////////////////////////////////////////////////////////////////////
 
 static bool bothZero(SkScalar a, SkScalar b) {
@@ -1974,17 +1991,17 @@ bool SkTypeface_FreeType::Scanner::scanFont(
         }
     }
 
-    if (name) {
+    if (name != nullptr) {
         name->set(face->family_name);
     }
-    if (style) {
+    if (style != nullptr) {
         *style = SkFontStyle(weight, width, slant);
     }
-    if (isFixedPitch) {
+    if (isFixedPitch != nullptr) {
         *isFixedPitch = FT_IS_FIXED_WIDTH(face);
     }
 
-    if (axes && !GetAxes(face.get(), axes)) {
+    if (axes != nullptr && !GetAxes(face.get(), axes)) {
         return false;
     }
     return true;

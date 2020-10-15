@@ -64,11 +64,10 @@ private:
                             int sampleCnt,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageInfo& msaaInfo,
-                            sk_sp<GrBackendSurfaceMutableStateImpl> msaaMutableState,
-                            const GrVkImageView* colorAttachmentView,
-                            const GrVkImageView* resolveAttachmentView,
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<GrVkAttachment> msaaAttachment,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
+                            sk_sp<const GrVkImageView> resolveAttachmentView,
                             GrMipmapStatus);
 
     // non-MSAA, not-wrapped
@@ -77,8 +76,8 @@ private:
                             SkISize dimensions,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageView* colorAttachmentView,
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
                             GrMipmapStatus);
 
     // MSAA, wrapped
@@ -87,11 +86,10 @@ private:
                             int sampleCnt,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageInfo& msaaInfo,
-                            sk_sp<GrBackendSurfaceMutableStateImpl> msaaMutableState,
-                            const GrVkImageView* colorAttachmentView,
-                            const GrVkImageView* resolveAttachmentView,
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<GrVkAttachment> msaaAttachment,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
+                            sk_sp<const GrVkImageView> resolveAttachmentView,
                             GrMipmapStatus,
                             GrBackendObjectOwnership,
                             GrWrapCacheable);
@@ -101,8 +99,8 @@ private:
                             SkISize dimensions,
                             const GrVkImageInfo& info,
                             sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                            const GrVkImageView* texView,
-                            const GrVkImageView* colorAttachmentView,
+                            sk_sp<const GrVkImageView> texView,
+                            sk_sp<const GrVkImageView> colorAttachmentView,
                             GrMipmapStatus,
                             GrBackendObjectOwnership,
                             GrWrapCacheable);

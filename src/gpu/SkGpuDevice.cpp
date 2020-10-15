@@ -110,12 +110,6 @@ sk_sp<SkGpuDevice> SkGpuDevice::Make(GrRecordingContext* context, SkBudgeted bud
     return sk_sp<SkGpuDevice>(new SkGpuDevice(context, std::move(renderTargetContext), flags));
 }
 
-GrContext* SkGpuDevice::context() const {
-    // CONTEXT TODO: remove this use of 'backdoor'. Short term, we need to use it to support the
-    // SkCanvas::getGrContext and SkSurface::getContext calls.
-    return fContext->priv().backdoor();
-}
-
 static SkImageInfo make_info(GrRenderTargetContext* context, bool opaque) {
     SkColorType colorType = GrColorTypeToSkColorType(context->colorInfo().colorType());
     return SkImageInfo::Make(context->width(), context->height(), colorType,
@@ -252,6 +246,17 @@ void SkGpuDevice::replaceRenderTargetContext(SkSurface::ContentChangeMode mode) 
 ///////////////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
+
+void SkGpuDevice::onClipPath(const SkPath& path, SkClipOp op, bool aa) {
+#if GR_TEST_UTILS
+    if (fContext->priv().options().fAllPathsVolatile && !path.isVolatile()) {
+        this->onClipPath(SkPath(path).setIsVolatile(true), op, aa);
+        return;
+    }
+#endif
+    SkASSERT(op == SkClipOp::kIntersect || op == SkClipOp::kDifference);
+    fClip.clipPath(this->localToDevice(), path, GrAA(aa), op);
+}
 
 void SkGpuDevice::onClipRegion(const SkRegion& globalRgn, SkClipOp op) {
     SkASSERT(op == SkClipOp::kIntersect || op == SkClipOp::kDifference);
@@ -647,6 +652,12 @@ void SkGpuDevice::drawStrokedLine(const SkPoint points[2],
 }
 
 void SkGpuDevice::drawPath(const SkPath& origSrcPath, const SkPaint& paint, bool pathIsMutable) {
+#if GR_TEST_UTILS
+    if (fContext->priv().options().fAllPathsVolatile && !origSrcPath.isVolatile()) {
+        this->drawPath(SkPath(origSrcPath).setIsVolatile(true), paint, true);
+        return;
+    }
+#endif
     ASSERT_SINGLE_OWNER
     if (!origSrcPath.isInverseFillType() && !paint.getPathEffect()) {
         SkPoint points[2];
@@ -770,23 +781,11 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial(const SkIRect& subset, bool force
                                                &this->surfaceProps());
 }
 
-void SkGpuDevice::drawDevice(SkBaseDevice* device,
-                             int left, int top, const SkPaint& paint) {
-    SkASSERT(!paint.getImageFilter());
-    SkASSERT(!paint.getMaskFilter());
-
+void SkGpuDevice::drawDevice(SkBaseDevice* device, const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     // clear of the source device must occur before CHECK_SHOULD_DRAW
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawDevice", fContext.get());
-
-    // drawDevice is defined to be in device coords.
-    SkGpuDevice* dev = static_cast<SkGpuDevice*>(device);
-    sk_sp<SkSpecialImage> srcImg(dev->snapSpecial(SkIRect::MakeWH(dev->width(), dev->height())));
-    if (!srcImg) {
-        return;
-    }
-
-    this->drawSpecial(srcImg.get(), left, top, paint);
+    this->INHERITED::drawDevice(device, paint);
 }
 
 void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
@@ -931,7 +930,12 @@ void SkGpuDevice::drawVertices(const SkVertices* vertices, SkBlendMode mode, con
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkGpuDevice::drawShadow(const SkPath& path, const SkDrawShadowRec& rec) {
-
+#if GR_TEST_UTILS
+    if (fContext->priv().options().fAllPathsVolatile && !path.isVolatile()) {
+        this->drawShadow(SkPath(path).setIsVolatile(true), rec);
+        return;
+    }
+#endif
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawShadow", fContext.get());
 

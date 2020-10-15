@@ -19,9 +19,10 @@ namespace SkSL {
 
 class Context;
 class ErrorReporter;
-struct Expression;
-struct ProgramElement;
-struct Statement;
+class Expression;
+class IRGenerator;
+class ProgramElement;
+class Statement;
 class SymbolTable;
 class Type;
 
@@ -119,6 +120,8 @@ public:
         kSwizzle_Command,
         // uint16 id
         kSymbolRef_Command,
+        // String name, uint16 origSymbolId
+        kSymbolAlias_Command,
         // uint16 owned symbol count, Symbol[] ownedSymbols, uint16 symbol count,
         // (String, uint16/*index*/)[].
         kSymbolTable_Command,
@@ -142,9 +145,11 @@ public:
     };
 
     // src must remain in memory as long as the objects created from it do
-    Rehydrator(Context* context, std::shared_ptr<SymbolTable> symbolTable,
-               ErrorReporter* errorReporter, const uint8_t* src, size_t length)
+    Rehydrator(const Context* context, ModifiersPool* modifiers,
+               std::shared_ptr<SymbolTable> symbolTable, ErrorReporter* errorReporter,
+               const uint8_t* src, size_t length)
         : fContext(*context)
+        , fModifiers(*modifiers)
         , fErrors(errorReporter)
         , fSymbolTable(std::move(symbolTable))
         , fStart(src)
@@ -226,7 +231,8 @@ private:
 
     const Type* type();
 
-    Context& fContext;
+    const Context& fContext;
+    ModifiersPool& fModifiers;
     ErrorReporter* fErrors;
     std::shared_ptr<SymbolTable> fSymbolTable;
     std::vector<const Symbol*> fSymbols;

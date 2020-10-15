@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+ - `CanvasKit.MakePathFromSVGString` was renamed to `CanvasKit.Path.MakeFromSVGString`
+ - `CanvasKit.MakePathFromOp` was renamed to `CanvasKit.Path.MakeFromOp`
+
+### Changed
+ - We now compile CanvasKit with emsdk 2.0.6 when testing and deploying to npm.
+ - We no longer compile with rtti on, saving about 1% in code size.
+
+### Removed
+ - `CanvasKit.MakePathFromCmds`; Was deprecated in favor of `CanvasKit.Path.MakeFromCmds`.
+ - `new CanvasKit.Path(path)` in favor of existing `path.copy()`.
+ - Unused internal APIs (_getRasterN32PremulSurface, Drawable)
+
+### Type Changes (index.d.ts)
+ - Return value for MakeFromCmds correctly reflects the possibility of null.
+
+## [0.19.0] - 2020-10-08
+
+### Breaking
+ - "Sk" has been removed from all names. e.g. `new CanvasKit.SkPaint()` becomes
+   `new CanvasKit.Paint()`. See `./types/index.d.ts` for all the new names.
+
+### Removed
+ - `Surface.captureFrameAsSkPicture`; it was deprecated previously.
+ - `CanvasKit.MakeSkCornerPathEffect`, `CanvasKit.MakeSkDiscretePathEffect`,
+   `CanvasKit.MakeBlurMaskFilter`, `CanvasKit.MakeSkDashPathEffect`,
+   `CanvasKit.MakeLinearGradientShader`, `CanvasKit.MakeRadialGradientShader`,
+   `CanvasKit.MakeTwoPointConicalGradientShader`;  these were deprecated previously and have
+   replacements like `CanvasKit.PathEffect.MakeDash`.
+ - `Canvas.concat44`; it was deprecated previously, just use `Canvas.concat`
+
+## [0.18.1] - 2020-10-06
+
+### Added
+ - Typescript types (and documentation) are now in the types subfolder. We will keep these updated
+   as we make changes to the CanvasKit library.
+
+## [0.18.0] - 2020-10-05
+
+### Breaking
  - SkRect are no longer returned from `CanvasKit.LTRBRect`, `CanvasKit.XYWHRect` nor
    are accepted as JS objects. Instead, the format is 4 floats in either an array, a
    Float32Array or a piece of memory returned by CanvasKit.Malloc. These floats are the
@@ -42,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `SkCanvas.drawAnimatedImage` has been removed in favor of calling
    `SkCanvas.drawImageAtCurrentFrame` or `SkAnimatedImage.makeImageAtCurrentFrame` and then
    `SkCanvas.drawImage`.
+ - `SkTextBlob.MakeFromRSXform` also accepts a (possibly Malloc'd) Float32Array of RSXforms (
+   see SkRSXform for more.)
 
 ### Removed
  - `SkCanvas.drawRoundRect` has been removed in favor of `SkCanvas.drawRRect`
@@ -56,10 +97,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    already have their own representation of Rect. This is experimental because we don't know
    if it's faster/better under real-world use and because we don't want to commit to having these
    for all Rect APIs (and for similar types) until it has baked in a bit.
+ - Added the following to `TextStyle`:
+   - `decorationStyle`
+   - `textBaseline`
+   - `letterSpacing`
+   - `wordSpacing`
+   - `heightMultiplier`
+   - `locale`
+   - `shadows`
+   - `fontFeatures`
+ - Added `strutStyle` to `ParagraphStyle`.
+ - Added `addPlaceholder` to `ParagraphBuilder`.
+ - Added `getRectsForPlaceholders` to `Paragraph`.
+ - `SkFont.getGlyphIDs`, `SkFont.getGlyphBounds`, `SkFont.getGlyphWidths` for turning code points
+   into GlyphIDs and getting the associated metrics with those glyphs. Note: glyph ids are only
+   valid for the font of which they were requested.
+ - `SkTextBlob.MakeFromRSXformGlyphs` and `SkTextBlob.MakeFromGlyphs` as a way to build TextBlobs
+   using GlyphIDs instead of code points.
+ - `CanvasKit.MallocGlyphIDs` as a helper for pre-allocating space on the WASM heap for Glyph IDs.
 
 ### Deprecated
  - `SkAnimatedImage.getCurrentFrame`; prefer `SkAnimatedImage.makeImageAtCurrentFrame` (which
    follows the establishing naming convention).
+ - `SkSurface.captureFrameAsSkPicture` will be removed in a future release. Callers can simply
+   use `SkPictureRecorder` directly.
+ - `CanvasKit.FourFloatArrayHelper` and related helpers (mostly helping with drawAtlas).
+   `CanvasKit.Malloc` is the better tool and will replace these soon.
+ - `SkPathMeasure`; SkContourMeasureIter has all the same functionality and a cleaner pattern.
+
+### Fixed
+ - Addressed Memory leak in `SkCanvas.drawText`.
+ - Made SkTextBlob hang on to less memory during its lifetime.
+ - `SkPath.computeTightBounds()` works again. Like getBounds() it takes an optional argument
+   to put the bounds into.
 
 ## [0.17.3] - 2020-08-05
 

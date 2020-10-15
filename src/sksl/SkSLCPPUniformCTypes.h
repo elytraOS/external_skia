@@ -13,7 +13,7 @@
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
-#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+#if defined(SKSL_STANDALONE) || GR_TEST_UTILS
 
 namespace SkSL {
 
@@ -50,7 +50,7 @@ public:
                                          const Layout& layout);
 
     static const UniformCTypeMapper* Get(const Context& context, const Variable& variable) {
-        return Get(context, variable.type(), variable.fModifiers.fLayout);
+        return Get(context, variable.type(), variable.modifiers().fLayout);
     }
 
     // The C++ type name that this mapper applies to
@@ -131,6 +131,6 @@ private:
 
 }  // namespace SkSL
 
-#endif // defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+#endif // defined(SKSL_STANDALONE) || GR_TEST_UTILS
 
 #endif // SkSLUniformCTypes_DEFINED

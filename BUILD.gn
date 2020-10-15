@@ -72,6 +72,9 @@ config("skia_private") {
   visibility = [ ":*" ]
 
   defines = [ "SK_GAMMA_APPLY_TO_A8" ]
+  if (skia_enable_gpu) {
+    defines += [ "GR_OP_ALLOCATE_USE_NEW" ]
+  }
   if (skia_use_fixed_gamma_text) {
     defines += [
       "SK_GAMMA_EXPONENT=1.4",
@@ -552,7 +555,12 @@ if (skia_lex) {
 if (skia_compile_processors || skia_compile_sksl_tests) {
   executable("skslc") {
     defines = [ "SKSL_STANDALONE" ]
-    sources = [ "src/sksl/SkSLMain.cpp" ]
+    sources = [
+      "src/core/SkMalloc.cpp",
+      "src/core/SkMath.cpp",
+      "src/ports/SkMemory_malloc.cpp",
+      "src/sksl/SkSLMain.cpp",
+    ]
     sources += skia_sksl_sources
     sources += skia_sksl_gpu_sources
     include_dirs = [ "." ]
@@ -670,78 +678,85 @@ if (skia_compile_processors) {
 
 if (skia_compile_sksl_tests) {
   import("gn/sksl_tests.gni")
-  sksl_fp_tests_outputs = []
-  foreach(src, sksl_fp_tests_sources) {
-    dir = get_path_info(src, "dir")
-    name = get_path_info(src, "name")
-    sksl_fp_tests_outputs += [
-      "$target_out_dir/" + rebase_path("$dir/golden/$name.cpp", target_out_dir),
-      "$target_out_dir/" + rebase_path("$dir/golden/$name.h", target_out_dir),
-    ]
-  }
 
-  sksl_glsl_tests_outputs = []
-  foreach(src, sksl_glsl_tests_sources) {
-    dir = get_path_info(src, "dir")
-    name = get_path_info(src, "name")
-    sksl_glsl_tests_outputs +=
-        [ "$target_out_dir/" +
-          rebase_path("$dir/golden/$name.glsl", target_out_dir) ]
+  template("compile_sksl") {
+    # Compile the passed-in `sources` into `outputs` using skslc, with the given language/settings.
+    action("compile_sksl_${target_name}") {
+      script = "gn/compile_sksl_tests.py"
+      deps = [
+        ":create_sksl_fp",
+        ":sksl_pre_includes",
+        ":skslc(//gn/toolchain:$host_toolchain)",
+      ]
+      sources = invoker.sources
+      outputs = []
+      foreach(src, sources) {
+        dir = get_path_info(src, "dir")
+        name = get_path_info(src, "name")
+        foreach(outputPattern, invoker.outputPatterns) {
+          outputs += [ target_out_dir + "/" + rebase_path(
+                           dir + outputPattern[0] + name + outputPattern[1],
+                           target_out_dir) ]
+        }
+      }
+      args = [
+        rebase_path(skslc_path),
+        invoker.lang,
+        invoker.settings,
+      ]
+      args += rebase_path(sources)
+    }
   }
-
-  sksl_glsl_settings_tests_outputs = []
-  foreach(src, sksl_glsl_settings_tests_sources) {
-    dir = get_path_info(src, "dir")
-    name = get_path_info(src, "name")
-    sksl_glsl_tests_outputs +=
-        [ "$target_out_dir/" +
-          rebase_path("$dir/golden/$name.glsl", target_out_dir) ]
-    sksl_glsl_settings_tests_outputs += [
-      "$target_out_dir/" +
-          rebase_path("$dir/golden/${name}DefaultSettings.glsl",
-                      target_out_dir),
+  compile_sksl("fp_tests") {
+    sources = sksl_fp_tests_sources
+    outputPatterns = [
+      [
+        "/golden/",
+        ".cpp",
+      ],
+      [
+        "/golden/",
+        ".h",
+      ],
     ]
+    lang = "--fp"
+    settings = "--settings"
   }
-
-  action("compile_sksl_tests") {
-    # This action compiles SkSL tests with their settings enabled, i.e. in --settings mode.
-    script = "gn/compile_sksl_tests.py"
-    deps = [
-      ":create_sksl_fp",
-      ":sksl_pre_includes",
-      ":skslc(//gn/toolchain:$host_toolchain)",
-    ]
-    sources = sksl_fp_tests_sources + sksl_glsl_tests_sources +
-              sksl_glsl_settings_tests_sources
-    outputs = sksl_fp_tests_outputs + sksl_glsl_tests_outputs
-    args = [
-      rebase_path(skslc_path),
-      "--settings",
-    ]
-    args += rebase_path(sksl_fp_tests_sources)
-    args += rebase_path(sksl_glsl_tests_sources)
-    args += rebase_path(sksl_glsl_settings_tests_sources)
+  compile_sksl("glsl_tests") {
+    sources = sksl_glsl_tests_sources + sksl_glsl_settings_tests_sources
+    outputPatterns = [ [
+          "/golden/",
+          ".glsl",
+        ] ]
+    lang = "--glsl"
+    settings = "--settings"
   }
-  action("compile_sksl_tests_nosettings") {
-    # This action compiles SkSL tests with their settings disabled, i.e. in --nosettings mode.
-    script = "gn/compile_sksl_tests.py"
-    deps = [
-      ":create_sksl_fp",
-      ":sksl_pre_includes",
-      ":skslc(//gn/toolchain:$host_toolchain)",
-    ]
+  compile_sksl("glsl_nosettings_tests") {
     sources = sksl_glsl_settings_tests_sources
-    outputs = sksl_glsl_settings_tests_outputs
-    args = [
-      rebase_path(skslc_path),
-      "--nosettings",
-    ]
-    args += rebase_path(sksl_glsl_settings_tests_sources)
+    outputPatterns = [ [
+          "/golden/",
+          "StandaloneSettings.glsl",
+        ] ]
+    lang = "--glsl"
+    settings = "--nosettings"
+  }
+  compile_sksl("metal_tests") {
+    sources = sksl_metal_tests_sources
+    outputPatterns = [ [
+          "/golden/",
+          ".metal",
+        ] ]
+    lang = "--metal"
+    settings = "--settings"
   }
 } else {
-  group("compile_sksl_tests") {
+  group("compile_sksl_fp_tests") {
   }
-  group("compile_sksl_tests_nosettings") {
+  group("compile_sksl_glsl_tests") {
+  }
+  group("compile_sksl_glsl_nosettings_tests") {
+  }
+  group("compile_sksl_metal_tests") {
   }
 }
 
@@ -749,8 +764,10 @@ optional("gpu") {
   enabled = skia_enable_gpu
   deps = [
     ":compile_processors",
-    ":compile_sksl_tests",
-    ":compile_sksl_tests_nosettings",
+    ":compile_sksl_fp_tests",
+    ":compile_sksl_glsl_nosettings_tests",
+    ":compile_sksl_glsl_tests",
+    ":compile_sksl_metal_tests",
     ":dehydrate_sksl",
     ":run_sksllex",
   ]
@@ -854,7 +871,10 @@ optional("gpu") {
 
   if (skia_use_direct3d) {
     public_defines += [ "SK_DIRECT3D" ]
-    deps += [ "//third_party/spirv-cross:spirv_cross" ]
+    deps += [
+      "//third_party/d3d12allocator",
+      "//third_party/spirv-cross:spirv_cross",
+    ]
     sources += skia_direct3d_sources
     if (skia_enable_direct3d_debug_layer) {
       public_defines += [ "SK_ENABLE_D3D_DEBUG_LAYER" ]
@@ -1164,11 +1184,6 @@ component("skia") {
     ":xml",
   ]
 
-  # This file (and all GN files in Skia) are designed to work with an
-  # empty sources assignment filter; we handle all that explicitly.
-  # We clear the filter here for clients who may have set up a global filter.
-  set_sources_assignment_filter([])
-
   public = skia_core_public
   public += skia_utils_public
   public += skia_effects_public
@@ -1330,11 +1345,6 @@ static_library("pathkit") {
     ":sse42",
     ":ssse3",
   ]
-
-  # This file (and all GN files in Skia) are designed to work with an
-  # empty sources assignment filter; we handle all that explicitly.
-  # We clear the filter here for clients who may have set up a global filter.
-  set_sources_assignment_filter([])
 
   sources = []
   sources += skia_pathops_sources
@@ -1588,12 +1598,16 @@ if (skia_enable_tools) {
     deps = []
     public_deps = []
     sources = [
+      "tools/gpu/BackendSurfaceFactory.cpp",
+      "tools/gpu/BackendSurfaceFactory.h",
       "tools/gpu/BackendTextureImageFactory.cpp",
       "tools/gpu/BackendTextureImageFactory.h",
       "tools/gpu/FlushFinishTracker.cpp",
       "tools/gpu/FlushFinishTracker.h",
       "tools/gpu/GrContextFactory.cpp",
       "tools/gpu/GrTest.cpp",
+      "tools/gpu/ManagedBackendTexture.cpp",
+      "tools/gpu/ManagedBackendTexture.h",
       "tools/gpu/MemoryCache.cpp",
       "tools/gpu/MemoryCache.h",
       "tools/gpu/ProxyUtils.cpp",
@@ -1862,6 +1876,7 @@ if (skia_enable_tools) {
       "modules/skparagraph:tests",
       "modules/sksg:tests",
       "modules/skshaper",
+      "//third_party/absl",
       "//third_party/libpng",
       "//third_party/libwebp",
       "//third_party/zlib",
@@ -1886,6 +1901,7 @@ if (skia_enable_tools) {
     ]
   }
 
+  # TODO(fmalita): componentize & relocate
   test_lib("experimental_svg_model") {
     if (skia_use_expat) {
       sources = [
@@ -1917,6 +1933,16 @@ if (skia_enable_tools) {
       deps = [
         ":skia",
         ":xml",
+      ]
+    }
+  }
+
+  if (skia_use_expat && !skia_use_wuffs) {
+    test_app("svg_tool") {
+      sources = [ "experimental/svg/utils/SvgTool.cpp" ]
+      deps = [
+        ":experimental_svg_model",
+        ":flags",
       ]
     }
   }
@@ -1958,6 +1984,17 @@ if (skia_enable_tools) {
       "modules/skshaper",
     ]
   }
+  test_lib("hash_and_encode") {
+    sources = [
+      "tools/HashAndEncode.cpp",
+      "tools/HashAndEncode.h",
+    ]
+    deps = [
+      ":flags",
+      ":skia",
+      "//third_party/libpng",
+    ]
+  }
   if (target_cpu != "wasm") {
     test_app("convert-to-nia") {
       sources = [ "tools/convert-to-nia.cpp" ]
@@ -1968,17 +2005,6 @@ if (skia_enable_tools) {
       deps = [
         ":skcms",
         ":skia",
-      ]
-    }
-    test_lib("hash_and_encode") {
-      sources = [
-        "tools/HashAndEncode.cpp",
-        "tools/HashAndEncode.h",
-      ]
-      deps = [
-        ":flags",
-        ":skia",
-        "//third_party/libpng",
       ]
     }
     test_app("fm") {

@@ -18,35 +18,47 @@
 
 namespace SkSL {
 
-struct Symbol;
+class Symbol;
 
-struct Enum : public ProgramElement {
+class Enum : public ProgramElement {
+public:
     static constexpr Kind kProgramElementKind = Kind::kEnum;
 
     Enum(int offset, StringFragment typeName, std::shared_ptr<SymbolTable> symbols,
          bool isBuiltin = true)
-    : INHERITED(offset, kProgramElementKind)
-    , fTypeName(typeName)
-    , fSymbols(std::move(symbols))
-    , fBuiltin(isBuiltin) {}
+    : INHERITED(offset, EnumData{typeName, std::move(symbols), isBuiltin}) {}
+
+    StringFragment typeName() const {
+        return this->enumData().fTypeName;
+    }
+
+    std::shared_ptr<SymbolTable> symbols() const {
+        return this->enumData().fSymbols;
+    }
+
+    bool isBuiltin() const {
+        return this->enumData().fIsBuiltin;
+    }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new Enum(fOffset, fTypeName, fSymbols, fBuiltin));
+        return std::unique_ptr<ProgramElement>(new Enum(fOffset, this->typeName(), this->symbols(),
+                                                        this->isBuiltin()));
     }
 
     String code() const {
-        String result = "enum class " + fTypeName + " {\n";
+        String result = "enum class " + this->typeName() + " {\n";
         String separator;
         std::vector<const Symbol*> sortedSymbols;
-        for (const auto& pair : *fSymbols) {
-            sortedSymbols.push_back(pair.second);
-        }
+        sortedSymbols.reserve(symbols()->count());
+        this->symbols()->foreach([&](StringFragment, const Symbol* symbol) {
+            sortedSymbols.push_back(symbol);
+        });
         std::sort(sortedSymbols.begin(), sortedSymbols.end(),
-                  [](const Symbol* a, const Symbol* b) { return a->fName < b->fName; });
+                  [](const Symbol* a, const Symbol* b) { return a->name() < b->name(); });
         for (const auto& s : sortedSymbols) {
-            const Expression& initialValue = *s->as<Variable>().fInitialValue;
-            result += separator + "    " + s->fName + " = " +
-                      to_string(initialValue.as<IntLiteral>().fValue);
+            const Expression& initialValue = *s->as<Variable>().initialValue();
+            result += separator + "    " + s->name() + " = " +
+                      to_string(initialValue.as<IntLiteral>().value());
             separator = ",\n";
         }
         result += "\n};";
@@ -57,10 +69,7 @@ struct Enum : public ProgramElement {
         return this->code();
     }
 
-    const StringFragment fTypeName;
-    const std::shared_ptr<SymbolTable> fSymbols;
-    bool fBuiltin;
-
+private:
     using INHERITED = ProgramElement;
 };
 

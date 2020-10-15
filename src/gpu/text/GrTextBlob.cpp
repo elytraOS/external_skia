@@ -363,7 +363,7 @@ auto GrPathSubRun::Make(
             });
 
     return alloc->make<GrPathSubRun>(
-            isAntiAliased, strikeSpec, blob, SkMakeSpan(pathData, drawables.size()));
+            isAntiAliased, strikeSpec, blob, SkSpan(pathData, drawables.size()));
 };
 
 // -- GrGlyphVector --------------------------------------------------------------------------------
@@ -379,11 +379,11 @@ GrGlyphVector GrGlyphVector::Make(
                 return Variant{glyphs[i].glyph()->getPackedID()};
             });
 
-    return GrGlyphVector{spec, SkMakeSpan(variants, glyphs.size())};
+    return GrGlyphVector{spec, SkSpan(variants, glyphs.size())};
 }
 
 SkSpan<const GrGlyph*> GrGlyphVector::glyphs() const {
-    return SkMakeSpan(reinterpret_cast<const GrGlyph**>(fGlyphs.data()), fGlyphs.size());
+    return SkSpan(reinterpret_cast<const GrGlyph**>(fGlyphs.data()), fGlyphs.size());
 }
 
 void GrGlyphVector::packedGlyphIDToGrGlyph(GrStrikeCache* cache) {
@@ -1112,9 +1112,8 @@ void GrTextBlob::setMinAndMaxScale(SkScalar scaledMin, SkScalar scaledMax) {
 
 bool GrTextBlob::canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) {
     // A singular matrix will create a GrTextBlob with no SubRuns, but unknown glyphs can
-    // also cause empty runs. If there are no subRuns, and the matrix is complicated, then
-    // regenerate.
-    if (fSubRunList.isEmpty() && !fInitialMatrix.rectStaysRect()) {
+    // also cause empty runs. If there are no subRuns, then regenerate.
+    if (fSubRunList.isEmpty()) {
         return false;
     }
 

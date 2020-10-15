@@ -39,7 +39,6 @@
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
-#include "src/sksl/ir/SkSLVarDeclarationsStatement.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/ir/SkSLWhileStatement.h"
 
@@ -127,7 +126,7 @@ protected:
 
     void writeTypePrecision(const Type& type);
 
-    void writeVarDeclarations(const VarDeclarations& decl, bool global);
+    void writeVarDeclaration(const VarDeclaration& var, bool global);
 
     void writeFragCoord();
 
@@ -178,8 +177,6 @@ protected:
     virtual void writeSetting(const Setting& s);
 
     void writeStatement(const Statement& s);
-
-    void writeStatements(const std::vector<std::unique_ptr<Statement>>& statements);
 
     void writeBlock(const Block& b);
 

@@ -396,7 +396,7 @@ PORTS_SRCS_WASM = struct(
         # commented lines below left in because they indicate specifically what is
         # included here and not in other PORTS_SRCS lists.
         "src/ports/*FontConfig*",
-        "src/ports/*FreeType*",
+        #"src/ports/*FreeType*",
         "src/ports/*WIC*",
         "src/ports/*CG*",
         "src/ports/*android*",
@@ -408,11 +408,11 @@ PORTS_SRCS_WASM = struct(
         "src/ports/*win*",
         "src/ports/*NDK*",
         #"src/ports/SkDebug_stdio.cpp",
-        "src/ports/SkFontMgr_custom.cpp",
+        #"src/ports/SkFontMgr_custom.cpp",
         "src/ports/SkFontMgr_custom_directory.cpp",
         "src/ports/SkFontMgr_custom_directory_factory.cpp",
-        "src/ports/SkFontMgr_custom_embedded.cpp",
-        "src/ports/SkFontMgr_custom_embedded_factory.cpp",
+        #"src/ports/SkFontMgr_custom_embedded.cpp",
+        #"src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         # "src/ports/SkFontMgr_empty_factory.cpp",
@@ -980,4 +980,25 @@ SKOTTIE_IOS_LIB_HDRS = [
 SKOTTIE_IOS_LIB_SDK_FRAMEWORKS = [
     "Foundation",
     "UIKit",
+]
+
+################################################################################
+## svg_lib
+################################################################################
+
+def svg_lib_hdrs():
+    return native.glob(["experimental/svg/model/*.h"])
+
+def svg_lib_srcs():
+    return native.glob(["experimental/svg/model/*.cpp"])
+
+################################################################################
+## svg_tool
+################################################################################
+
+SVG_TOOL_SRCS = [
+    "experimental/svg/utils/SvgTool.cpp",
+    # TODO(benjaminwagner): Add "flags" target.
+    "tools/flags/CommandLineFlags.cpp",
+    "tools/flags/CommandLineFlags.h",
 ]

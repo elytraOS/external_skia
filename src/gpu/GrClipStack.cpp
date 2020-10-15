@@ -125,6 +125,15 @@ static bool shape_contains_rect(
     if (!mixedAAMode && aToDevice == bToDevice) {
         // A and B are in the same coordinate space, so don't bother mapping
         return a.conservativeContains(b);
+    } else if (bToDevice.isIdentity() && aToDevice.preservesAxisAlignment()) {
+        // Optimize the common case of draws (B, with identity matrix) and axis-aligned shapes,
+        // instead of checking the four corners separately.
+        SkRect bInA = b;
+        if (mixedAAMode) {
+            bInA.outset(0.5f, 0.5f);
+        }
+        SkAssertResult(deviceToA.mapRect(&bInA));
+        return a.conservativeContains(bInA);
     }
 
     // Test each corner for contains; since a is convex, if all 4 corners of b's bounds are
@@ -531,7 +540,10 @@ void GrClipStack::RawElement::simplify(const SkIRect& deviceBounds, bool forceAA
         return;
     }
 
-    if (forceAA) {
+    // Except for axis-aligned clip rects, upgrade to AA when forced. We skip axis-aligned clip
+    // rects because a non-AA axis aligned rect can always be set as just a scissor test or window
+    // rect, avoiding an expensive stencil mask generation.
+    if (forceAA && !(fShape.isRect() && fLocalToDevice.preservesAxisAlignment())) {
         fAA = GrAA::kYes;
     }
 
@@ -539,7 +551,7 @@ void GrClipStack::RawElement::simplify(const SkIRect& deviceBounds, bool forceAA
     // mapped bounds of the shape.
     fOuterBounds = GrClip::GetPixelIBounds(outer, fAA, BoundsType::kExterior);
 
-    if (fLocalToDevice.isScaleTranslate()) {
+    if (fLocalToDevice.preservesAxisAlignment()) {
         if (fShape.isRect()) {
             // The actual geometry can be updated to the device-intersected bounds and we can
             // know the inner bounds
@@ -558,16 +570,19 @@ void GrClipStack::RawElement::simplify(const SkIRect& deviceBounds, bool forceAA
                 SkASSERT(fOuterBounds.contains(fInnerBounds) || fInnerBounds.isEmpty());
             }
         } else if (fShape.isRRect()) {
-            // Can't transform in place
-            SkRRect src = fShape.rrect();
-            SkAssertResult(src.transform(fLocalToDevice, &fShape.rrect()));
-            fLocalToDevice.setIdentity();
-            fDeviceToLocal.setIdentity();
+            // Can't transform in place and must still check transform result since some very
+            // ill-formed scale+translate matrices can cause invalid rrect radii.
+            SkRRect src;
+            if (fShape.rrect().transform(fLocalToDevice, &src)) {
+                fShape.rrect() = src;
+                fLocalToDevice.setIdentity();
+                fDeviceToLocal.setIdentity();
 
-            SkRect inner = SkRRectPriv::InnerBounds(fShape.rrect());
-            fInnerBounds = GrClip::GetPixelIBounds(inner, fAA, BoundsType::kInterior);
-            if (!fInnerBounds.intersect(deviceBounds)) {
-                fInnerBounds = SkIRect::MakeEmpty();
+                SkRect inner = SkRRectPriv::InnerBounds(fShape.rrect());
+                fInnerBounds = GrClip::GetPixelIBounds(inner, fAA, BoundsType::kInterior);
+                if (!fInnerBounds.intersect(deviceBounds)) {
+                    fInnerBounds = SkIRect::MakeEmpty();
+                }
             }
         }
     }
@@ -1326,10 +1341,11 @@ GrClip::Effect GrClipStack::apply(GrRecordingContext* context, GrRenderTargetCon
     bool scissorIsNeeded = SkToBool(cs.shader());
 
     int remainingAnalyticFPs = kMaxAnalyticFPs;
-    if (rtc->numSamples() > 1 || aa == GrAAType::kMSAA || hasUserStencilSettings) {
-        // Disable analytic clips when we have MSAA. In MSAA we never conflate coverage and opacity.
+    if (hasUserStencilSettings) {
+        // Disable analytic clips when there are user stencil settings to ensure the clip is
+        // respected in the stencil buffer.
         remainingAnalyticFPs = 0;
-        // We disable MSAA when avoiding stencil so shouldn't get here.
+        // If we have user stencil settings, we shouldn't be avoiding the stencil buffer anyways.
         SkASSERT(!context->priv().caps()->avoidStencilBuffers());
     }
 

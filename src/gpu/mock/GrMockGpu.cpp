@@ -5,12 +5,14 @@
  * found in the LICENSE file.
  */
 
+#include "src/gpu/mock/GrMockGpu.h"
+
+#include "src/gpu/mock/GrMockAttachment.h"
 #include "src/gpu/mock/GrMockBuffer.h"
 #include "src/gpu/mock/GrMockCaps.h"
-#include "src/gpu/mock/GrMockGpu.h"
 #include "src/gpu/mock/GrMockOpsRenderPass.h"
-#include "src/gpu/mock/GrMockStencilAttachment.h"
 #include "src/gpu/mock/GrMockTexture.h"
+
 #include <atomic>
 
 int GrMockGpu::NextInternalTextureID() {
@@ -52,13 +54,14 @@ sk_sp<GrGpu> GrMockGpu::Make(const GrMockOptions* mockOptions,
     return sk_sp<GrGpu>(new GrMockGpu(direct, *mockOptions, contextOptions));
 }
 
-GrOpsRenderPass* GrMockGpu::getOpsRenderPass(
-                                GrRenderTarget* rt, GrStencilAttachment*,
-                                GrSurfaceOrigin origin, const SkIRect& bounds,
-                                const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
-                                const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-                                const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
-                                GrXferBarrierFlags renderPassXferBarriers) {
+GrOpsRenderPass* GrMockGpu::getOpsRenderPass(GrRenderTarget* rt,
+                                             GrAttachment*,
+                                             GrSurfaceOrigin origin,
+                                             const SkIRect& bounds,
+                                             const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
+                                             const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+                                             const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+                                             GrXferBarrierFlags renderPassXferBarriers) {
     return new GrMockOpsRenderPass(this, rt, origin, colorInfo);
 }
 
@@ -247,31 +250,19 @@ sk_sp<GrRenderTarget> GrMockGpu::onWrapBackendRenderTarget(const GrBackendRender
                                                         isProtected, info));
 }
 
-sk_sp<GrRenderTarget> GrMockGpu::onWrapBackendTextureAsRenderTarget(const GrBackendTexture& tex,
-                                                                    int sampleCnt) {
-    GrMockTextureInfo texInfo;
-    SkAssertResult(tex.getMockTextureInfo(&texInfo));
-    SkASSERT(texInfo.compressionType() == SkImage::CompressionType::kNone);
-
-    // The client gave us the texture ID but we supply the render target ID.
-    GrMockRenderTargetInfo rtInfo(texInfo.colorType(), NextInternalRenderTargetID());
-
-    auto isProtected = GrProtected(tex.isProtected());
-    return sk_sp<GrRenderTarget>(new GrMockRenderTarget(
-            this, GrMockRenderTarget::kWrapped, tex.dimensions(), sampleCnt, isProtected, rtInfo));
-}
-
 sk_sp<GrGpuBuffer> GrMockGpu::onCreateBuffer(size_t sizeInBytes, GrGpuBufferType type,
                                              GrAccessPattern accessPattern, const void*) {
     return sk_sp<GrGpuBuffer>(new GrMockBuffer(this, sizeInBytes, type, accessPattern));
 }
 
-GrStencilAttachment* GrMockGpu::createStencilAttachmentForRenderTarget(
-        const GrRenderTarget* rt, int width, int height, int numStencilSamples) {
+sk_sp<GrAttachment> GrMockGpu::makeStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
+                                                                    SkISize dimensions,
+                                                                    int numStencilSamples) {
     SkASSERT(numStencilSamples == rt->numSamples());
-    static constexpr int kBits = 8;
     fStats.incStencilAttachmentCreates();
-    return new GrMockStencilAttachment(this, width, height, kBits, rt->numSamples());
+    return sk_sp<GrAttachment>(
+            new GrMockAttachment(this, dimensions, GrAttachment::UsageFlags::kStencil,
+                                 rt->numSamples()));
 }
 
 GrBackendTexture GrMockGpu::onCreateBackendTexture(SkISize dimensions,
@@ -334,12 +325,14 @@ bool GrMockGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     return fOutstandingTestingOnlyTextureIDs.contains(info.id());
 }
 
-GrBackendRenderTarget GrMockGpu::createTestingOnlyBackendRenderTarget(int w, int h,
-                                                                      GrColorType colorType) {
+GrBackendRenderTarget GrMockGpu::createTestingOnlyBackendRenderTarget(SkISize dimensions,
+                                                                      GrColorType colorType,
+                                                                      int sampleCnt,
+                                                                      GrProtected) {
     GrMockRenderTargetInfo info(colorType, NextExternalRenderTargetID());
-    static constexpr int kSampleCnt = 1;
     static constexpr int kStencilBits = 8;
-    return GrBackendRenderTarget(w, h, kSampleCnt, kStencilBits, info);
+    return GrBackendRenderTarget(dimensions.width(), dimensions.height(), sampleCnt, kStencilBits,
+                                 info);
 }
 
 void GrMockGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) {}

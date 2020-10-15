@@ -13,6 +13,7 @@
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrAppliedClip.h"
+#include "src/gpu/GrAttachment.h"
 #include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDeferredProxyUploader.h"
 #include "src/gpu/GrDrawingManager.h"
@@ -21,7 +22,6 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrSWMaskHelper.h"
-#include "src/gpu/GrStencilAttachment.h"
 #include "src/gpu/GrStyle.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
@@ -46,7 +46,13 @@ GrClip::PreClipResult GrClipStackClip::preApply(const SkRect& drawBounds, GrAA a
 
     PreClipResult result(Effect::kClipped);
     bool isAA;
-    if (fStack->isRRect(rect, &result.fRRect, &isAA)) {
+    // SkClipStack does not have a way to distinguish "not a rrect" vs. "rrect that doesn't
+    // intersect the draw", so pass in the device bounds and then check the returned shape for
+    // intersection afterwards.
+    if (fStack->isRRect(SkRect::Make(deviceRect), &result.fRRect, &isAA)) {
+        if (!result.fRRect.getBounds().intersects(rect)) {
+            return Effect::kClippedOut;
+        }
         result.fIsRRect = true;
         result.fAA = GrAA(isAA);
     }
@@ -81,23 +87,17 @@ static std::unique_ptr<GrFragmentProcessor> create_fp_for_mask(GrSurfaceProxyVie
     return GrDeviceSpaceEffect::Make(std::move(fp));
 }
 
-// Does the path in 'element' require SW rendering? If so, return true (and,
-// optionally, set 'prOut' to NULL. If not, return false (and, optionally, set
-// 'prOut' to the non-SW path renderer that will do the job).
+// Does the path in 'element' require SW rendering?
 bool GrClipStackClip::PathNeedsSWRenderer(GrRecordingContext* context,
                                           const SkIRect& scissorRect,
                                           bool hasUserStencilSettings,
                                           const GrRenderTargetContext* renderTargetContext,
                                           const SkMatrix& viewMatrix,
                                           const Element* element,
-                                          GrPathRenderer** prOut,
                                           bool needsStencil) {
     if (Element::DeviceSpaceType::kRect == element->getDeviceSpaceType()) {
         // rects can always be drawn directly w/o using the software path
         // TODO: skip rrects once we're drawing them directly.
-        if (prOut) {
-            *prOut = nullptr;
-        }
         return false;
     } else {
         // We shouldn't get here with an empty clip element.
@@ -134,9 +134,6 @@ bool GrClipStackClip::PathNeedsSWRenderer(GrRecordingContext* context,
         // the 'false' parameter disallows use of the SW path renderer
         GrPathRenderer* pr =
             context->priv().drawingManager()->getPathRenderer(canDrawArgs, false, type);
-        if (prOut) {
-            *prOut = pr;
-        }
         return SkToBool(!pr);
     }
 }
@@ -179,7 +176,7 @@ bool GrClipStackClip::UseSWOnlyPath(GrRecordingContext* context,
                             kIntersect_SkClipOp == op || kReverseDifference_SkClipOp == op;
 
         if (PathNeedsSWRenderer(context, reducedClip.scissor(), hasUserStencilSettings,
-                                renderTargetContext, translate, element, nullptr, needsStencil)) {
+                                renderTargetContext, translate, element, needsStencil)) {
             return true;
         }
     }

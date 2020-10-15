@@ -18,6 +18,7 @@
 #include "tests/Test.h"
 
 #include <algorithm>
+#include <thread>
 
 DEF_TEST(SkRuntimeEffectInvalid, r) {
     auto test = [r](const char* hdr, const char* body, const char* expected) {
@@ -222,6 +223,10 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext
     effect.build("", "return float4(p - 0.5, 0, 1);");
     effect.test(0xFF000000, 0xFF0000FF, 0xFF00FF00, 0xFF00FFFF);
 
+    // ... and support GLSL type names
+    effect.build("", "return vec4(p - 0.5, 0, 1);");
+    effect.test(0xFF000000, 0xFF0000FF, 0xFF00FF00, 0xFF00FFFF);
+
     //
     // Sampling children
     //
@@ -288,4 +293,24 @@ DEF_TEST(SkRuntimeShaderBuilderReuse, r) {
 
     b.uniform("x") = 1.0f;
     auto shader_1 = b.makeShader(nullptr, true);
+}
+
+DEF_TEST(SkRuntimeEffectThreaded, r) {
+    // SkRuntimeEffect uses a single compiler instance, but it's mutex locked.
+    // This tests that we can safely use it from more than one thread, and also
+    // that programs don't refer to shared structures owned by the compiler.
+    // skbug.com/10589
+    static constexpr char kSource[] = "half4 main() { return sk_FragCoord.xyxy; }";
+
+    std::thread threads[16];
+    for (auto& thread : threads) {
+        thread = std::thread([r]() {
+            auto [effect, error] = SkRuntimeEffect::Make(SkString(kSource));
+            REPORTER_ASSERT(r, effect);
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }

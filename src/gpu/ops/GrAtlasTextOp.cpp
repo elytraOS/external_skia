@@ -228,7 +228,7 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
 
     resetVertexBuffer();
 
-    for (const Geometry& geo : SkMakeSpan(fGeoData.get(), fGeoCount)) {
+    for (const Geometry& geo : SkSpan(fGeoData.get(), fGeoCount)) {
         const GrAtlasSubRun& subRun = geo.fSubRun;
         SkASSERT((int)subRun.vertexStride() == vertexStride);
 
@@ -271,7 +271,8 @@ void GrAtlasTextOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBou
                                                              std::move(fProcessors),
                                                              GrPipeline::InputFlags::kNone);
 
-    flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline);
+    flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline,
+                                                    &GrUserStencilSettings::kUnused);
 }
 
 void GrAtlasTextOp::createDrawForGeneratedGlyphs(

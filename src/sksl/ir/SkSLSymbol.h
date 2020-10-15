@@ -16,11 +16,13 @@ namespace SkSL {
 /**
  * Represents a symboltable entry.
  */
-struct Symbol : public IRNode {
+class Symbol : public IRNode {
+public:
     enum class Kind {
         kExternal = (int) ProgramElement::Kind::kLast + 1,
         kField,
         kFunctionDeclaration,
+        kSymbolAlias,
         kType,
         kUnresolvedFunction,
         kVariable,
@@ -30,23 +32,44 @@ struct Symbol : public IRNode {
     };
 
     Symbol(int offset, Kind kind, StringFragment name, const Type* type = nullptr)
-    : INHERITED(offset, (int) kind, type)
-    , fName(name) {
+    : INHERITED(offset, (int) kind, SymbolData{name, type}) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
 
-    Symbol(const Symbol&) = default;
+    Symbol(int offset, const FieldData& data)
+    : INHERITED(offset, (int) Kind::kField, data) {}
+
+    Symbol(int offset, const FunctionDeclarationData& data)
+    : INHERITED(offset, (int) Kind::kFunctionDeclaration, data) {}
+
+    Symbol(int offset, const SymbolAliasData& data)
+    : INHERITED(offset, (int) Kind::kSymbolAlias, data) {}
+
+    Symbol(int offset, const UnresolvedFunctionData& data)
+    : INHERITED(offset, (int) Kind::kUnresolvedFunction, data) {}
+
+    Symbol(int offset, const VariableData& data)
+    : INHERITED(offset, (int) Kind::kVariable, data) {}
+
     Symbol& operator=(const Symbol&) = default;
 
     ~Symbol() override {}
+
+    virtual const Type& type() const {
+        return *this->symbolData().fType;
+    }
 
     Kind kind() const {
         return (Kind) fKind;
     }
 
+    virtual StringFragment name() const {
+        return this->symbolData().fName;
+    }
+
     /**
      *  Use is<T> to check the type of a symbol.
-     *  e.g. replace `sym.fKind == Symbol::kVariable_Kind` with `sym.is<Variable>()`.
+     *  e.g. replace `sym.kind() == Symbol::Kind::kVariable` with `sym.is<Variable>()`.
      */
     template <typename T>
     bool is() const {
@@ -68,8 +91,7 @@ struct Symbol : public IRNode {
         return static_cast<T&>(*this);
     }
 
-    StringFragment fName;
-
+private:
     using INHERITED = IRNode;
 };
 

@@ -159,6 +159,8 @@ void TestSVGTypeface::onCharsToGlyphs(const SkUnichar uni[], int count, SkGlyphI
 
 void TestSVGTypeface::onGetFamilyName(SkString* familyName) const { *familyName = fName; }
 
+bool TestSVGTypeface::onGetPostScriptName(SkString*) const { return false; }
+
 SkTypeface::LocalizedStrings* TestSVGTypeface::onCreateFamilyNameIterator() const {
     SkString familyName(fName);
     SkString language("und");  // undetermined
@@ -309,7 +311,7 @@ sk_sp<TestSVGTypeface> TestSVGTypeface::Default() {
     return sk_make_sp<DefaultTypeface>("Emoji",
                                        1000,
                                        metrics,
-                                       SkMakeSpan(glyphs),
+                                       SkSpan(glyphs),
                                        SkFontStyle::Normal());
 }
 
@@ -359,7 +361,7 @@ sk_sp<TestSVGTypeface> TestSVGTypeface::Planets() {
     return sk_make_sp<PlanetTypeface>("Planets",
                                       200,
                                       metrics,
-                                      SkMakeSpan(glyphs),
+                                      SkSpan(glyphs),
                                       SkFontStyle::Normal());
 }
 

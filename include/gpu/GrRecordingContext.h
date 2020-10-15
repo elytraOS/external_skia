@@ -23,7 +23,7 @@ class GrRecordingContextPriv;
 class GrSurfaceContext;
 class GrSurfaceProxy;
 class GrTextBlobCache;
-class GrThreadSafeUniquelyKeyedProxyViewCache;
+class GrThreadSafeCache;
 class SkArenaAlloc;
 class SkJSONWriter;
 
@@ -174,8 +174,8 @@ protected:
     GrTextBlobCache* getTextBlobCache();
     const GrTextBlobCache* getTextBlobCache() const;
 
-    GrThreadSafeUniquelyKeyedProxyViewCache* threadSafeViewCache();
-    const GrThreadSafeUniquelyKeyedProxyViewCache* threadSafeViewCache() const;
+    GrThreadSafeCache* threadSafeCache();
+    const GrThreadSafeCache* threadSafeCache() const;
 
     /**
      * Registers an object for flush-related callbacks. (See GrOnFlushCallbackObject.)
@@ -233,7 +233,7 @@ private:
 
     std::unique_ptr<GrAuditTrail>     fAuditTrail;
 
-#ifdef GR_TEST_UTILS
+#if GR_TEST_UTILS
     int fSuppressWarningMessages = 0;
 #endif
 

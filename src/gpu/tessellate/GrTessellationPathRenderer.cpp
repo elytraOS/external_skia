@@ -39,25 +39,30 @@ bool GrTessellationPathRenderer::IsSupported(const GrCaps& caps) {
     return caps.drawInstancedSupport() && caps.shaderCaps()->vertexIDSupport();
 }
 
-GrTessellationPathRenderer::GrTessellationPathRenderer(const GrRecordingContext* rContext)
+GrTessellationPathRenderer::GrTessellationPathRenderer(GrRecordingContext* rContext)
         : fAtlas(kAtlasAlpha8Type, GrDynamicAtlas::InternalMultisample::kYes, kAtlasInitialSize,
                  std::min(kMaxAtlasSize, rContext->priv().caps()->maxPreferredRenderTargetSize()),
                  *rContext->priv().caps(), kAtlasAlgorithm) {
     this->initAtlasFlags(rContext);
 }
 
-void GrTessellationPathRenderer::initAtlasFlags(const GrRecordingContext* rContext) {
+void GrTessellationPathRenderer::initAtlasFlags(GrRecordingContext* rContext) {
+    fMaxAtlasPathWidth = 0;
+
+    if (!rContext->asDirectContext()) {
+        // The atlas is not compatible with DDL. Leave it disabled on non-direct contexts.
+        return;
+    }
+
     const GrCaps& caps = *rContext->priv().caps();
+    auto atlasFormat = caps.getDefaultBackendFormat(kAtlasAlpha8Type, GrRenderable::kYes);
+    if (caps.internalMultisampleCount(atlasFormat) <= 1) {
+        // MSAA is not supported on kAlpha8. Leave the atlas disabled.
+        return;
+    }
 
     fStencilAtlasFlags = OpFlags::kStencilOnly | OpFlags::kDisableHWTessellation;
     fMaxAtlasPathWidth = fAtlas.maxAtlasSize() / 2;
-
-    auto atlasFormat = caps.getDefaultBackendFormat(kAtlasAlpha8Type, GrRenderable::kYes);
-    if (caps.internalMultisampleCount(atlasFormat) <= 1) {
-        // MSAA is not supported on kAlpha8. Disable the atlas.
-        fMaxAtlasPathWidth = 0;
-        return;
-    }
 
     // The atlas usually does better with hardware tessellation. If hardware tessellation is
     // supported, we will next choose a max atlas path width that is guaranteed to never require
@@ -76,7 +81,7 @@ void GrTessellationPathRenderer::initAtlasFlags(const GrRecordingContext* rConte
     //     GrWangsFormula::worst_case_cubic(kLinearizationIntolerance, w, kMaxAtlasPathHeight^2 / w)
     //              == maxTessellationSegments
     //
-    float k = GrWangsFormula::cubic_k(kLinearizationIntolerance);
+    float k = GrWangsFormula::cubic_constant(kLinearizationIntolerance);
     float h = kMaxAtlasPathHeight;
     float s = caps.shaderCaps()->maxTessellationSegments();
     // Quadratic formula from Numerical Recipes in C:
@@ -176,6 +181,8 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
     if (args.fShape->style().isSimpleFill() &&
         this->tryAddPathToAtlas(*args.fContext->priv().caps(), *args.fViewMatrix, path, devBounds,
                                 args.fAAType, &devIBounds, &locationInAtlas, &transposedInAtlas)) {
+        // The atlas is not compatible with DDL. We should only be using it on direct contexts.
+        SkASSERT(args.fContext->asDirectContext());
 #ifdef SK_DEBUG
         // If using hardware tessellation in the atlas, make sure the max number of segments is
         // sufficient for this path. fMaxAtlasPathWidth should have been tuned for this to always be
@@ -252,8 +259,8 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
         path.transform(*args.fViewMatrix, &devPath);
         SkStrokeRec devStroke = args.fShape->style().strokeRec();
         devStroke.setStrokeStyle(1);
-        auto op = pool->allocate<GrStrokeTessellateOp>(args.fAAType, SkMatrix::I(), devPath,
-                                                       devStroke, std::move(args.fPaint));
+        auto op = pool->allocate<GrStrokeTessellateOp>(args.fAAType, SkMatrix::I(), devStroke,
+                                                       devPath, std::move(args.fPaint));
         renderTargetContext->addDrawOp(args.fClip, std::move(op));
         return true;
     }
@@ -261,8 +268,8 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
     if (!args.fShape->style().isSimpleFill()) {
         const SkStrokeRec& stroke = args.fShape->style().strokeRec();
         SkASSERT(stroke.getStyle() == SkStrokeRec::kStroke_Style);
-        auto op = pool->allocate<GrStrokeTessellateOp>(args.fAAType, *args.fViewMatrix, path,
-                                                       stroke, std::move(args.fPaint));
+        auto op = pool->allocate<GrStrokeTessellateOp>(args.fAAType, *args.fViewMatrix, stroke,
+                                                       path, std::move(args.fPaint));
         renderTargetContext->addDrawOp(args.fClip, std::move(op));
         return true;
     }

@@ -1108,6 +1108,7 @@ DEF_TEST(GrClipStack_DeviceRRect, r) {
 DEF_TEST(GrClipStack_ScaleTranslate, r) {
     SkMatrix lm = SkMatrix::Scale(2.f, 4.f);
     lm.postTranslate(15.5f, 14.3f);
+    SkASSERT(lm.preservesAxisAlignment() && lm.isScaleTranslate());
 
     // Rect -> matrix is applied up front
     SkRect rect = {0.f, 0.f, 10.f, 10.f};
@@ -1133,6 +1134,43 @@ DEF_TEST(GrClipStack_ScaleTranslate, r) {
 
     // Path -> matrix is NOT applied
     run_test_case(r, TestCase::Build("st+path", kDeviceBounds)
+                              .actual().intersect().localToDevice(lm).path(make_octagon(rect))
+                                       .finishElements()
+                              .expectActual()
+                              .state(GrClipStack::ClipState::kComplex)
+                              .finishTest());
+}
+
+// Tests that rect-stays-rect matrices that are not scale+translate matrices are pre-applied.
+DEF_TEST(GrClipStack_PreserveAxisAlignment, r) {
+    SkMatrix lm = SkMatrix::RotateDeg(90.f);
+    lm.postTranslate(15.5f, 14.3f);
+    SkASSERT(lm.preservesAxisAlignment() && !lm.isScaleTranslate());
+
+    // Rect -> matrix is applied up front
+    SkRect rect = {0.f, 0.f, 10.f, 10.f};
+    run_test_case(r, TestCase::Build("r90+rect", kDeviceBounds)
+                              .actual().rect(rect, lm, GrAA::kYes, SkClipOp::kIntersect)
+                                       .finishElements()
+                              .expect().rect(lm.mapRect(rect), GrAA::kYes, SkClipOp::kIntersect)
+                                       .finishElements()
+                              .state(GrClipStack::ClipState::kDeviceRect)
+                              .finishTest());
+
+    // RRect -> matrix is applied up front
+    SkRRect localRRect = SkRRect::MakeRectXY(rect, 2.f, 2.f);
+    SkRRect deviceRRect;
+    SkAssertResult(localRRect.transform(lm, &deviceRRect));
+    run_test_case(r, TestCase::Build("r90+rrect", kDeviceBounds)
+                              .actual().rrect(localRRect, lm, GrAA::kYes, SkClipOp::kIntersect)
+                                       .finishElements()
+                              .expect().rrect(deviceRRect, GrAA::kYes, SkClipOp::kIntersect)
+                                       .finishElements()
+                              .state(GrClipStack::ClipState::kDeviceRRect)
+                              .finishTest());
+
+    // Path -> matrix is NOT applied
+    run_test_case(r, TestCase::Build("r90+path", kDeviceBounds)
                               .actual().intersect().localToDevice(lm).path(make_octagon(rect))
                                        .finishElements()
                               .expectActual()
@@ -1605,27 +1643,36 @@ DEF_TEST(GrClipStack_ForceAA, r) {
     SkPath nonAAPath = make_octagon({2.f, 10.f, 16.f, 20.f});
     cs.clipPath(SkMatrix::I(), nonAAPath, GrAA::kNo, SkClipOp::kIntersect);
 
-    // Non-AA can combine with AA that wouldn't normally have combined
+    // Non-AA rects remain non-AA so they can be applied as a scissor
     SkRect nonAARect = {4.5f, 5.f, 17.25f, 18.23f};
     cs.clipRect(SkMatrix::I(), nonAARect, GrAA::kNo, SkClipOp::kIntersect);
 
     // The stack reports elements newest first, but the non-AA rect op was combined in place with
     // the first aa rect, so we should see nonAAPath as AA, and then the intersection of rects.
-    SkRect expectedRect = aaRect;
-    SkAssertResult(expectedRect.intersect(nonAARect));
     auto elements = cs.begin();
 
-    const GrClipStack::Element& aaPath = *elements;
-    REPORTER_ASSERT(r, aaPath.fShape.path() == nonAAPath, "Expected path element");
-    REPORTER_ASSERT(r, aaPath.fAA == GrAA::kYes, "Path element not promoted to AA");
+    const GrClipStack::Element& nonAARectElement = *elements;
+    REPORTER_ASSERT(r, nonAARectElement.fShape.isRect(), "Expected rect element");
+    REPORTER_ASSERT(r, nonAARectElement.fAA == GrAA::kNo,
+                    "Axis-aligned non-AA rect ignores forceAA");
+    REPORTER_ASSERT(r, nonAARectElement.fShape.rect() == nonAARect,
+                    "Mixed AA rects should not combine");
 
     ++elements;
-    const GrClipStack::Element& rect = *elements;
-    REPORTER_ASSERT(r, rect.fShape.rect() == expectedRect, "Mixed AA rects did not combine");
-    REPORTER_ASSERT(r, rect.fAA == GrAA::kYes, "Rect elements not promoted to AA");
+    const GrClipStack::Element& aaPathElement = *elements;
+    REPORTER_ASSERT(r, aaPathElement.fShape.isPath(), "Expected path element");
+    REPORTER_ASSERT(r, aaPathElement.fShape.path() == nonAAPath, "Wrong path element");
+    REPORTER_ASSERT(r, aaPathElement.fAA == GrAA::kYes, "Path element not promoted to AA");
 
     ++elements;
-    REPORTER_ASSERT(r, !(elements != cs.end()), "Expected only two clip elements");
+    const GrClipStack::Element& aaRectElement = *elements;
+    REPORTER_ASSERT(r, aaRectElement.fShape.isRect(), "Expected rect element");
+    REPORTER_ASSERT(r, aaRectElement.fShape.rect() == aaRect,
+                    "Mixed AA rects should not combine");
+    REPORTER_ASSERT(r, aaRectElement.fAA == GrAA::kYes, "Rect element stays AA");
+
+    ++elements;
+    REPORTER_ASSERT(r, !(elements != cs.end()), "Expected only three clip elements");
 }
 
 // Tests preApply works as expected for device rects, rrects, and reports clipped-out, etc. as

@@ -13,6 +13,7 @@
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkTArray.h"
 #include "src/core/SkTInternalLList.h"
+#include "src/gpu/GrAttachment.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrSamplePatternDictionary.h"
@@ -36,7 +37,7 @@ class GrRenderTarget;
 class GrRingBuffer;
 class GrSemaphore;
 class GrStagingBufferManager;
-class GrStencilAttachment;
+class GrAttachment;
 class GrStencilSettings;
 class GrSurface;
 class GrTexture;
@@ -173,11 +174,6 @@ public:
      * Implements GrResourceProvider::wrapBackendRenderTarget
      */
     sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTarget&);
-
-    /**
-     * Implements GrResourceProvider::wrapBackendTextureAsRenderTarget
-     */
-    sk_sp<GrRenderTarget> wrapBackendTextureAsRenderTarget(const GrBackendTexture&, int sampleCnt);
 
     /**
      * Implements GrResourceProvider::wrapVulkanSecondaryCBAsRenderTarget
@@ -352,15 +348,14 @@ public:
     // If a 'stencil' is provided it will be the one bound to 'renderTarget'. If one is not
     // provided but 'renderTarget' has a stencil buffer then that is a signal that the
     // render target's stencil buffer should be ignored.
-    virtual GrOpsRenderPass* getOpsRenderPass(
-            GrRenderTarget* renderTarget,
-            GrStencilAttachment* stencil,
-            GrSurfaceOrigin,
-            const SkIRect& bounds,
-            const GrOpsRenderPass::LoadAndStoreInfo&,
-            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-            const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
-            GrXferBarrierFlags renderPassXferBarriers) = 0;
+    virtual GrOpsRenderPass* getOpsRenderPass(GrRenderTarget* renderTarget,
+                                              GrAttachment* stencil,
+                                              GrSurfaceOrigin,
+                                              const SkIRect& bounds,
+                                              const GrOpsRenderPass::LoadAndStoreInfo&,
+                                              const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+                                              const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+                                              GrXferBarrierFlags renderPassXferBarriers) = 0;
 
     // Called by GrDrawingManager when flushing.
     // Provides a hook for post-flush actions (e.g. Vulkan command buffer submits). This will also
@@ -446,6 +441,9 @@ public:
         int stencilAttachmentCreates() const { return fStencilAttachmentCreates; }
         void incStencilAttachmentCreates() { fStencilAttachmentCreates++; }
 
+        int msaaAttachmentCreates() const { return fMSAAAttachmentCreates; }
+        void incMSAAAttachmentCreates() { fMSAAAttachmentCreates++; }
+
         int numDraws() const { return fNumDraws; }
         void incNumDraws() { fNumDraws++; }
 
@@ -457,6 +455,9 @@ public:
 
         int numScratchTexturesReused() const { return fNumScratchTexturesReused; }
         void incNumScratchTexturesReused() { ++fNumScratchTexturesReused; }
+
+        int numScratchMSAAAttachmentsReused() const { return fNumScratchMSAAAttachmentsReused; }
+        void incNumScratchMSAAAttachmentsReused() { ++fNumScratchMSAAAttachmentsReused; }
 
         int numInlineCompilationFailures() const { return fNumInlineCompilationFailures; }
         void incNumInlineCompilationFailures() { ++fNumInlineCompilationFailures; }
@@ -499,10 +500,12 @@ public:
         int fTransfersToTexture = 0;
         int fTransfersFromSurface = 0;
         int fStencilAttachmentCreates = 0;
+        int fMSAAAttachmentCreates = 0;
         int fNumDraws = 0;
         int fNumFailedDraws = 0;
         int fNumSubmitToGpus = 0;
         int fNumScratchTexturesReused = 0;
+        int fNumScratchMSAAAttachmentsReused = 0;
 
         int fNumInlineCompilationFailures = 0;
         int fInlineProgramCacheStats[kNumProgramCacheResults] = { 0 };
@@ -525,10 +528,14 @@ public:
         void incTextureCreates() {}
         void incTextureUploads() {}
         void incTransfersToTexture() {}
+        void incTransfersFromSurface() {}
         void incStencilAttachmentCreates() {}
+        void incMSAAAttachmentCreates() {}
         void incNumDraws() {}
         void incNumFailedDraws() {}
         void incNumSubmitToGpus() {}
+        void incNumScratchTexturesReused() {}
+        void incNumScratchMSAAAttachmentsReused() {}
         void incNumInlineCompilationFailures() {}
         void incNumInlineProgramCacheResult(ProgramCacheResult stat) {}
         void incNumPreCompilationFailures() {}
@@ -635,12 +642,14 @@ public:
 
     virtual bool setBackendTextureState(const GrBackendTexture&,
                                         const GrBackendSurfaceMutableState&,
+                                        GrBackendSurfaceMutableState* previousState,
                                         sk_sp<GrRefCntedCallback> finishedCallback) {
         return false;
     }
 
     virtual bool setBackendRenderTargetState(const GrBackendRenderTarget&,
                                              const GrBackendSurfaceMutableState&,
+                                             GrBackendSurfaceMutableState* previousState,
                                              sk_sp<GrRefCntedCallback> finishedCallback) {
         return false;
     }
@@ -662,9 +671,24 @@ public:
     /** Check a handle represents an actual texture in the backend API that has not been freed. */
     virtual bool isTestingOnlyBackendTexture(const GrBackendTexture&) const = 0;
 
-    virtual GrBackendRenderTarget createTestingOnlyBackendRenderTarget(int w, int h,
-                                                                       GrColorType) = 0;
+    /**
+     * Creates a GrBackendRenderTarget that can be wrapped using
+     * SkSurface::MakeFromBackendRenderTarget. Ideally this is a non-textureable allocation to
+     * differentiate from testing with SkSurface::MakeFromBackendTexture. When sampleCnt > 1 this
+     * is used to test client wrapped allocations with MSAA where Skia does not allocate a separate
+     * buffer for resolving. If the color is non-null the backing store should be cleared to the
+     * passed in color.
+     */
+    virtual GrBackendRenderTarget createTestingOnlyBackendRenderTarget(
+            SkISize dimensions,
+            GrColorType,
+            int sampleCount = 1,
+            GrProtected = GrProtected::kNo) = 0;
 
+    /**
+     * Deletes a GrBackendRenderTarget allocated with the above. Synchronization to make this safe
+     * is up to the caller.
+     */
     virtual void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) = 0;
 
     // This is only to be used in GL-specific tests.
@@ -689,9 +713,18 @@ public:
 
     // width and height may be larger than rt (if underlying API allows it).
     // Returns nullptr if compatible sb could not be created, otherwise the caller owns the ref on
-    // the GrStencilAttachment.
-    virtual GrStencilAttachment* createStencilAttachmentForRenderTarget(
-            const GrRenderTarget*, int width, int height, int numStencilSamples) = 0;
+    // the GrAttachment.
+    virtual sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget*,
+                                                                     SkISize dimensions,
+                                                                     int numStencilSamples) = 0;
+
+    virtual GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) = 0;
+
+    // Creates an MSAA surface to be used as an MSAA attachment on a framebuffer.
+    virtual sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
+                                                   const GrBackendFormat& format,
+                                                   int numSamples,
+                                                   GrProtected isProtected) = 0;
 
     void handleDirtyContext() {
         if (fResetBits) {
@@ -787,8 +820,6 @@ private:
                                                             GrWrapOwnership,
                                                             GrWrapCacheable) = 0;
     virtual sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&) = 0;
-    virtual sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
-                                                                     int sampleCnt) = 0;
     virtual sk_sp<GrRenderTarget> onWrapVulkanSecondaryCBAsRenderTarget(const SkImageInfo&,
                                                                         const GrVkDrawableInfo&);
 

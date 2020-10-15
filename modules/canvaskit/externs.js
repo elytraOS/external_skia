@@ -40,34 +40,31 @@ var CanvasKit = {
   MakeCanvas: function() {},
   MakeCanvasSurface: function() {},
   MakeGrContext: function() {},
-  /** @return {CanvasKit.SkAnimatedImage} */
+  /** @return {CanvasKit.AnimatedImage} */
   MakeAnimatedImageFromEncoded: function() {},
-  /** @return {CanvasKit.SkImage} */
+  /** @return {CanvasKit.Image} */
   MakeImage: function() {},
-  /** @return {CanvasKit.SkImage} */
+  /** @return {CanvasKit.Image} */
   MakeImageFromEncoded: function() {},
   MakeImageFromCanvasImageSource: function() {},
   MakeOnScreenGLSurface: function() {},
-  MakePathFromCmds: function() {},
-  MakePathFromOp: function() {},
-  MakePathFromSVGString: function() {},
   MakeRenderTarget: function() {},
-  MakeSkPicture: function() {},
+  MakePicture: function() {},
   MakeSWCanvasSurface: function() {},
   MakeManagedAnimation: function() {},
   MakeParticles: function() {},
-  MakeSkVertices: function() {},
+  MakeVertices: function() {},
   MakeSurface: function() {},
   MakeWebGLCanvasSurface: function() {},
-  /** @return {TypedArray} */
   Malloc: function() {},
+  MallocGlyphIDs: function() {},
   Free: function() {},
   computeTonalColors: function() {},
   currentContext: function() {},
   getColorComponents: function() {},
   getDecodeCacheLimitBytes: function() {},
   getDecodeCacheUsageBytes: function() {},
-  getSkDataBytes: function() {},
+  getDataBytes: function() {},
   multiplyByAlpha: function() {},
   parseColorString: function() {},
   setCurrentContext: function() {},
@@ -85,14 +82,12 @@ var CanvasKit = {
   _MakeSweepGradientShader: function() {},
   _MakeManagedAnimation: function() {},
   _MakeParticles: function() {},
-  _MakeSkPicture: function() {},
-  _MakeSkVertices: function() {},
+  _MakePicture: function() {},
   _MakeTwoPointConicalGradientShader: function() {},
   _decodeAnimatedImage: function() {},
   _decodeImage: function() {},
   _drawShapedText: function() {},
   _getRasterDirectSurface: function() {},
-  _getRasterN32PremulSurface: function() {},
 
   // The testing object is meant to expose internal functions
   // for more fine-grained testing, e.g. parseColor
@@ -144,6 +139,7 @@ var CanvasKit = {
     // private API
     /** @return {Float32Array} */
     _getRectsForRange: function() {},
+    _getRectsForPlaceholders: function() {},
   },
 
   ParagraphBuilder: {
@@ -156,6 +152,7 @@ var CanvasKit = {
     prototype: {
       pushStyle: function() {},
       pushPaintStyle: function() {},
+      addPlaceholder: function() {},
     },
 
     // private API
@@ -163,9 +160,10 @@ var CanvasKit = {
     _MakeFromFontProvider: function() {},
     _pushStyle: function() {},
     _pushPaintStyle: function() {},
+    _addPlaceholder: function() {},
   },
 
-  SkRuntimeEffect: {
+  RuntimeEffect: {
     // public API (from C++ bindings)
     Make: function() {},
 
@@ -176,8 +174,8 @@ var CanvasKit = {
 
   ParagraphStyle: function() {},
   RSXFormBuilder: function() {},
-  SkColorBuilder: function() {},
-  SkRectBuilder: function() {},
+  ColorBuilder: function() {},
+  RectBuilder: function() {},
 
   ShapedText: {
     prototype: {
@@ -187,7 +185,7 @@ var CanvasKit = {
     _getBounds: function() {},
   },
 
-  SkAnimatedImage: {
+  AnimatedImage: {
     // public API (from C++ bindings)
     decodeNextFrame: function() {},
     getFrameCount: function() {},
@@ -197,7 +195,7 @@ var CanvasKit = {
     width: function() {},
   },
 
-  SkCanvas: {
+  Canvas: {
     // public API (from C++ bindings)
     clipPath: function() {},
     drawCircle: function() {},
@@ -279,7 +277,7 @@ var CanvasKit = {
     delete: function() {},
   },
 
-  SkColorFilter: {
+  ColorFilter: {
     // public API (from C++ bindings and JS interface)
     MakeBlend: function() {},
     MakeCompose: function() {},
@@ -292,7 +290,7 @@ var CanvasKit = {
     _makeMatrix: function() {},
   },
 
-  SkColorMatrix: {
+  ColorMatrix: {
     concat: function() {},
     identity: function() {},
     postTranslate: function() {},
@@ -300,7 +298,7 @@ var CanvasKit = {
     scaled: function() {},
   },
 
-  SkColorSpace: {
+  ColorSpace: {
     Equals: function() {},
     SRGB: {},
     DISPLAY_P3: {},
@@ -311,18 +309,18 @@ var CanvasKit = {
     _MakeAdobeRGB: function() {},
   },
 
-  SkContourMeasureIter: {
+  ContourMeasureIter: {
     next: function() {},
   },
 
-  SkContourMeasure: {
+  ContourMeasure: {
     getPosTan: function() {},
     getSegment: function() {},
     isClosed: function() {},
     length: function() {},
   },
 
-  SkFont: {
+  Font: {
     // public API (from C++ bindings)
     getScaleX: function() {},
     getSize: function() {},
@@ -336,11 +334,21 @@ var CanvasKit = {
     setSkewX: function() {},
     setSubpixel: function() {},
     setTypeface: function() {},
+
+    prototype: {
+      getGlyphBounds: function() {},
+      getGlyphIDs: function() {},
+      getGlyphWidths: function() {},
+      getWidths: function() {},
+    },
+
     // private API (from C++ bindings)
+    _getGlyphIDs: function() {},
+    _getGlyphWidthBounds: function() {},
     _getWidths: function() {},
   },
 
-  SkFontMgr: {
+  FontMgr: {
     // public API (from C++ and JS bindings)
     FromData: function() {},
     RefDefault: function() {},
@@ -361,7 +369,7 @@ var CanvasKit = {
     _registerFont: function() {},
   },
 
-  SkImage: {
+  Image: {
     // public API (from C++ bindings)
     height: function() {},
     width: function() {},
@@ -371,7 +379,7 @@ var CanvasKit = {
     _makeShader: function() {},
   },
 
-  SkImageFilter: {
+  ImageFilter: {
     MakeBlur: function() {},
     MakeColorFilter: function() {},
     MakeCompose: function() {},
@@ -382,7 +390,7 @@ var CanvasKit = {
   },
 
   // These are defined in interface.js
-  SkM44: {
+  M44: {
     identity: function() {},
     invert: function() {},
     mustInvert: function() {},
@@ -398,7 +406,7 @@ var CanvasKit = {
     setupCamera: function() {},
   },
 
-  SkMatrix: {
+  Matrix: {
     identity: function() {},
     invert: function() {},
     mapPoints: function() {},
@@ -409,13 +417,13 @@ var CanvasKit = {
     translated: function() {},
   },
 
-  SkMaskFilter: {
+  MaskFilter: {
     MakeBlur: function() {},
   },
 
-  SkPaint: {
+  Paint: {
     // public API (from C++ bindings)
-    /** @return {CanvasKit.SkPaint} */
+    /** @return {CanvasKit.Paint} */
     copy: function() {},
     getBlendMode: function() {},
     getColor: function() {},
@@ -450,7 +458,7 @@ var CanvasKit = {
     _setColor: function() {},
   },
 
-  SkPathEffect: {
+  PathEffect: {
     MakeCorner: function() {},
     MakeDash: function() {},
     MakeDiscrete: function() {},
@@ -459,7 +467,7 @@ var CanvasKit = {
     _MakeDash: function() {},
   },
 
-  SkParticleEffect: {
+  ParticleEffect: {
     // public API (from C++ bindings)
     draw: function() {},
     getEffectUniform: function() {},
@@ -480,13 +488,14 @@ var CanvasKit = {
     _particleUniformPtr: function() {},
   },
 
-  SkPath: {
+  Path: {
     // public API (from C++ and JS bindings)
     MakeFromCmds: function() {},
+    MakeFromSVGString: function() {},
+    MakeFromOp: function() {},
     MakeFromVerbsPointsWeights: function() {},
-    computeTightBounds: function() {},
     contains: function() {},
-    /** @return {CanvasKit.SkPath} */
+    /** @return {CanvasKit.Path} */
     copy: function() {},
     countPoints: function() {},
     equals: function() {},
@@ -516,6 +525,7 @@ var CanvasKit = {
       arcToTangent: function() {},
       close: function() {},
       conicTo: function() {},
+      computeTightBounds: function() {},
       cubicTo: function() {},
       dash: function() {},
       lineTo: function() {},
@@ -526,7 +536,6 @@ var CanvasKit = {
       rArcTo: function() {},
       rConicTo: function() {},
       rCubicTo: function() {},
-      rect: function() {},
       rLineTo: function() {},
       rMoveTo: function() {},
       rQuadTo: function() {},
@@ -551,6 +560,7 @@ var CanvasKit = {
     _arcToTangent: function() {},
     _close: function() {},
     _conicTo: function() {},
+    _computeTightBounds: function() {},
     _cubicTo: function() {},
     _dash: function() {},
     _lineTo: function() {},
@@ -573,7 +583,7 @@ var CanvasKit = {
     dumpHex: function() {},
   },
 
-  SkPathMeasure: {
+  PathMeasure: {
     getLength: function() {},
     getSegment: function() {},
     getPosTan: function() {},
@@ -581,11 +591,11 @@ var CanvasKit = {
     nextContour: function() {},
   },
 
-  SkPicture: {
+  Picture: {
     serialize: function() {},
   },
 
-  SkPictureRecorder: {
+  PictureRecorder: {
     finishRecordingAsPicture: function() {},
     prototype: {
       beginRecording: function() {},
@@ -593,7 +603,7 @@ var CanvasKit = {
     _beginRecording: function() {},
   },
 
-  SkShader: {
+  Shader: {
     Blend: function() {},
     Color: function() {},
     Empty: function() {},
@@ -607,9 +617,9 @@ var CanvasKit = {
     _Color: function() {},
   },
 
-  SkSurface: {
+  Surface: {
     // public API (from C++ bindings)
-    /** @return {CanvasKit.SkCanvas} */
+    /** @return {CanvasKit.Canvas} */
     getCanvas: function() {},
     imageInfo: function() {},
 
@@ -620,29 +630,32 @@ var CanvasKit = {
     openGLversion: {},
 
     prototype: {
-      /** @return {CanvasKit.SkImage} */
+      /** @return {CanvasKit.Image} */
       makeImageSnapshot: function() {},
     },
 
     // private API
     _flush: function() {},
-    _getRasterN32PremulSurface: function() {},
     _makeImageSnapshot: function() {},
     delete: function() {},
   },
 
-  SkTextBlob: {
+  TextBlob: {
     // public API (both C++ and JS bindings)
+    MakeFromGlyphs: function() {},
     MakeFromRSXform: function() {},
+    MakeFromRSXformGlyphs: function() {},
     MakeFromText: function() {},
     MakeOnPath: function() {},
     // private API (from C++ bindings)
+    _MakeFromGlyphs: function() {},
     _MakeFromRSXform: function() {},
+    _MakeFromRSXformGlyphs: function() {},
     _MakeFromText: function() {},
   },
 
   // These are defined in interface.js
-  SkVector: {
+  Vector: {
     add: function() {},
     sub: function() {},
     dot: function() {},
@@ -654,7 +667,7 @@ var CanvasKit = {
     dist: function() {},
   },
 
-  SkVertices: {
+  Vertices: {
     // public API (from C++ bindings)
     uniqueID: function() {},
 
@@ -666,7 +679,7 @@ var CanvasKit = {
     _bounds: function() {},
   },
 
-  _SkVerticesBuilder: {
+  _VerticesBuilder: {
     colors: function() {},
     detach: function() {},
     indices: function() {},
@@ -888,6 +901,28 @@ var CanvasKit = {
     RTL: {},
   },
 
+  DecorationStyle: {
+    Solid: {},
+    Double: {},
+    Dotted: {},
+    Dashed: {},
+    Wavy: {},
+  },
+
+  PlaceholderAlignment: {
+    Baseline: {},
+    AboveBaseline: {},
+    BelowBaseline: {},
+    Top: {},
+    Bottom: {},
+    Middle: {},
+  },
+
+  TextBaseline: {
+    Alphabetic: {},
+    Ideographic: {},
+  },
+
   TileMode: {
     Clamp: {},
     Repeat: {},
@@ -945,37 +980,35 @@ var CanvasKit = {
 // It's not enough to declare them above, because closure can still erase them
 // unless they go on the prototype.
 CanvasKit.Paragraph.prototype.getRectsForRange = function() {};
+CanvasKit.Paragraph.prototype.getRectsForPlaceholders = function() {};
 
-CanvasKit.SkPicture.prototype.saveAsFile = function() {};
+CanvasKit.Picture.prototype.saveAsFile = function() {};
 
-CanvasKit.SkSurface.prototype.dispose = function() {};
-CanvasKit.SkSurface.prototype.flush = function() {};
-CanvasKit.SkSurface.prototype.requestAnimationFrame = function() {};
-CanvasKit.SkSurface.prototype.drawOnce = function() {};
-CanvasKit.SkSurface.prototype.captureFrameAsSkPicture = function() {};
+CanvasKit.Surface.prototype.dispose = function() {};
+CanvasKit.Surface.prototype.flush = function() {};
+CanvasKit.Surface.prototype.requestAnimationFrame = function() {};
+CanvasKit.Surface.prototype.drawOnce = function() {};
 
-CanvasKit.SkImage.prototype.encodeToData = function() {};
-CanvasKit.SkImage.prototype.makeShader = function() {};
+CanvasKit.Image.prototype.encodeToData = function() {};
+CanvasKit.Image.prototype.makeShader = function() {};
 
-CanvasKit.SkFontMgr.prototype.MakeTypefaceFromData = function() {};
-
-CanvasKit.SkFont.prototype.getWidths = function() {};
+CanvasKit.FontMgr.prototype.MakeTypefaceFromData = function() {};
 
 CanvasKit.RSXFormBuilder.prototype.build = function() {};
 CanvasKit.RSXFormBuilder.prototype.delete = function() {};
 CanvasKit.RSXFormBuilder.prototype.push = function() {};
 CanvasKit.RSXFormBuilder.prototype.set = function() {};
 
-CanvasKit.SkColorBuilder.prototype.build = function() {};
-CanvasKit.SkColorBuilder.prototype.delete = function() {};
-CanvasKit.SkColorBuilder.prototype.push = function() {};
-CanvasKit.SkColorBuilder.prototype.set = function() {};
+CanvasKit.ColorBuilder.prototype.build = function() {};
+CanvasKit.ColorBuilder.prototype.delete = function() {};
+CanvasKit.ColorBuilder.prototype.push = function() {};
+CanvasKit.ColorBuilder.prototype.set = function() {};
 
-CanvasKit.SkRuntimeEffect.prototype.makeShader = function() {};
-CanvasKit.SkRuntimeEffect.prototype.makeShaderWithChildren = function() {};
+CanvasKit.RuntimeEffect.prototype.makeShader = function() {};
+CanvasKit.RuntimeEffect.prototype.makeShaderWithChildren = function() {};
 
-CanvasKit.SkParticleEffect.prototype.effectUniforms = function() {};
-CanvasKit.SkParticleEffect.prototype.particleUniforms = function() {};
+CanvasKit.ParticleEffect.prototype.effectUniforms = function() {};
+CanvasKit.ParticleEffect.prototype.particleUniforms = function() {};
 
 // Define StrokeOpts object
 var StrokeOpts = {};

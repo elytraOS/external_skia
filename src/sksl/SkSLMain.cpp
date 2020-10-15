@@ -5,7 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include <fstream>
+#define SK_OPTS_NS skslc_standalone
+#include "src/opts/SkChecksum_opts.h"
+
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLDehydrator.h"
 #include "src/sksl/SkSLFileOutputStream.h"
@@ -14,6 +16,21 @@
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
+
+#include <fstream>
+#include <stdarg.h>
+#include <stdio.h>
+
+void SkDebugf(const char format[], ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+}
+
+namespace SkOpts {
+    decltype(hash_fn) hash_fn = skslc_standalone::hash_fn;
+}
 
 // Given the path to a file (e.g. src/gpu/effects/GrFooFragmentProcessor.fp) and the expected
 // filename prefix and suffix (e.g. "Gr" and ".fp"), returns the "base name" of the
@@ -60,6 +77,10 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                     static auto s_addAndTrueCaps = Factory::AddAndTrueToLoopCondition();
                     settings->fCaps = s_addAndTrueCaps.get();
                 }
+                if (settingsText.consumeSuffix(" BlendModesFailRandomlyForAllZeroVec")) {
+                    static auto s_blendZeroCaps = Factory::BlendModesFailRandomlyForAllZeroVec();
+                    settings->fCaps = s_blendZeroCaps.get();
+                }
                 if (settingsText.consumeSuffix(" CannotUseFractForNegativeValues")) {
                     static auto s_negativeFractCaps = Factory::CannotUseFractForNegativeValues();
                     settings->fCaps = s_negativeFractCaps.get();
@@ -104,6 +125,10 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                     static auto s_incompleteShortIntCaps = Factory::IncompleteShortIntPrecision();
                     settings->fCaps = s_incompleteShortIntCaps.get();
                 }
+                if (settingsText.consumeSuffix(" MustGuardDivisionEvenAfterExplicitZeroCheck")) {
+                    static auto s_div0Caps = Factory::MustGuardDivisionEvenAfterExplicitZeroCheck();
+                    settings->fCaps = s_div0Caps.get();
+                }
                 if (settingsText.consumeSuffix(" MustForceNegatedAtanParamToFloat")) {
                     static auto s_negativeAtanCaps = Factory::MustForceNegatedAtanParamToFloat();
                     settings->fCaps = s_negativeAtanCaps.get();
@@ -145,6 +170,9 @@ static void detect_shader_settings(const SkSL::String& text, SkSL::Program::Sett
                 }
                 if (settingsText.consumeSuffix(" ForceHighPrecision")) {
                     settings->fForceHighPrecision = true;
+                }
+                if (settingsText.consumeSuffix(" NoInline")) {
+                    settings->fInlineThreshold = 0;
                 }
                 if (settingsText.consumeSuffix(" Sharpen")) {
                     settings->fSharpenTextures = true;
@@ -305,30 +333,22 @@ int main(int argc, const char** argv) {
             printf("error writing '%s'\n", argv[2]);
             exit(4);
         }
-        std::shared_ptr<SkSL::SymbolTable> symbols;
-        std::vector<std::unique_ptr<SkSL::ProgramElement>> elements;
-        compiler.processIncludeFile(kind, argv[1], nullptr, &elements, &symbols);
+        auto [symbols, elements] =
+                compiler.loadModule(kind, SkSL::Compiler::MakeModulePath(argv[1]), nullptr);
         SkSL::Dehydrator dehydrator;
-        for (int i = symbols->fParent->fOwnedSymbols.size() - 1; i >= 0; --i) {
-            symbols->fOwnedSymbols.insert(symbols->fOwnedSymbols.begin(),
-                                          std::move(symbols->fParent->fOwnedSymbols[i]));
-        }
-        for (const auto& p : *symbols->fParent) {
-            symbols->addWithoutOwnership(p.first, p.second);
-        }
         dehydrator.write(*symbols);
         dehydrator.write(elements);
         SkSL::String baseName = base_name(argv[1], "", ".sksl");
         SkSL::StringStream buffer;
         dehydrator.finish(buffer);
         const SkSL::String& data = buffer.str();
-        out.printf("static constexpr size_t SKSL_INCLUDE_%s_LENGTH = %d;\n", baseName.c_str(),
-                   (int) data.length());
-        out.printf("static uint8_t SKSL_INCLUDE_%s[%d] = {", baseName.c_str(), (int) data.length());
+        out.printf("static uint8_t SKSL_INCLUDE_%s[] = {", baseName.c_str());
         for (size_t i = 0; i < data.length(); ++i) {
-            out.printf("%d,", (uint8_t) data[i]);
+            out.printf("%s%d,", dehydrator.prefixAtOffset(i), uint8_t(data[i]));
         }
         out.printf("};\n");
+        out.printf("static constexpr size_t SKSL_INCLUDE_%s_LENGTH = sizeof(SKSL_INCLUDE_%s);\n",
+                   baseName.c_str(), baseName.c_str());
         if (!out.close()) {
             printf("error writing '%s'\n", argv[2]);
             exit(4);

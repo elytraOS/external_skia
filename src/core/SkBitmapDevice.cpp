@@ -213,7 +213,11 @@ static bool valid_for_bitmap_device(const SkImageInfo& info,
 }
 
 SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap)
+#ifdef SK_LEGACY_SURFACE_PROPS
         : INHERITED(bitmap.info(), SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType))
+#else
+        : INHERITED(bitmap.info(), SkSurfaceProps())
+#endif
         , fBitmap(bitmap)
         , fRCStack(bitmap.width(), bitmap.height())
         , fGlyphPainter(this->surfaceProps(),
@@ -224,7 +228,11 @@ SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap)
 }
 
 SkBitmapDevice* SkBitmapDevice::Create(const SkImageInfo& info) {
+#ifdef SK_LEGACY_SURFACE_PROPS
     return Create(info, SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType));
+#else
+    return Create(info, SkSurfaceProps());
+#endif
 }
 
 SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap, const SkSurfaceProps& surfaceProps,
@@ -554,29 +562,6 @@ void SkBitmapDevice::drawVertices(const SkVertices* vertices, SkBlendMode bmode,
     BDDraw(this).drawVertices(vertices, bmode, paint);
 }
 
-void SkBitmapDevice::drawDevice(SkBaseDevice* device, int x, int y, const SkPaint& origPaint) {
-    SkASSERT(!origPaint.getImageFilter());
-    SkASSERT(!origPaint.getMaskFilter());
-
-    // todo: can we unify with similar adjustment in SkGpuDevice?
-    SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
-
-    // hack to test coverage
-    SkBitmapDevice* src = static_cast<SkBitmapDevice*>(device);
-    if (src->fCoverage) {
-        SkDraw draw;
-        SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
-        draw.fDst = fBitmap.pixmap();
-        draw.fMatrixProvider = &matrixProvider;
-        draw.fRC = &fRCStack.rc();
-        paint.writable()->setShader(src->fBitmap.makeShader());
-        draw.drawBitmap(*src->fCoverage,
-                        SkMatrix::Translate(SkIntToScalar(x),SkIntToScalar(y)), nullptr, *paint);
-    } else {
-        BDDraw(this).drawSprite(src->fBitmap, x, y, *paint);
-    }
-}
-
 void SkBitmapDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
                                const SkRect tex[], const SkColor colors[], int count,
                                SkBlendMode mode, const SkPaint& paint) {
@@ -590,16 +575,44 @@ void SkBitmapDevice::drawAtlas(const SkImage* atlas, const SkRSXform xform[],
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkBitmapDevice::drawSpecial(SkSpecialImage* src, int x, int y, const SkPaint& paint) {
-    SkASSERT(!src->isTextureBacked());
-    SkASSERT(!paint.getMaskFilter() && !paint.getImageFilter());
+void SkBitmapDevice::drawDevice(SkBaseDevice* device, const SkPaint& paint) {
+    SkASSERT(!paint.getImageFilter());
+    SkASSERT(!paint.getMaskFilter());
 
-    SkBitmap resultBM;
-    if (src->getROPixels(&resultBM)) {
-        BDDraw(this).drawSprite(resultBM, x, y, paint);
+    // hack to test coverage
+    SkBitmapDevice* src = static_cast<SkBitmapDevice*>(device);
+    if (src->fCoverage) {
+        SkDraw draw;
+        SkSimpleMatrixProvider matrixProvider(device->getRelativeTransform(*this));
+        draw.fDst = fBitmap.pixmap();
+        draw.fMatrixProvider = &matrixProvider;
+        draw.fRC = &fRCStack.rc();
+
+        SkPaint deviceAsShader = paint;
+        deviceAsShader.setShader(src->fBitmap.makeShader());
+        draw.drawBitmap(*src->fCoverage, SkMatrix::I(), nullptr, deviceAsShader);
+    } else {
+        this->INHERITED::drawDevice(device, paint);
     }
 }
 
+void SkBitmapDevice::drawSpecial(SkSpecialImage* src,
+                                 const SkMatrix& localToDevice,
+                                 const SkPaint& paint) {
+    SkASSERT(!paint.getImageFilter());
+    SkASSERT(!paint.getMaskFilter());
+    SkASSERT(!src->isTextureBacked());
+
+    SkBitmap resultBM;
+    if (src->getROPixels(&resultBM)) {
+        SkDraw draw;
+        SkSimpleMatrixProvider matrixProvider(localToDevice);
+        draw.fDst = fBitmap.pixmap();
+        draw.fMatrixProvider = &matrixProvider;
+        draw.fRC = &fRCStack.rc();
+        draw.drawBitmap(resultBM, SkMatrix::I(), nullptr, paint);
+    }
+}
 sk_sp<SkSpecialImage> SkBitmapDevice::makeSpecial(const SkBitmap& bitmap) {
     return SkSpecialImage::MakeFromRaster(bitmap.bounds(), bitmap);
 }

@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
 
     SkVideoEncoder encoder;
 
-    GrContext* context = nullptr;
+    GrDirectContext* context = nullptr;
     sk_sp<SkSurface> surf;
     sk_sp<SkData> data;
 
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
                                                 SkSurface::RescaleGamma::kSrc,
                                                 kNone_SkFilterQuality,
                                                 read_pixels_cb, &asyncRec);
-                surf->getContext()->submit();
+                context->submit();
             } else {
                 SkPixmap pm;
                 SkAssertResult(surf->peekPixels(&pm));

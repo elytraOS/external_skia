@@ -16,7 +16,8 @@ namespace SkSL {
 /**
  * Abstract supertype of all statements.
  */
-struct Statement : public IRNode {
+class Statement : public IRNode {
+public:
     enum Kind {
         kBlock = (int) Symbol::Kind::kLast + 1,
         kBreak,
@@ -32,7 +33,6 @@ struct Statement : public IRNode {
         kSwitch,
         kSwitchCase,
         kVarDeclaration,
-        kVarDeclarations,
         kWhile,
 
         kFirst = kBlock,
@@ -44,13 +44,27 @@ struct Statement : public IRNode {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
 
+    Statement(int offset, Kind kind, BlockData data, StatementArray stmts)
+    : INHERITED(offset, (int) kind, data, std::move(stmts)) {
+        SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
+    }
+
+    Statement(int offset, const ForStatementData& data)
+    : INHERITED(offset, (int) Kind::kFor, data) {}
+
+    Statement(int offset, const IfStatementData& data)
+    : INHERITED(offset, (int) Kind::kIf, data) {}
+
+    Statement(int offset, const InlineMarkerData& data)
+    : INHERITED(offset, (int) Kind::kInlineMarker, data) {}
+
     Kind kind() const {
         return (Kind) fKind;
     }
 
     /**
      *  Use is<T> to check the type of a statement.
-     *  e.g. replace `s.fKind == Statement::kReturn_Kind` with `s.is<ReturnStatement>()`.
+     *  e.g. replace `s.kind() == Statement::Kind::kReturn` with `s.is<ReturnStatement>()`.
      */
     template <typename T>
     bool is() const {
@@ -79,6 +93,7 @@ struct Statement : public IRNode {
 
     virtual std::unique_ptr<Statement> clone() const = 0;
 
+private:
     using INHERITED = IRNode;
 };
 

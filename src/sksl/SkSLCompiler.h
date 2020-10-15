@@ -9,7 +9,6 @@
 #define SKSL_COMPILER
 
 #include <set>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include "src/sksl/SkSLASTFile.h"
@@ -38,18 +37,28 @@
 #define SK_SAMPLEMASK_BUILTIN             20
 #define SK_VERTEXID_BUILTIN               42
 #define SK_INSTANCEID_BUILTIN             43
-#define SK_CLIPDISTANCE_BUILTIN            3
 #define SK_INVOCATIONID_BUILTIN            8
 #define SK_POSITION_BUILTIN                0
+
+class SkBitSet;
 
 namespace SkSL {
 
 class ByteCode;
 class ExternalValue;
 class IRGenerator;
-struct IRIntrinsic;
-using IRIntrinsicMap = std::unordered_map<String, IRIntrinsic>;
+class IRIntrinsicMap;
 struct PipelineStageArgs;
+
+struct LoadedModule {
+    std::shared_ptr<SymbolTable>                 fSymbols;
+    std::vector<std::unique_ptr<ProgramElement>> fElements;
+};
+
+struct ParsedModule {
+    std::shared_ptr<SymbolTable>    fSymbols;
+    std::shared_ptr<IRIntrinsicMap> fIntrinsics;
+};
 
 /**
  * Main compiler entry point. This is a traditional compiler design which first parses the .sksl
@@ -119,12 +128,14 @@ public:
     Compiler& operator=(const Compiler&) = delete;
 
     /**
-     * Registers an ExternalValue as a top-level symbol which is visible in the global namespace.
+     * If externalValues is supplied, those values are registered in the symbol table of the
+     * Program, but ownership is *not* transferred. It is up to the caller to keep them alive.
      */
-    void registerExternalValue(ExternalValue* value);
-
-    std::unique_ptr<Program> convertProgram(Program::Kind kind, String text,
-                                            const Program::Settings& settings);
+    std::unique_ptr<Program> convertProgram(
+            Program::Kind kind,
+            String text,
+            const Program::Settings& settings,
+            const std::vector<std::unique_ptr<ExternalValue>>* externalValues = nullptr);
 
     bool toSPIRV(Program& program, OutputStream& out);
 
@@ -140,7 +151,7 @@ public:
 
     bool toMetal(Program& program, String* out);
 
-#if defined(SKSL_STANDALONE) || defined(GR_TEST_UTILS)
+#if defined(SKSL_STANDALONE) || GR_TEST_UTILS
     bool toCPP(Program& program, String name, OutputStream& out);
 
     bool toH(Program& program, String name, OutputStream& out);
@@ -151,11 +162,6 @@ public:
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     bool toPipelineStage(Program& program, PipelineStageArgs* outArgs);
 #endif
-
-    /**
-     * Takes ownership of the given symbol. It will be destroyed when the compiler is destroyed.
-     */
-    const Symbol* takeOwnership(std::unique_ptr<const Symbol> symbol);
 
     void error(int offset, String msg) override;
 
@@ -180,25 +186,38 @@ public:
     // (e.g. '+=' becomes '+')
     static Token::Kind RemoveAssignment(Token::Kind op);
 
-    void processIncludeFile(Program::Kind kind, const char* path,
-                            std::shared_ptr<SymbolTable> base,
-                            std::vector<std::unique_ptr<ProgramElement>>* outElements,
-                            std::shared_ptr<SymbolTable>* outSymbolTable);
+    // When  SKSL_STANDALONE, fPath is used. (fData, fSize) will be (nullptr, 0)
+    // When !SKSL_STANDALONE, fData and fSize are used. fPath will be nullptr.
+    struct ModuleData {
+        const char*    fPath;
+
+        const uint8_t* fData;
+        size_t         fSize;
+    };
+
+    static ModuleData MakeModulePath(const char* path) {
+        return ModuleData{path, /*fData=*/nullptr, /*fSize=*/0};
+    }
+    static ModuleData MakeModuleData(const uint8_t* data, size_t size) {
+        return ModuleData{/*fPath=*/nullptr, data, size};
+    }
+
+    LoadedModule loadModule(Program::Kind kind, ModuleData data, std::shared_ptr<SymbolTable> base);
+    ParsedModule parseModule(Program::Kind kind, ModuleData data, const ParsedModule& base);
 
 private:
-    void loadGeometryIntrinsics();
+    const ParsedModule& loadFPModule();
+    const ParsedModule& loadGeometryModule();
+    const ParsedModule& loadInterpreterModule();
+    const ParsedModule& loadPipelineModule();
 
-    void loadInterpreterIntrinsics();
-
-    void loadPipelineIntrinsics();
+    const ParsedModule& moduleForProgramKind(Program::Kind kind);
 
     void addDefinition(const Expression* lvalue, std::unique_ptr<Expression>* expr,
                        DefinitionMap* definitions);
-
     void addDefinitions(const BasicBlock::Node& node, DefinitionMap* definitions);
 
-    void scanCFG(CFG* cfg, BlockId block, std::set<BlockId>* workList);
-
+    void scanCFG(CFG* cfg, BlockId block, SkBitSet* processedSet);
     void computeDataFlow(CFG* cfg);
 
     /**
@@ -236,21 +255,18 @@ private:
     Position position(int offset);
 
     std::shared_ptr<SymbolTable> fRootSymbolTable;
-    std::shared_ptr<SymbolTable> fGpuSymbolTable;
-    std::unique_ptr<IRIntrinsicMap> fGPUIntrinsics;
-    std::shared_ptr<SymbolTable> fInterpreterSymbolTable;
-    std::unique_ptr<IRIntrinsicMap> fInterpreterIntrinsics;
 
-    std::vector<std::unique_ptr<ProgramElement>> fVertexInclude;
-    std::shared_ptr<SymbolTable> fVertexSymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fFragmentInclude;
-    std::shared_ptr<SymbolTable> fFragmentSymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fGeometryInclude;
-    std::shared_ptr<SymbolTable> fGeometrySymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fPipelineInclude;
-    std::shared_ptr<SymbolTable> fPipelineSymbolTable;
-    std::vector<std::unique_ptr<ProgramElement>> fFPInclude;
-    std::shared_ptr<SymbolTable> fFPSymbolTable;
+    ParsedModule fRootModule;
+    ParsedModule fGPUModule;
+    ParsedModule fInterpreterModule;
+    ParsedModule fVertexModule;
+    ParsedModule fFragmentModule;
+    ParsedModule fGeometryModule;
+    ParsedModule fPipelineModule;
+    ParsedModule fFPModule;
+
+    // holds ModifiersPools belonging to the core includes for lifetime purposes
+    std::vector<std::unique_ptr<ModifiersPool>> fModifiers;
 
     Inliner fInliner;
     std::unique_ptr<IRGenerator> fIRGenerator;
@@ -260,6 +276,8 @@ private:
     std::shared_ptr<Context> fContext;
     int fErrorCount;
     String fErrorText;
+
+    friend class AutoSource;
 };
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU

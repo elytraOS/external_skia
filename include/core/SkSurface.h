@@ -206,7 +206,7 @@ public:
         @param releaseContext      state passed to textureReleaseProc
         @return                    SkSurface if all parameters are valid; otherwise, nullptr
     */
-    static sk_sp<SkSurface> MakeFromBackendTexture(GrContext* context,
+    static sk_sp<SkSurface> MakeFromBackendTexture(GrRecordingContext* context,
                                                    const GrBackendTexture& backendTexture,
                                                    GrSurfaceOrigin origin, int sampleCnt,
                                                    SkColorType colorType,
@@ -240,7 +240,7 @@ public:
         @param releaseContext           state passed to releaseProc
         @return                         SkSurface if all parameters are valid; otherwise, nullptr
     */
-    static sk_sp<SkSurface> MakeFromBackendRenderTarget(GrContext* context,
+    static sk_sp<SkSurface> MakeFromBackendRenderTarget(GrRecordingContext* context,
                                                 const GrBackendRenderTarget& backendRenderTarget,
                                                 GrSurfaceOrigin origin,
                                                 SkColorType colorType,
@@ -248,17 +248,6 @@ public:
                                                 const SkSurfaceProps* surfaceProps,
                                                 RenderTargetReleaseProc releaseProc = nullptr,
                                                 ReleaseContext releaseContext = nullptr);
-
-#if GR_TEST_UTILS
-    // TODO: Remove this.
-    static sk_sp<SkSurface> MakeFromBackendTextureAsRenderTarget(GrContext* context,
-                                                            const GrBackendTexture& backendTexture,
-                                                            GrSurfaceOrigin origin,
-                                                            int sampleCnt,
-                                                            SkColorType colorType,
-                                                            sk_sp<SkColorSpace> colorSpace,
-                                                            const SkSurfaceProps* surfaceProps);
-#endif
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
     /** Private.
@@ -280,7 +269,7 @@ public:
                                fonts; may be nullptr
         @return                created SkSurface, or nullptr
     */
-    static sk_sp<SkSurface> MakeFromAHardwareBuffer(GrContext* context,
+    static sk_sp<SkSurface> MakeFromAHardwareBuffer(GrDirectContext* context,
                                                     AHardwareBuffer* hardwareBuffer,
                                                     GrSurfaceOrigin origin,
                                                     sk_sp<SkColorSpace> colorSpace,
@@ -307,7 +296,7 @@ public:
                                instantiated; may not be nullptr
         @return                created SkSurface, or nullptr
      */
-    static sk_sp<SkSurface> MakeFromCAMetalLayer(GrContext* context,
+    static sk_sp<SkSurface> MakeFromCAMetalLayer(GrRecordingContext* context,
                                                  GrMTLHandle layer,
                                                  GrSurfaceOrigin origin,
                                                  int sampleCnt,
@@ -334,7 +323,7 @@ public:
                                fonts; may be nullptr
         @return                created SkSurface, or nullptr
      */
-    static sk_sp<SkSurface> MakeFromMTKView(GrContext* context,
+    static sk_sp<SkSurface> MakeFromMTKView(GrRecordingContext* context,
                                             GrMTLHandle mtkView,
                                             GrSurfaceOrigin origin,
                                             int sampleCnt,
@@ -376,14 +365,6 @@ public:
                                              const SkSurfaceProps* surfaceProps,
                                              bool shouldCreateWithMips = false);
 
-    /** Deprecated.
-    */
-    static sk_sp<SkSurface> MakeRenderTarget(GrContext* context, SkBudgeted budgeted,
-                                             const SkImageInfo& imageInfo,
-                                             int sampleCount, GrSurfaceOrigin surfaceOrigin,
-                                             const SkSurfaceProps* surfaceProps,
-                                             bool shouldCreateWithMips = false);
-
     /** Returns SkSurface on GPU indicated by context. Allocates memory for
         pixels, based on the width, height, and SkColorType in SkImageInfo.  budgeted
         selects whether allocation for pixels is tracked by context. imageInfo
@@ -412,12 +393,6 @@ public:
                                 kBottomLeft_GrSurfaceOrigin, surfaceProps);
     }
 
-    /** Deprecated.
-    */
-    static sk_sp<SkSurface> MakeRenderTarget(GrContext* context, SkBudgeted budgeted,
-                                             const SkImageInfo& imageInfo, int sampleCount,
-                                             const SkSurfaceProps* surfaceProps);
-
     /** Returns SkSurface on GPU indicated by context. Allocates memory for
         pixels, based on the width, height, and SkColorType in SkImageInfo.  budgeted
         selects whether allocation for pixels is tracked by context. imageInfo
@@ -439,11 +414,6 @@ public:
         return MakeRenderTarget(context, budgeted, imageInfo, 0, kBottomLeft_GrSurfaceOrigin,
                                 nullptr);
     }
-
-    /** Deprecated.
-    */
-    static sk_sp<SkSurface> MakeRenderTarget(GrContext* context, SkBudgeted budgeted,
-                                             const SkImageInfo& imageInfo);
 
     /** Returns SkSurface on GPU indicated by context that is compatible with the provided
         characterization. budgeted selects whether allocation for pixels is tracked by context.
@@ -900,9 +870,9 @@ public:
         correct ordering when the surface backing store is accessed outside Skia (e.g. direct use of
         the 3D API or a windowing system). GrContext has additional flush and submit methods that
         apply to all surfaces and images created from a GrContext. This is equivalent to calling
-        SkSurface::flush with a default GrFlushInfo followed by GrContext::submit.
+        SkSurface::flush with a default GrFlushInfo followed by GrContext::submit(syncCpu).
     */
-    void flushAndSubmit();
+    void flushAndSubmit(bool syncCpu = false);
 
     enum class BackendSurfaceAccess {
         kNoAccess,  //!< back-end object will not be used by client
@@ -975,6 +945,10 @@ public:
         used if the surface will be used for presenting or external use and the client wants backend
         object to be prepped for that use. A finishedProc or semaphore on the GrFlushInfo will also
         include the work for any requested state change.
+
+        If the backend API is Vulkan, the caller can set the GrBackendSurfaceMutableState's
+        VkImageLayout to VK_IMAGE_LAYOUT_UNDEFINED or queueFamilyIndex to VK_QUEUE_FAMILY_IGNORED to
+        tell Skia to not change those respective states.
 
         If the return is GrSemaphoresSubmitted::kYes, only initialized GrBackendSemaphores will be
         submitted to the gpu during the next submit call (it is possible Skia failed to create a

@@ -29,8 +29,8 @@ class SkVertices;
 // using GrClipStack. When false, SkGpuDevice continues to extend SkClipStackDevice and uses
 // SkClipStack and GrClipStackClip to manage the clip stack.
 #if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
-    // For staging purposes, disable this for Android Framework and Google3
-    #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) || defined(SK_BUILD_FOR_GOOGLE3)
+    // For staging purposes, disable this for Android Framework
+    #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
         #define SK_DISABLE_NEW_GR_CLIP_STACK
     #endif
 #endif
@@ -80,7 +80,6 @@ public:
 
     ~SkGpuDevice() override {}
 
-    GrContext* context() const override;
     GrRecordingContext* recordingContext() const override { return fContext.get(); }
 
     // set all pixels to 0
@@ -119,9 +118,8 @@ public:
 
     void drawDrawable(SkDrawable*, const SkMatrix*, SkCanvas* canvas) override;
 
-    void drawDevice(SkBaseDevice*, int x, int y, const SkPaint&) override;
-
-    void drawSpecial(SkSpecialImage*, int left, int top, const SkPaint&) override;
+    void drawDevice(SkBaseDevice*, const SkPaint&) override;
+    void drawSpecial(SkSpecialImage*, const SkMatrix&, const SkPaint&) override;
 
     void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], SkCanvas::QuadAAFlags aaFlags,
                         const SkColor4f& color, SkBlendMode mode) override;
@@ -158,10 +156,7 @@ protected:
         SkASSERT(op == SkClipOp::kIntersect || op == SkClipOp::kDifference);
         fClip.clipRRect(this->localToDevice(), rrect, GrAA(aa), op);
     }
-    void onClipPath(const SkPath& path, SkClipOp op, bool aa) override {
-        SkASSERT(op == SkClipOp::kIntersect || op == SkClipOp::kDifference);
-        fClip.clipPath(this->localToDevice(), path, GrAA(aa), op);
-    }
+    void onClipPath(const SkPath& path, SkClipOp op, bool aa) override;
     void onClipShader(sk_sp<SkShader> shader) override {
         fClip.clipShader(std::move(shader));
     }

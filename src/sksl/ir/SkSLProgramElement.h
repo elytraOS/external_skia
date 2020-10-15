@@ -17,7 +17,8 @@ namespace SkSL {
 /**
  * Represents a top-level element (e.g. function or global variable) in a program.
  */
-struct ProgramElement : public IRNode {
+class ProgramElement : public IRNode {
+public:
     enum class Kind {
         kEnum = 0,
         kExtension,
@@ -25,10 +26,10 @@ struct ProgramElement : public IRNode {
         kInterfaceBlock,
         kModifiers,
         kSection,
-        kVar,
+        kGlobalVar,
 
         kFirst = kEnum,
-        kLast = kVar
+        kLast = kGlobalVar
     };
 
     ProgramElement(int offset, Kind kind)
@@ -36,13 +37,27 @@ struct ProgramElement : public IRNode {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
 
+    ProgramElement(int offset, const EnumData& enumData)
+    : INHERITED(offset, (int) Kind::kEnum, enumData) {}
+
+    ProgramElement(int offset, const ModifiersDeclarationData& enumData)
+    : INHERITED(offset, (int) Kind::kModifiers, enumData) {}
+
+    ProgramElement(int offset, Kind kind, const String& data)
+    : INHERITED(offset, (int) kind, data) {
+        SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
+    }
+
+    ProgramElement(int offset, const SectionData& sectionData)
+    : INHERITED(offset, (int) Kind::kSection, sectionData) {}
+
     Kind kind() const {
         return (Kind) fKind;
     }
 
     /**
      *  Use is<T> to check the type of a program element.
-     *  e.g. replace `el.fKind == ProgramElement::kEnum_Kind` with `el.is<Enum>()`.
+     *  e.g. replace `el.kind() == ProgramElement::Kind::kEnum` with `el.is<Enum>()`.
      */
     template <typename T>
     bool is() const {
@@ -66,6 +81,7 @@ struct ProgramElement : public IRNode {
 
     virtual std::unique_ptr<ProgramElement> clone() const = 0;
 
+private:
     using INHERITED = IRNode;
 };
 

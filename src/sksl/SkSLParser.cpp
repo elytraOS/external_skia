@@ -357,7 +357,7 @@ ASTNode::ID Parser::enumDeclaration() {
     if (!this->expect(Token::Kind::TK_LBRACE, "'{'")) {
         return ASTNode::ID::Invalid();
     }
-    fSymbols.add(this->text(name), std::make_unique<Type>(this->text(name), Type::TypeKind::kEnum));
+    fSymbols.add(std::make_unique<Type>(this->text(name), Type::TypeKind::kEnum));
     CREATE_NODE(result, name.fOffset, ASTNode::Kind::kEnum, this->text(name));
     if (!this->checkNext(Token::Kind::TK_RBRACE)) {
         Token id;
@@ -503,9 +503,18 @@ ASTNode::ID Parser::structDeclaration() {
             return ASTNode::ID::Invalid();
         }
         ASTNode& declsNode = getNode(decls);
+        Modifiers modifiers = declsNode.begin()->getModifiers();
+        if (modifiers.fFlags != Modifiers::kNo_Flag) {
+            String desc = modifiers.description();
+            desc.pop_back();  // remove trailing space
+            this->error(declsNode.fOffset,
+                        "modifier '" + desc + "' is not permitted on a struct field");
+        }
+
         const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getTypeData().fName];
-        SkASSERT(symbol && symbol->kind() == Symbol::Kind::kType);
-        const Type* type = (const Type*) symbol;
+        SkASSERT(symbol);
+        const Type* type = &symbol->as<Type>();
+
         for (auto iter = declsNode.begin() + 2; iter != declsNode.end(); ++iter) {
             ASTNode& var = *iter;
             ASTNode::VarData vd = var.getVarData();
@@ -521,7 +530,8 @@ ASTNode::ID Parser::structDeclaration() {
                         std::make_unique<Type>(typeName, Type::TypeKind::kArray, *type,
                                                (int)columns));
             }
-            fields.push_back(Type::Field(declsNode.begin()->getModifiers(), vd.fName, type));
+
+            fields.push_back(Type::Field(modifiers, vd.fName, type));
             if (vd.fSizeCount ? (var.begin() + (vd.fSizeCount - 1))->fNext : var.fFirstChild) {
                 this->error(declsNode.fOffset, "initializers are not permitted on struct fields");
             }
@@ -530,7 +540,7 @@ ASTNode::ID Parser::structDeclaration() {
     if (!this->expect(Token::Kind::TK_RBRACE, "'}'")) {
         return ASTNode::ID::Invalid();
     }
-    fSymbols.add(this->text(name), std::make_unique<Type>(name.fOffset, this->text(name), fields));
+    fSymbols.add(std::make_unique<Type>(name.fOffset, this->text(name), fields));
     RETURN_NODE(name.fOffset, ASTNode::Kind::kType,
                 ASTNode::TypeData(this->text(name), true, false));
 }
