@@ -16,8 +16,8 @@
 #include "src/core/SkImagePriv.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
@@ -487,10 +487,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrRecordingContext* context,
                                                    const SkSurfaceProps* props,
                                                    SkSurface::TextureReleaseProc textureReleaseProc,
                                                    SkSurface::ReleaseContext releaseContext) {
-    sk_sp<GrRefCntedCallback> releaseHelper;
-    if (textureReleaseProc) {
-        releaseHelper.reset(new GrRefCntedCallback(textureReleaseProc, releaseContext));
-    }
+    auto releaseHelper = GrRefCntedCallback::Make(textureReleaseProc, releaseContext);
 
     if (!context) {
         return nullptr;
@@ -526,10 +523,7 @@ bool SkSurface_Gpu::onReplaceBackendTexture(const GrBackendTexture& backendTextu
                                             ContentChangeMode mode,
                                             TextureReleaseProc releaseProc,
                                             ReleaseContext releaseContext) {
-    sk_sp<GrRefCntedCallback> releaseHelper;
-    if (releaseProc) {
-        releaseHelper.reset(new GrRefCntedCallback(releaseProc, releaseContext));
-    }
+    auto releaseHelper = GrRefCntedCallback::Make(releaseProc, releaseContext);
 
     auto context = this->fDevice->recordingContext();
     if (context->abandoned()) {
@@ -604,10 +598,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrRecordingContext* cont
                                                         const SkSurfaceProps* props,
                                                         SkSurface::RenderTargetReleaseProc relProc,
                                                         SkSurface::ReleaseContext releaseContext) {
-    sk_sp<GrRefCntedCallback> releaseHelper;
-    if (relProc) {
-        releaseHelper.reset(new GrRefCntedCallback(relProc, releaseContext));
-    }
+    auto releaseHelper = GrRefCntedCallback::Make(relProc, releaseContext);
 
     if (!context) {
         return nullptr;
@@ -655,13 +646,6 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrDirectContext* dContext,
     }
 
     bool isTextureable = SkToBool(bufferDesc.usage & AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE);
-    bool isProtectedContent = SkToBool(bufferDesc.usage & AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT);
-
-    // We currently don't support protected content
-    if (isProtectedContent) {
-        SkDebugf("We currently don't support protected content on android\n");
-        return nullptr;
-    }
 
     GrBackendFormat backendFormat = GrAHardwareBufferUtils::GetBackendFormat(dContext,
                                                                              hardwareBuffer,
@@ -675,6 +659,9 @@ sk_sp<SkSurface> SkSurface::MakeFromAHardwareBuffer(GrDirectContext* dContext,
         GrAHardwareBufferUtils::DeleteImageProc deleteImageProc = nullptr;
         GrAHardwareBufferUtils::UpdateImageProc updateImageProc = nullptr;
         GrAHardwareBufferUtils::TexImageCtx deleteImageCtx = nullptr;
+
+        bool isProtectedContent =
+                SkToBool(bufferDesc.usage & AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT);
 
         GrBackendTexture backendTexture =
                 GrAHardwareBufferUtils::MakeBackendTexture(dContext, hardwareBuffer,

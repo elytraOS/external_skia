@@ -344,7 +344,6 @@ protected:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    virtual GrContext* context() const { return nullptr; }
     virtual GrRecordingContext* recordingContext() const { return nullptr; }
 
     virtual sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&);
@@ -402,9 +401,6 @@ protected:
     virtual SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) {
         return nullptr;
     }
-
-    // A helper function used by derived classes to log the scale factor of a bitmap or image draw.
-    static void LogDrawScaleFactor(const SkMatrix& view, const SkMatrix& srcToDst, SkFilterQuality);
 
 private:
     friend class SkAndroidFrameworkUtils;

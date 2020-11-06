@@ -16,22 +16,20 @@ namespace SkSL {
 /**
  * A literal floating point number.
  */
-class FloatLiteral : public Expression {
+class FloatLiteral final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kFloatLiteral;
 
     FloatLiteral(const Context& context, int offset, float value)
-    : INHERITED(offset, FloatLiteralData{context.fFloatLiteral_Type.get(), value}) {}
+        : INHERITED(offset, kExpressionKind, context.fFloatLiteral_Type.get())
+        , fValue(value) {}
 
     FloatLiteral(int offset, float value, const Type* type)
-    : INHERITED(offset, FloatLiteralData{type, value}) {}
-
-    const Type& type() const override {
-        return *this->floatLiteralData().fType;
-    }
+        : INHERITED(offset, kExpressionKind, type)
+        , fValue(value) {}
 
     float value() const {
-        return this->floatLiteralData().fValue;
+        return fValue;
     }
 
     String description() const override {
@@ -66,6 +64,8 @@ public:
     }
 
 private:
+    float fValue;
+
     using INHERITED = Expression;
 };
 

@@ -14,7 +14,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/GrResourceKey.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -405,16 +405,14 @@ class GrMeshTestOp : public GrDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static std::unique_ptr<GrDrawOp> Make(GrRecordingContext* rContext,
-                                          std::function<void(DrawMeshHelper*)> prepareFn,
-                                          std::function<void(DrawMeshHelper*)> executeFn) {
-        GrOpMemoryPool* pool = rContext->priv().opMemoryPool();
-
-        return pool->allocate<GrMeshTestOp>(prepareFn, executeFn);
+    static GrOp::Owner Make(GrRecordingContext* rContext,
+                            std::function<void(DrawMeshHelper*)> prepareFn,
+                            std::function<void(DrawMeshHelper*)> executeFn) {
+        return GrOp::Make<GrMeshTestOp>(rContext, prepareFn, executeFn);
     }
 
 private:
-    friend class GrOpMemoryPool; // for ctor
+    friend class GrOp; // for ctor
 
     GrMeshTestOp(std::function<void(DrawMeshHelper*)> prepareFn,
                  std::function<void(DrawMeshHelper*)> executeFn)

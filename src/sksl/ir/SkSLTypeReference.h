@@ -17,19 +17,16 @@ namespace SkSL {
  * Represents an identifier referring to a type. This is an intermediate value: TypeReferences are
  * always eventually replaced by Constructors in valid programs.
  */
-class TypeReference : public Expression {
+class TypeReference final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kTypeReference;
 
     TypeReference(const Context& context, int offset, const Type* value)
-    : INHERITED(offset, TypeReferenceData{context.fInvalid_Type.get(), value}) {}
-
-    const Type& type() const override {
-        return *this->typeReferenceData().fType;
-    }
+        : INHERITED(offset, kExpressionKind, context.fInvalid_Type.get())
+        , fValue(*value) {}
 
     const Type& value() const {
-        return *this->typeReferenceData().fValue;
+        return fValue;
     }
 
     bool hasProperty(Property property) const override {
@@ -47,7 +44,10 @@ public:
 
 private:
     TypeReference(int offset, const Type* value, const Type* type)
-    : INHERITED(offset, TypeReferenceData{type, value}) {}
+        : INHERITED(offset, kExpressionKind, type)
+        , fValue(*value) {}
+
+    const Type& fValue;
 
     using INHERITED = Expression;
 };

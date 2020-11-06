@@ -168,6 +168,19 @@ export interface CanvasKit {
     MakeCanvasSurface(canvas: HTMLCanvasElement | string): Surface | null;
 
     /**
+     * Creates a Raster (CPU) Surface that will draw into the provided Malloc'd buffer. This allows
+     * clients to efficiently be able to read the current pixels w/o having to copy.
+     * The length of pixels must be at least height * bytesPerRow bytes big.
+     * @param ii
+     * @param pixels
+     * @param bytesPerRow - How many bytes are per row. This is at least width * bytesPerColorType. For example,
+     *                      an 8888 ColorType has 4 bytes per pixel, so a 5 pixel wide 8888 surface needs at least
+     *                      5 * 4 = 20 bytesPerRow. Some clients may have more than the usual to make the data line
+     *                      up with a particular multiple.
+     */
+    MakeRasterDirectSurface(ii: ImageInfo, pixels: MallocObj, bytesPerRow: number): Surface | null;
+
+    /**
      * Creates a CPU backed (aka raster) surface.
      * @param canvas - either the canvas element itself or a string with the DOM id of it.
      */
@@ -201,19 +214,19 @@ export interface CanvasKit {
     GetWebGLContext(canvas: HTMLCanvasElement, opts?: WebGLOptions): WebGLContextHandle;
 
     /**
-     * Creates a GrContext from the given WebGL Context.
+     * Creates a GrDirectContext from the given WebGL Context.
      * @param ctx
      */
-    MakeGrContext(ctx: WebGLContextHandle): GrContext;
+    MakeGrContext(ctx: WebGLContextHandle): GrDirectContext;
 
     /**
-     * Creates a Surface that will be drawn to the given GrContext (and show up on screen).
+     * Creates a Surface that will be drawn to the given GrDirectContext (and show up on screen).
      * @param ctx
      * @param width - number of pixels of the width of the visible area.
      * @param height - number of pixels of the height of the visible area.
      * @param colorSpace
      */
-    MakeOnScreenGLSurface(ctx: GrContext, width: number, height: number,
+    MakeOnScreenGLSurface(ctx: GrDirectContext, width: number, height: number,
                           colorSpace: ColorSpace): Surface | null;
 
     /**
@@ -223,7 +236,7 @@ export interface CanvasKit {
      * @param width
      * @param height
      */
-    MakeRenderTarget(ctx: GrContext, width: number, height: number): Surface | null;
+    MakeRenderTarget(ctx: GrDirectContext, width: number, height: number): Surface | null;
 
     /**
      * Returns a (non-visible) Surface on the GPU. It has the settings provided by image info.
@@ -231,7 +244,7 @@ export interface CanvasKit {
      * @param ctx
      * @param info
      */
-    MakeRenderTarget(ctx: GrContext, info: ImageInfo): Surface | null;
+    MakeRenderTarget(ctx: GrDirectContext, info: ImageInfo): Surface | null;
 
     /**
      * Returns the current WebGLContext that the wasm code is configured to draw to. It is
@@ -541,13 +554,47 @@ export interface FontStyle {
 }
 
 /**
- * See GrContext.h for more on this class.
+ * See GrDirectContext.h for more on this class.
  */
-export interface GrContext extends EmbindObject<GrContext> {
+export interface GrDirectContext extends EmbindObject<GrDirectContext> {
     getResourceCacheLimitBytes(): number;
     getResourceCacheUsageBytes(): number;
     releaseResourcesAndAbandonContext(): void;
     setResourceCacheLimitBytes(bytes: number): void;
+}
+
+/**
+ * See Metrics.h for more on this struct.
+ */
+export interface LineMetrics {
+    /** The index in the text buffer the line begins. */
+    startIndex: number;
+    /** The index in the text buffer the line ends. */
+    endIndex: number;
+    endExcludingWhitespaces: number;
+    endIncludingNewline: number;
+    /** True if the line ends in a hard break (e.g. newline) */
+    isHardBreak: boolean;
+    /**
+     * The final computed ascent for the line. This can be impacted by
+     * the strut, height, scaling, as well as outlying runs that are very tall.
+     */
+    ascent: number;
+    /**
+     * The final computed descent for the line. This can be impacted by
+     * the strut, height, scaling, as well as outlying runs that are very tall.
+     */
+    descent: number;
+    /** round(ascent + descent) */
+    height: number;
+    /** width of the line */
+    width: number;
+    /** The left edge of the line. The right edge can be obtained with `left + width` */
+    left: number;
+    /** The y position of the baseline for this line from the top of the paragraph. */
+    baseline: number;
+    /** Zero indexed line number. */
+    lineNumber: number;
 }
 
 /**
@@ -602,6 +649,7 @@ export interface Paragraph extends EmbindObject<Paragraph> {
 
     getHeight(): number;
     getIdeographicBaseline(): number;
+    getLineMetrics(): LineMetrics[];
     getLongestLine(): number;
     getMaxIntrinsicWidth(): number;
     getMaxWidth(): number;
@@ -1193,10 +1241,13 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param alphaType - defaults to Unpremul
      * @param colorType - defaults to RGBA_8888
      * @param colorSpace - defaults to SRGB
+     * @param dest - If provided, the pixels will be copied into the allocated buffer allowing access to the
+     *               pixels without allocating a new TypedArray.
      * @param dstRowBytes
      */
     readPixels(x: number, y: number, w: number, h: number, alphaType?: AlphaType,
-               colorType?: ColorType, colorSpace?: ColorSpace, dstRowBytes?: number): Uint8Array;
+               colorType?: ColorType, colorSpace?: ColorSpace, dstRowBytes?: number,
+               dest?: MallocObj): Uint8Array;
 
     /**
      * Removes changes to the current matrix and clip since Canvas state was
@@ -1518,9 +1569,13 @@ export interface Image extends EmbindObject<Image> {
      * @param imageInfo - describes the destination format of the pixels.
      * @param srcX
      * @param srcY
-     * @returns a Uint8Array if RGB_8888 was requested, Float32Array if RGBA_F32 was requested.
+     * @param dest - If provided, the pixels will be copied into the allocated buffer allowing access to the
+     *               pixels without allocating a new TypedArray.
+     * @returns a Uint8Array if RGB_8888 was requested, Float32Array if RGBA_F32 was requested. null will be returned
+     *          on any error.
+     *
      */
-    readPixels(imageInfo: ImageInfo, srcX: number, srcY: number): Uint8Array | Float32Array | null;
+    readPixels(imageInfo: ImageInfo, srcX: number, srcY: number, dest?: MallocObj): Uint8Array | Float32Array | null;
 
     /**
      * Return the width in pixels of the image.
@@ -2924,7 +2979,6 @@ export interface RuntimeEffectFactory {
 
 /**
  * For more information, see SkShaders.h.
- * TODO(kjlubick) Rename these to Make* as per the convention
  */
 export interface ShaderFactory {
     /**
@@ -2933,14 +2987,39 @@ export interface ShaderFactory {
      * @param one
      * @param two
      */
-    Blend(mode: BlendMode, one: Shader, two: Shader): Shader;
+    MakeBlend(mode: BlendMode, one: Shader, two: Shader): Shader;
 
     /**
      * Returns a shader with a given color and colorspace.
      * @param color
      * @param space
      */
-    Color(color: InputColor, space: ColorSpace): Shader;
+    MakeColor(color: InputColor, space: ColorSpace): Shader;
+
+    /**
+     * Returns a shader with Perlin Fractal Noise.
+     * See SkPerlinNoiseShader.h for more details
+     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
+     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
+     * @param octaves
+     * @param seed
+     * @param tileW - if this and tileH are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     * @param tileH - if this and tileW are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     */
+    MakeFractalNoise(baseFreqX: number, baseFreqY: number, octaves: number, seed: number,
+                     tileW: number, tileH: number): Shader;
+
+    /**
+     * Returns a shader with Improved Perlin Noise.
+     * See SkPerlinNoiseShader.h for more details
+     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
+     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
+     * @param octaves
+     * @param z - like seed, but minor variations to z will only slightly change the noise.
+     */
+    MakeImprovedNoise(baseFreqX: number, baseFreqY: number, octaves: number, z: number): Shader;
 
     /**
      * Returns a shader is a linear interpolation combines the given shaders with a BlendMode.
@@ -2948,7 +3027,98 @@ export interface ShaderFactory {
      * @param one
      * @param two
      */
-    Lerp(t: number, one: Shader, two: Shader): Shader;
+    MakeLerp(t: number, one: Shader, two: Shader): Shader;
+
+    /**
+     * Returns a shader that generates a linear gradient between the two specified points.
+     * See SkGradientShader.h for more.
+     * @param start
+     * @param end
+     * @param colors - colors to be distributed between start and end.
+     * @param pos - May be null. The relative positions of colors. If supplied must be same length
+     *              as colors.
+     * @param mode
+     * @param localMatrix
+     * @param flags - By default gradients will interpolate their colors in unpremul space
+     *                and then premultiply each of the results. By setting this to 1, the
+     *                gradients will premultiply their colors first, and then interpolate
+     *                between them.
+     * @param colorSpace
+     */
+    MakeLinearGradient(start: Point, end: Point, colors: InputFlexibleColorArray,
+                       pos: number[] | null, mode: TileMode, localMatrix?: InputMatrix,
+                       flags?: number, colorSpace?: ColorSpace): Shader;
+
+    /**
+     * Returns a shader that generates a radial gradient given the center and radius.
+     * See SkGradientShader.h for more.
+     * @param center
+     * @param radius
+     * @param colors - colors to be distributed between the center and edge.
+     * @param pos - May be null. The relative positions of colors. If supplied must be same length
+     *              as colors. Range [0.0, 1.0]
+     * @param mode
+     * @param localMatrix
+     * @param flags - 0 to interpolate colors in unpremul, 1 to interpolate colors in premul.
+     * @param colorSpace
+     */
+    MakeRadialGradient(center: Point, radius: number, colors: InputFlexibleColorArray,
+                       pos: number[] | null, mode: TileMode, localMatrix?: InputMatrix,
+                       flags?: number, colorSpace?: ColorSpace): Shader;
+
+    /**
+     * Returns a shader that generates a sweep gradient given a center.
+     * See SkGradientShader.h for more.
+     * @param cx
+     * @param cy
+     * @param colors - colors to be distributed around the center, within the provided angles.
+     * @param pos - May be null. The relative positions of colors. If supplied must be same length
+     *              as colors. Range [0.0, 1.0]
+     * @param mode
+     * @param localMatrix
+     * @param flags - 0 to interpolate colors in unpremul, 1 to interpolate colors in premul.
+     * @param startAngle - angle corresponding to 0.0. Defaults to 0 degrees.
+     * @param endAngle - angle corresponding to 1.0. Defaults to 360 degrees.
+     * @param colorSpace
+     */
+    MakeSweepGradient(cx: number, cy: number, colors: InputFlexibleColorArray,
+                      pos: number[] | null, mode: TileMode, localMatrix?: InputMatrix | null,
+                      flags?: number, startAngle?: AngleInDegrees, endAngle?: AngleInDegrees,
+                      colorSpace?: ColorSpace): Shader;
+
+    /**
+     * Returns a shader with Perlin Turbulence.
+     * See SkPerlinNoiseShader.h for more details
+     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
+     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
+     * @param octaves
+     * @param seed
+     * @param tileW - if this and tileH are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     * @param tileH - if this and tileW are non-zero, the frequencies will be modified so that the
+     *                noise will be tileable for the given size.
+     */
+    MakeTurbulence(baseFreqX: number, baseFreqY: number, octaves: number, seed: number,
+                   tileW: number, tileH: number): Shader;
+
+    /**
+     * Returns a shader that generates a conical gradient given two circles.
+     * See SkGradientShader.h for more.
+     * @param start
+     * @param startRadius
+     * @param end
+     * @param endRadius
+     * @param colors
+     * @param pos
+     * @param mode
+     * @param localMatrix
+     * @param flags
+     * @param colorSpace
+     */
+    MakeTwoPointConicalGradient(start: Point, startRadius: number, end: Point, endRadius: number,
+                                colors: InputFlexibleColorArray, pos: number[] | null,
+                                mode: TileMode, localMatrix?: InputMatrix, flags?: number,
+                                colorSpace?: ColorSpace): Shader;
 }
 
 /**
@@ -3217,6 +3387,12 @@ export type InputFlattenedPointArray = MallocObj | FlattenedPointArray | number[
  * Length 4 * n for n rectangles.
  */
 export type InputFlattenedRectangleArray = MallocObj | FlattenedRectangleArray | number[];
+/**
+ * Some APIs accept a flattened array of colors in one of two ways - groups of 4 float values for
+ * r, g, b, a or just integers that have 8 bits for each these. CanvasKit will detect which one
+ * it is and act accordingly.
+ */
+export type InputFlexibleColorArray = Float32Array | Uint32Array;
 /**
  * CanvasKit APIs accept all of these matrix types. Under the hood, we generally use 4x4 matrices.
  */

@@ -17,29 +17,25 @@ namespace SkSL {
 /**
  * An expression modified by a unary operator appearing after it, such as 'i++'.
  */
-class PostfixExpression : public Expression {
+class PostfixExpression final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kPostfix;
 
     PostfixExpression(std::unique_ptr<Expression> operand, Token::Kind op)
-    : INHERITED(operand->fOffset, kExpressionKind, TypeTokenData{&operand->type(), op}) {
-        fExpressionChildren.push_back(std::move(operand));
-    }
-
-    const Type& type() const override {
-        return *this->typeTokenData().fType;
-    }
+        : INHERITED(operand->fOffset, kExpressionKind, &operand->type())
+        , fOperand(std::move(operand))
+        , fOperator(op) {}
 
     Token::Kind getOperator() const {
-        return this->typeTokenData().fToken;
+        return fOperator;
     }
 
     std::unique_ptr<Expression>& operand() {
-        return fExpressionChildren[0];
+        return fOperand;
     }
 
     const std::unique_ptr<Expression>& operand() const {
-        return fExpressionChildren[0];
+        return fOperand;
     }
 
     bool hasProperty(Property property) const override {
@@ -59,6 +55,9 @@ public:
     }
 
 private:
+    std::unique_ptr<Expression> fOperand;
+    Token::Kind fOperator;
+
     using INHERITED = Expression;
 };
 

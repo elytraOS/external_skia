@@ -21,9 +21,9 @@
 #include "src/core/SkMipmap.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrBackendUtils.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrCpuBuffer.h"
 #include "src/gpu/GrDataUtils.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrProgramInfo.h"
@@ -1714,7 +1714,8 @@ sk_sp<GrAttachment> GrGLGpu::makeStencilAttachmentForRenderTarget(const GrRender
     fStats.incStencilAttachmentCreates();
 
     return sk_sp<GrAttachment>(new GrGLAttachment(
-            this, sbDesc, dimensions, GrAttachment::UsageFlags::kStencil, numStencilSamples, sFmt));
+            this, sbDesc, dimensions, GrAttachment::UsageFlags::kStencilAttachment,
+            numStencilSamples, sFmt));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2153,7 +2154,7 @@ bool GrGLGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
                                           dstColorType, buffer, rowPixelWidth);
 }
 
-GrOpsRenderPass* GrGLGpu::getOpsRenderPass(
+GrOpsRenderPass* GrGLGpu::onGetOpsRenderPass(
         GrRenderTarget* rt,
         GrAttachment*,
         GrSurfaceOrigin origin,
@@ -2532,10 +2533,13 @@ void GrGLGpu::bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwiz
 
 #ifdef SK_DEBUG
     if (!this->caps()->npotTextureTileSupport()) {
-        if (samplerState.isRepeated()) {
+        if (samplerState.isRepeatedX()) {
             const int w = texture->width();
+            SkASSERT(SkIsPow2(w));
+        }
+        if (samplerState.isRepeatedY()) {
             const int h = texture->height();
-            SkASSERT(SkIsPow2(w) && SkIsPow2(h));
+            SkASSERT(SkIsPow2(h));
         }
     }
 #endif
@@ -3043,7 +3047,6 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
     auto errorHandler = this->getContext()->priv().getShaderErrorHandler();
     SkSL::String sksl(vshaderTxt.c_str(), vshaderTxt.size());
     SkSL::Program::Settings settings;
-    settings.fCaps = shaderCaps;
     SkSL::String glsl;
     std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(*fGLContext, SkSL::Program::kVertex_Kind,
                                                           sksl, settings, &glsl, errorHandler);
@@ -3197,7 +3200,6 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
     auto errorHandler = this->getContext()->priv().getShaderErrorHandler();
     SkSL::String sksl(vshaderTxt.c_str(), vshaderTxt.size());
     SkSL::Program::Settings settings;
-    settings.fCaps = shaderCaps;
     SkSL::String glsl;
     std::unique_ptr<SkSL::Program> program = GrSkSLtoGLSL(*fGLContext, SkSL::Program::kVertex_Kind,
                                                           sksl, settings, &glsl, errorHandler);

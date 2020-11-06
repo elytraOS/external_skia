@@ -26,21 +26,20 @@ namespace SkSL {
  * Matrix constructors will always consist of either exactly 1 scalar, exactly 1 matrix, or a
  * collection of vectors and scalars totalling exactly the right number of scalar components.
  */
-class Constructor : public Expression {
+class Constructor final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kConstructor;
 
     Constructor(int offset, const Type* type, ExpressionArray arguments)
-            : INHERITED(offset, kExpressionKind, type) {
-        fExpressionChildren = std::move(arguments);
-    }
+        : INHERITED(offset, kExpressionKind, type)
+        , fArguments(std::move(arguments)) {}
 
     ExpressionArray& arguments() {
-        return fExpressionChildren;
+        return fArguments;
     }
 
     const ExpressionArray& arguments() const {
-        return fExpressionChildren;
+        return fArguments;
     }
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
@@ -57,7 +56,7 @@ public:
 
     std::unique_ptr<Expression> clone() const override {
         ExpressionArray cloned;
-        cloned.reserve(this->arguments().size());
+        cloned.reserve_back(this->arguments().size());
         for (const std::unique_ptr<Expression>& arg: this->arguments()) {
             cloned.push_back(arg->clone());
         }
@@ -114,6 +113,8 @@ public:
     SKSL_FLOAT getMatComponent(int col, int row) const override;
 
 private:
+    ExpressionArray fArguments;
+
     using INHERITED = Expression;
 };
 

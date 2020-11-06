@@ -17,35 +17,28 @@ namespace SkSL {
 /**
  * A function invocation.
  */
-class FunctionCall : public Expression {
+class FunctionCall final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kFunctionCall;
 
     FunctionCall(int offset, const Type* type, const FunctionDeclaration* function,
                  ExpressionArray arguments)
-    : INHERITED(offset, FunctionCallData{type, function}) {
-        fExpressionChildren = std::move(arguments);
-        ++this->function().callCount();
-    }
+        : INHERITED(offset, kExpressionKind, type)
+        , fFunction(*function)
+        , fArguments(std::move(arguments)) {}
 
-    ~FunctionCall() override {
-        --this->function().callCount();
-    }
-
-    const Type& type() const override {
-        return *this->functionCallData().fType;
-    }
+    ~FunctionCall() override {}
 
     const FunctionDeclaration& function() const {
-        return *this->functionCallData().fFunction;
+        return fFunction;
     }
 
     ExpressionArray& arguments() {
-        return fExpressionChildren;
+        return fArguments;
     }
 
     const ExpressionArray& arguments() const {
-        return fExpressionChildren;
+        return fArguments;
     }
 
     bool hasProperty(Property property) const override {
@@ -63,7 +56,7 @@ public:
 
     std::unique_ptr<Expression> clone() const override {
         ExpressionArray cloned;
-        cloned.reserve(this->arguments().size());
+        cloned.reserve_back(this->arguments().size());
         for (const auto& arg : this->arguments()) {
             cloned.push_back(arg->clone());
         }
@@ -84,6 +77,9 @@ public:
     }
 
 private:
+    const FunctionDeclaration& fFunction;
+    ExpressionArray fArguments;
+
     using INHERITED = Expression;
 };
 

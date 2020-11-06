@@ -11,6 +11,7 @@
 #include "include/codec/SkEncodedOrigin.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkYUVAIndex.h"
 
 /**
  * Specifies the structure of planes for a YUV image with optional alpha. The actual planar data
@@ -38,6 +39,8 @@ public:
      * this expands.
      */
     enum class PlanarConfig {
+        kUnknown,
+
         kY_U_V_444,    ///< Plane 0: Y, Plane 1: U,  Plane 2: V
         kY_U_V_422,    ///< Plane 0: Y, Plane 1: U,  Plane 2: V
         kY_U_V_420,    ///< Plane 0: Y, Plane 1: U,  Plane 2: V
@@ -97,6 +100,15 @@ public:
      */
     static constexpr int NumChannelsInPlane(PlanarConfig, int i);
 
+    /**
+     * Given a PlanarConfig and a set of channel flags for each plane, convert to SkYUVAIndex
+     * representation. Fails if channel flags aren't valid for the PlanarConfig (i.e. don't have
+     * enough channels in a plane).
+     */
+    static bool GetYUVAIndices(PlanarConfig,
+                               const uint32_t planeChannelFlags[kMaxPlanes],
+                               SkYUVAIndex indices[SkYUVAIndex::kIndexCount]);
+
     /** Does the PlanarConfig have alpha values? */
     static bool HasAlpha(PlanarConfig);
 
@@ -155,13 +167,24 @@ public:
 
     int numChannelsInPlane(int i) const { return NumChannelsInPlane(fPlanarConfig, i); }
 
+    /**
+     * Given a set of channel flags for each plane, converts this->planarConfig() to SkYUVAIndex
+     * representation. Fails if the channel flags aren't valid for the PlanarConfig (i.e. don't have
+     * enough channels in a plane).
+     */
+    bool toYUVAIndices(const uint32_t channelFlags[4], SkYUVAIndex indices[4]) const {
+        return GetYUVAIndices(fPlanarConfig, channelFlags, indices);
+    }
+
     bool operator==(const SkYUVAInfo& that) const;
     bool operator!=(const SkYUVAInfo& that) const { return !(*this == that); }
+
+    bool isValid() const { return fPlanarConfig != PlanarConfig::kUnknown; }
 
 private:
     SkISize fDimensions = {0, 0};
 
-    PlanarConfig fPlanarConfig = PlanarConfig::kY_U_V_444;
+    PlanarConfig fPlanarConfig = PlanarConfig::kUnknown;
 
     SkYUVColorSpace fYUVColorSpace = SkYUVColorSpace::kIdentity_SkYUVColorSpace;
 
@@ -177,6 +200,8 @@ private:
 
 constexpr int SkYUVAInfo::NumPlanes(PlanarConfig planarConfig) {
     switch (planarConfig) {
+        case PlanarConfig::kUnknown:      return 0;
+
         case PlanarConfig::kY_U_V_444:    return 3;
         case PlanarConfig::kY_U_V_422:    return 3;
         case PlanarConfig::kY_U_V_420:    return 3;
@@ -204,6 +229,9 @@ constexpr int SkYUVAInfo::NumPlanes(PlanarConfig planarConfig) {
 
 constexpr int SkYUVAInfo::NumChannelsInPlane(PlanarConfig config, int i) {
     switch (config) {
+        case PlanarConfig::kUnknown:
+            return 0;
+
         case SkYUVAInfo::PlanarConfig::kY_U_V_444:
         case SkYUVAInfo::PlanarConfig::kY_U_V_422:
         case SkYUVAInfo::PlanarConfig::kY_U_V_420:

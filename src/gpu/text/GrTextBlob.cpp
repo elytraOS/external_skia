@@ -67,12 +67,11 @@ struct ARGB3DVertex {
 
 GrAtlasTextOp::MaskType op_mask_type(GrMaskFormat grMaskFormat) {
     switch (grMaskFormat) {
-        case kA8_GrMaskFormat: return GrAtlasTextOp::kGrayscaleCoverageMask_MaskType;
-        case kA565_GrMaskFormat: return GrAtlasTextOp::kLCDCoverageMask_MaskType;
-        case kARGB_GrMaskFormat: return GrAtlasTextOp::kColorBitmapMask_MaskType;
-            // Needed to placate some compilers.
-        default: return GrAtlasTextOp::kGrayscaleCoverageMask_MaskType;
+        case kA8_GrMaskFormat:   return GrAtlasTextOp::MaskType::kGrayscaleCoverage;
+        case kA565_GrMaskFormat: return GrAtlasTextOp::MaskType::kLCDCoverage;
+        case kARGB_GrMaskFormat: return GrAtlasTextOp::MaskType::kColorBitmap;
     }
+    SkUNREACHABLE;
 }
 
 SkPMColor4f calculate_colors(GrRenderTargetContext* rtc,
@@ -537,7 +536,7 @@ int GrDirectMaskSubRun::glyphCount() const {
     return fGlyphs.glyphs().count();
 }
 
-std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+std::tuple<const GrClip*, GrOp::Owner>
 GrDirectMaskSubRun::makeAtlasTextOp(const GrClip* clip, const SkMatrixProvider& viewMatrix,
                                     const SkGlyphRunList& glyphRunList,
                                     GrRenderTargetContext* rtc) const {
@@ -589,13 +588,14 @@ GrDirectMaskSubRun::makeAtlasTextOp(const GrClip* clip, const SkMatrixProvider& 
             drawingColor
     };
 
-    GrOpMemoryPool* const pool = rtc->priv().recordingContext()->priv().opMemoryPool();
-    std::unique_ptr<GrDrawOp> op = pool->allocate<GrAtlasTextOp>(op_mask_type(fMaskFormat),
-                                                                 false,
-                                                                 this->glyphCount(),
-                                                                 subRunBounds,
-                                                                 geometry,
-                                                                 std::move(grPaint));
+    GrRecordingContext* const context = rtc->priv().recordingContext();
+    GrOp::Owner op = GrOp::Make<GrAtlasTextOp>(context,
+                                               op_mask_type(fMaskFormat),
+                                               false,
+                                               this->glyphCount(),
+                                               subRunBounds,
+                                               geometry,
+                                               std::move(grPaint));
 
     return {clip, std::move(op)};
 }
@@ -723,7 +723,7 @@ bool GrTransformedMaskSubRun::canReuse(const SkPaint& paint, const SkMatrix& dra
     return true;
 }
 
-std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+std::tuple<const GrClip*, GrOp::Owner>
 GrTransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
                                          const SkMatrixProvider& viewMatrix,
                                          const SkGlyphRunList& glyphRunList,
@@ -733,7 +733,6 @@ GrTransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
     SkPoint drawOrigin = glyphRunList.origin();
     const SkPaint& drawPaint = glyphRunList.paint();
     const SkMatrix& drawMatrix = viewMatrix.localToDevice();
-    GrOpMemoryPool* pool = rtc->priv().recordingContext()->priv().opMemoryPool();
 
     GrPaint grPaint;
     SkPMColor4f drawingColor = calculate_colors(rtc, drawPaint, viewMatrix, fMaskFormat, &grPaint);
@@ -749,7 +748,9 @@ GrTransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
             drawingColor
     };
 
-    std::unique_ptr<GrDrawOp> op = pool->allocate<GrAtlasTextOp>(
+    GrRecordingContext* context = rtc->priv().recordingContext();
+    GrOp::Owner op = GrOp::Make<GrAtlasTextOp>(
+            context,
             op_mask_type(fMaskFormat),
             true,
             this->glyphCount(),
@@ -905,7 +906,7 @@ GrSubRun* GrSDFTSubRun::Make(
             runFont.hasSomeAntiAliasing());
 }
 
-std::tuple<const GrClip*, std::unique_ptr<GrDrawOp> >
+std::tuple<const GrClip*, GrOp::Owner >
 GrSDFTSubRun::makeAtlasTextOp(const GrClip* clip,
                               const SkMatrixProvider& viewMatrix,
                               const SkGlyphRunList& glyphRunList,
@@ -915,7 +916,6 @@ GrSDFTSubRun::makeAtlasTextOp(const GrClip* clip,
     SkPoint drawOrigin = glyphRunList.origin();
     const SkPaint& drawPaint = glyphRunList.paint();
     const SkMatrix& drawMatrix = viewMatrix.localToDevice();
-    GrOpMemoryPool* pool = rtc->priv().recordingContext()->priv().opMemoryPool();
 
     GrPaint grPaint;
     SkPMColor4f drawingColor = calculate_colors(rtc, drawPaint, viewMatrix, fMaskFormat, &grPaint);
@@ -925,23 +925,21 @@ GrSDFTSubRun::makeAtlasTextOp(const GrClip* clip,
     bool isBGR = SkPixelGeometryIsBGR(props.pixelGeometry());
     bool isLCD = fUseLCDText && SkPixelGeometryIsH(props.pixelGeometry());
     using MT = GrAtlasTextOp::MaskType;
-    MT maskType = !fAntiAliased ? MT::kAliasedDistanceField_MaskType
-                                : isLCD ? (isBGR ? MT::kLCDBGRDistanceField_MaskType
-                                                 : MT::kLCDDistanceField_MaskType)
-                                        : MT::kGrayscaleDistanceField_MaskType;
+    MT maskType = !fAntiAliased ? MT::kAliasedDistanceField
+                                : isLCD ? (isBGR ? MT::kLCDBGRDistanceField
+                                                 : MT::kLCDDistanceField)
+                                        : MT::kGrayscaleDistanceField;
 
     bool useGammaCorrectDistanceTable = colorInfo.isLinearlyBlended();
     uint32_t DFGPFlags = drawMatrix.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
     DFGPFlags |= drawMatrix.isScaleTranslate() ? kScaleOnly_DistanceFieldEffectFlag : 0;
     DFGPFlags |= drawMatrix.hasPerspective() ? kPerspective_DistanceFieldEffectFlag : 0;
     DFGPFlags |= useGammaCorrectDistanceTable ? kGammaCorrect_DistanceFieldEffectFlag : 0;
-    DFGPFlags |= MT::kAliasedDistanceField_MaskType == maskType ?
-                 kAliased_DistanceFieldEffectFlag : 0;
+    DFGPFlags |= MT::kAliasedDistanceField == maskType ? kAliased_DistanceFieldEffectFlag : 0;
 
     if (isLCD) {
         DFGPFlags |= kUseLCD_DistanceFieldEffectFlag;
-        DFGPFlags |= MT::kLCDBGRDistanceField_MaskType == maskType ?
-                     kBGR_DistanceFieldEffectFlag : 0;
+        DFGPFlags |= MT::kLCDBGRDistanceField == maskType ? kBGR_DistanceFieldEffectFlag : 0;
     }
 
     GrAtlasTextOp::Geometry geometry = {
@@ -953,7 +951,9 @@ GrSDFTSubRun::makeAtlasTextOp(const GrClip* clip,
             drawingColor
     };
 
-    std::unique_ptr<GrDrawOp> op = pool->allocate<GrAtlasTextOp>(
+    GrRecordingContext* context = rtc->priv().recordingContext();
+    GrOp::Owner op = GrOp::Make<GrAtlasTextOp>(
+            context,
             maskType,
             true,
             this->glyphCount(),

@@ -20,7 +20,7 @@ class Block;
 class Context;
 class Expression;
 class FunctionCall;
-struct FunctionDefinition;
+class FunctionDefinition;
 struct InlineCandidate;
 struct InlineCandidateList;
 class ModifiersPool;
@@ -38,7 +38,10 @@ class Inliner {
 public:
     Inliner() {}
 
-    void reset(const Context*, ModifiersPool* modifiers, const Program::Settings*);
+    void reset(const Context*,
+               ModifiersPool* modifiers,
+               const Program::Settings*,
+               const ShaderCapsClass* caps);
 
     /**
      * Processes the passed-in FunctionCall expression. The FunctionCall expression should be
@@ -90,6 +93,7 @@ private:
     const Context* fContext = nullptr;
     ModifiersPool* fModifiers = nullptr;
     const Program::Settings* fSettings = nullptr;
+    const ShaderCapsClass* fCaps = nullptr;
     int fInlineVarCounter = 0;
 };
 

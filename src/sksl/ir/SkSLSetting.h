@@ -17,12 +17,13 @@ namespace SkSL {
  * Represents a compile-time constant setting, such as sk_Caps.fbFetchSupport. These are generally
  * collapsed down to their constant representations during the compilation process.
  */
-class Setting : public Expression {
+class Setting final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kSetting;
 
     Setting(int offset, String name, const Type* type)
-    : INHERITED(offset, SettingData{std::move(name), type}) {}
+        : INHERITED(offset, kExpressionKind, type)
+        , fName(std::move(name)) {}
 
     std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
                                                   const DefinitionMap& definitions) override;
@@ -32,11 +33,7 @@ public:
     }
 
     const String& name() const {
-        return this->settingData().fName;
-    }
-
-    const Type& type() const override {
-        return *this->settingData().fType;
+        return fName;
     }
 
     String description() const override {
@@ -52,6 +49,8 @@ public:
     }
 
 private:
+    String fName;
+
     using INHERITED = Expression;
 };
 

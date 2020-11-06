@@ -181,6 +181,44 @@ private:
     using INHERITED = ProgramVisitor;
 };
 
+class ProgramUsageVisitor : public ProgramVisitor {
+public:
+    ProgramUsageVisitor(ProgramUsage* usage, int delta) : fUsage(usage), fDelta(delta) {}
+
+    bool visitExpression(const Expression& e) override {
+        if (e.is<FunctionCall>()) {
+            const FunctionDeclaration* f = &e.as<FunctionCall>().function();
+            fUsage->fCallCounts[f] += fDelta;
+            SkASSERT(fUsage->fCallCounts[f] >= 0);
+        } else if (e.is<VariableReference>()) {
+            const VariableReference& ref = e.as<VariableReference>();
+            ProgramUsage::VariableCounts& counts = fUsage->fVariableCounts[ref.variable()];
+            switch (ref.refKind()) {
+                case VariableRefKind::kRead:
+                    counts.fRead += fDelta;
+                    break;
+                case VariableRefKind::kWrite:
+                    counts.fWrite += fDelta;
+                    break;
+                case VariableRefKind::kReadWrite:
+                case VariableRefKind::kPointer:
+                    counts.fRead += fDelta;
+                    counts.fWrite += fDelta;
+                    break;
+            }
+            SkASSERT(counts.fRead >= 0 && counts.fWrite >= 0);
+        }
+        return INHERITED::visitExpression(e);
+    }
+
+    using ProgramVisitor::visitProgramElement;
+    using ProgramVisitor::visitStatement;
+
+    ProgramUsage* fUsage;
+    int fDelta;
+    using INHERITED = ProgramVisitor;
+};
+
 class VariableWriteVisitor : public ProgramVisitor {
 public:
     VariableWriteVisitor(const Variable* var)
@@ -324,7 +362,71 @@ bool Analysis::ReferencesFragCoords(const Program& program) {
 }
 
 bool Analysis::NodeCountExceeds(const FunctionDefinition& function, int limit) {
-    return NodeCountVisitor{limit}.visit(*function.fBody) > limit;
+    return NodeCountVisitor{limit}.visit(*function.body()) > limit;
+}
+
+std::unique_ptr<ProgramUsage> Analysis::GetUsage(const Program& program) {
+    auto usage = std::make_unique<ProgramUsage>();
+    ProgramUsageVisitor addRefs(usage.get(), /*delta=*/+1);
+    addRefs.visit(program);
+    return usage;
+}
+
+ProgramUsage::VariableCounts ProgramUsage::get(const Variable& v) const {
+    VariableCounts result = { 0, v.initialValue() ? 1 : 0 };
+    if (const VariableCounts* counts = fVariableCounts.find(&v)) {
+        result.fRead += counts->fRead;
+        result.fWrite += counts->fWrite;
+    }
+    return result;
+}
+
+bool ProgramUsage::isDead(const Variable& v) const {
+    const Modifiers& modifiers = v.modifiers();
+    VariableCounts counts = this->get(v);
+    if ((v.storage() != Variable::Storage::kLocal && counts.fRead) ||
+        (modifiers.fFlags & (Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag |
+                             Modifiers::kVarying_Flag))) {
+        return false;
+    }
+    return !counts.fWrite || (!counts.fRead && !(modifiers.fFlags &
+                                                 (Modifiers::kPLS_Flag | Modifiers::kPLSOut_Flag)));
+}
+
+int ProgramUsage::get(const FunctionDeclaration& f) const {
+    const int* count = fCallCounts.find(&f);
+    return count ? *count : 0;
+}
+
+void ProgramUsage::replace(const Expression* oldExpr, const Expression* newExpr) {
+    if (oldExpr) {
+        ProgramUsageVisitor subRefs(this, /*delta=*/-1);
+        subRefs.visitExpression(*oldExpr);
+    }
+    if (newExpr) {
+        ProgramUsageVisitor addRefs(this, /*delta=*/+1);
+        addRefs.visitExpression(*newExpr);
+    }
+}
+
+void ProgramUsage::add(const Statement* stmt) {
+    ProgramUsageVisitor addRefs(this, /*delta=*/+1);
+    addRefs.visitStatement(*stmt);
+}
+
+void ProgramUsage::remove(const Expression* expr) {
+    ProgramUsageVisitor subRefs(this, /*delta=*/-1);
+    subRefs.visitExpression(*expr);
+}
+
+void ProgramUsage::remove(const Statement* stmt) {
+    ProgramUsageVisitor subRefs(this, /*delta=*/-1);
+    subRefs.visitStatement(*stmt);
+}
+
+void ProgramUsage::remove(const ProgramElement& element) {
+    ProgramUsageVisitor subRefs(this, /*delta=*/-1);
+    subRefs.visitProgramElement(element);
 }
 
 bool Analysis::StatementWritesToVariable(const Statement& stmt, const Variable& var) {
@@ -368,7 +470,8 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitExpression(EXPR e) {
 
         case Expression::Kind::kBinary: {
             auto& b = e.template as<BinaryExpression>();
-            return this->visitExpression(b.left()) || this->visitExpression(b.right());
+            return (b.left() && this->visitExpression(*b.left())) ||
+                   (b.right() && this->visitExpression(*b.right()));
         }
         case Expression::Kind::kConstructor: {
             auto& c = e.template as<Constructor>();
@@ -390,7 +493,7 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitExpression(EXPR e) {
         case Expression::Kind::kFunctionCall: {
             auto& c = e.template as<FunctionCall>();
             for (auto& arg : c.arguments()) {
-                if (this->visitExpression(*arg)) { return true; }
+                if (arg && this->visitExpression(*arg)) { return true; }
             }
             return false;
         }
@@ -404,13 +507,16 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitExpression(EXPR e) {
         case Expression::Kind::kPrefix:
             return this->visitExpression(*e.template as<PrefixExpression>().operand());
 
-        case Expression::Kind::kSwizzle:
-            return this->visitExpression(*e.template as<Swizzle>().base());
+        case Expression::Kind::kSwizzle: {
+            auto& s = e.template as<Swizzle>();
+            return s.base() && this->visitExpression(*s.base());
+        }
 
         case Expression::Kind::kTernary: {
             auto& t = e.template as<TernaryExpression>();
-            return this->visitExpression(*t.test()) || this->visitExpression(*t.ifTrue()) ||
-                   this->visitExpression(*t.ifFalse());
+            return this->visitExpression(*t.test()) ||
+                   (t.ifTrue() && this->visitExpression(*t.ifTrue())) ||
+                   (t.ifFalse() && this->visitExpression(*t.ifFalse()));
         }
         default:
             SkUNREACHABLE;
@@ -430,7 +536,7 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
 
         case Statement::Kind::kBlock:
             for (auto& stmt : s.template as<Block>().children()) {
-                if (this->visitStatement(*stmt)) {
+                if (stmt && this->visitStatement(*stmt)) {
                     return true;
                 }
             }
@@ -452,8 +558,8 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         }
         case Statement::Kind::kIf: {
             auto& i = s.template as<IfStatement>();
-            return this->visitExpression(*i.test()) ||
-                   this->visitStatement(*i.ifTrue()) ||
+            return (i.test() && this->visitExpression(*i.test())) ||
+                   (i.ifTrue() && this->visitStatement(*i.ifTrue())) ||
                    (i.ifFalse() && this->visitStatement(*i.ifFalse()));
         }
         case Statement::Kind::kReturn: {
@@ -462,15 +568,15 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         }
         case Statement::Kind::kSwitch: {
             auto& sw = s.template as<SwitchStatement>();
-            if (this->visitExpression(*sw.fValue)) {
+            if (this->visitExpression(*sw.value())) {
                 return true;
             }
-            for (auto& c : sw.fCases) {
-                if (c->fValue && this->visitExpression(*c->fValue)) {
+            for (const auto& c : sw.cases()) {
+                if (c->value() && this->visitExpression(*c->value())) {
                     return true;
                 }
-                for (auto& st : c->fStatements) {
-                    if (this->visitStatement(*st)) {
+                for (auto& st : c->statements()) {
+                    if (st && this->visitStatement(*st)) {
                         return true;
                     }
                 }
@@ -479,12 +585,12 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         }
         case Statement::Kind::kVarDeclaration: {
             auto& v = s.template as<VarDeclaration>();
-            for (auto& sizeExpr : v.fSizes) {
-                if (sizeExpr && this->visitExpression(*sizeExpr)) {
+            for (const std::unique_ptr<Expression>& size : v.sizes()) {
+                if (size && this->visitExpression(*size)) {
                     return true;
                 }
             }
-            return v.fValue && this->visitExpression(*v.fValue);
+            return v.value() && this->visitExpression(*v.value());
         }
         case Statement::Kind::kWhile: {
             auto& w = s.template as<WhileStatement>();
@@ -500,16 +606,17 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitProgramElement(ELEM pe) {
     switch (pe.kind()) {
         case ProgramElement::Kind::kEnum:
         case ProgramElement::Kind::kExtension:
+        case ProgramElement::Kind::kFunctionPrototype:
         case ProgramElement::Kind::kModifiers:
         case ProgramElement::Kind::kSection:
             // Leaf program elements just return false by default
             return false;
 
         case ProgramElement::Kind::kFunction:
-            return this->visitStatement(*pe.template as<FunctionDefinition>().fBody);
+            return this->visitStatement(*pe.template as<FunctionDefinition>().body());
 
         case ProgramElement::Kind::kInterfaceBlock:
-            for (auto& e : pe.template as<InterfaceBlock>().fSizes) {
+            for (auto& e : pe.template as<InterfaceBlock>().sizes()) {
                 if (e && this->visitExpression(*e)) {
                     return true;
                 }
@@ -517,7 +624,7 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitProgramElement(ELEM pe) {
             return false;
 
         case ProgramElement::Kind::kGlobalVar:
-            if (this->visitStatement(*pe.template as<GlobalVarDeclaration>().fDecl)) {
+            if (this->visitStatement(*pe.template as<GlobalVarDeclaration>().declaration())) {
                 return true;
             }
             return false;

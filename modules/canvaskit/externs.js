@@ -55,6 +55,7 @@ var CanvasKit = {
   MakeParticles: function() {},
   MakeVertices: function() {},
   MakeSurface: function() {},
+  MakeRasterDirectSurface: function() {},
   MakeWebGLCanvasSurface: function() {},
   Malloc: function() {},
   MallocGlyphIDs: function() {},
@@ -77,13 +78,9 @@ var CanvasKit = {
   // in the pre-js file)
   _computeTonalColors: function() {},
   _MakeImage: function() {},
-  _MakeLinearGradientShader: function() {},
-  _MakeRadialGradientShader: function() {},
-  _MakeSweepGradientShader: function() {},
   _MakeManagedAnimation: function() {},
   _MakeParticles: function() {},
   _MakePicture: function() {},
-  _MakeTwoPointConicalGradientShader: function() {},
   _decodeAnimatedImage: function() {},
   _decodeImage: function() {},
   _drawShapedText: function() {},
@@ -129,6 +126,7 @@ var CanvasKit = {
     getGlyphPositionAtCoordinate: function() {},
     getHeight: function() {},
     getIdeographicBaseline: function() {},
+    getLineMetrics: function() {},
     getLongestLine: function() {},
     getMaxIntrinsicWidth: function() {},
     getMaxWidth: function() {},
@@ -220,6 +218,7 @@ var CanvasKit = {
     restoreToCount: function() {},
     rotate: function() {},
     save: function() {},
+    saveLayerPaint: function() {},
     scale: function() {},
     skew: function() {},
     translate: function() {},
@@ -604,17 +603,28 @@ var CanvasKit = {
   },
 
   Shader: {
+    // Deprecated names
     Blend: function() {},
     Color: function() {},
-    Empty: function() {},
     Lerp: function() {},
+    // public API (from JS / C++ bindings)
+    MakeBlend: function() {},
+    MakeColor: function() {},
+    MakeFractalNoise: function() {},
+    MakeImprovedNoise: function() {},
+    MakeLerp: function() {},
     MakeLinearGradient: function() {},
     MakeRadialGradient: function() {},
-    MakeTwoPointConicalGradient: function() {},
     MakeSweepGradient: function() {},
+    MakeTurbulence: function() {},
+    MakeTwoPointConicalGradient: function() {},
 
     // private API (from C++ bindings)
-    _Color: function() {},
+    _MakeColor: function() {},
+    _MakeLinearGradient: function() {},
+    _MakeRadialGradient: function() {},
+    _MakeSweepGradient: function() {},
+    _MakeTwoPointConicalGradient: function() {},
   },
 
   Surface: {

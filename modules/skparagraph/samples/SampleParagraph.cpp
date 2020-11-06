@@ -3056,6 +3056,72 @@ private:
     using INHERITED = Sample;
 };
 
+class ParagraphView49 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph49"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+        canvas->clear(SK_ColorGRAY);
+        auto fontCollection = getFontCollection();
+        fontCollection->disableFontFallback();
+        const char* text =  "AAAAAAAAA\n";
+
+        ParagraphStyle paragraph_style;
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto"), SkString("Noto Serif CJK JP")});
+        text_style.setFontSize(16);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        builder.pushStyle(text_style);
+        builder.addText(text);
+        PlaceholderStyle placeholder_style;
+        placeholder_style.fHeight = 42;
+        placeholder_style.fWidth = 45;
+        placeholder_style.fBaselineOffset = 42;
+        placeholder_style.fBaseline = TextBaseline::kAlphabetic;
+        placeholder_style.fAlignment = PlaceholderAlignment::kBottom;
+        builder.addPlaceholder(placeholder_style);
+        auto paragraph = builder.Build();
+        paragraph->layout(360);
+        paragraph->paint(canvas, 0, 0);
+    }
+
+private:
+    using INHERITED = Sample;
+};
+
+class ParagraphView50 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("Paragraph50"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+        canvas->clear(SK_ColorWHITE);
+
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+
+        ParagraphStyle paragraph_style;
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(16);
+        text_style.setDecorationStyle(TextDecorationStyle::kSolid);
+        text_style.setDecorationMode(TextDecorationMode::kGaps);
+        text_style.setDecorationColor(SK_ColorRED);
+        text_style.setDecoration(TextDecoration::kUnderline);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        builder.pushStyle(text_style);
+        builder.addText("\n\n");
+        builder.pop();
+        auto paragraph = builder.Build();
+        paragraph->layout(360);
+        paragraph->paint(canvas, 0, 0);
+    }
+
+private:
+    using INHERITED = Sample;
+};
+
 }  // namespace
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3105,3 +3171,5 @@ DEF_SAMPLE(return new ParagraphView45();)
 DEF_SAMPLE(return new ParagraphView46();)
 DEF_SAMPLE(return new ParagraphView47();)
 DEF_SAMPLE(return new ParagraphView48();)
+DEF_SAMPLE(return new ParagraphView49();)
+DEF_SAMPLE(return new ParagraphView50();)

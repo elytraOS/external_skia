@@ -6,7 +6,7 @@
  */
 
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrOpsTask.h"
@@ -97,10 +97,9 @@ class TestOp : public GrOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static std::unique_ptr<TestOp> Make(GrRecordingContext* context, int value, const Range& range,
-                                        int result[], const Combinable* combinable) {
-        GrOpMemoryPool* pool = context->priv().opMemoryPool();
-        return pool->allocate<TestOp>(value, range, result, combinable);
+    static GrOp::Owner Make(GrRecordingContext* context, int value, const Range& range,
+                            int result[], const Combinable* combinable) {
+        return GrOp::Make<TestOp>(context, value, range, result, combinable);
     }
 
     const char* name() const override { return "TestOp"; }
@@ -116,7 +115,7 @@ public:
     }
 
 private:
-    friend class ::GrOpMemoryPool;  // for ctor
+    friend class ::GrOp;  // for ctor
 
     TestOp(int value, const Range& range, int result[], const Combinable* combinable)
             : INHERITED(ClassID()), fResult(result), fCombinable(combinable) {
@@ -139,8 +138,7 @@ private:
         }
     }
 
-    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas* arenas,
-                                      const GrCaps&) override {
+    CombineResult onCombineIfPossible(GrOp* t, SkArenaAlloc* arenas, const GrCaps&) override {
         // This op doesn't use the arenas, but make sure the GrOpsTask is sending it
         SkASSERT(arenas);
         (void) arenas;
@@ -236,7 +234,8 @@ DEF_GPUTEST(OpChainTest, reporter, /*ctxInfo*/) {
                     Range range = kRanges[j / kNumOpPositions];
                     range.fOffset += pos;
                     auto op = TestOp::Make(dContext.get(), value, range, result, &combinable);
-                    op->writeResult(validResult);
+                    TestOp* testOp = (TestOp*)op.get();
+                    testOp->writeResult(validResult);
                     opsTask.addOp(drawingMgr, std::move(op),
                                   GrTextureResolveManager(dContext->priv().drawingManager()),
                                   *caps);

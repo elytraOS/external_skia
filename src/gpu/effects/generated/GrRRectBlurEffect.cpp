@@ -13,12 +13,11 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkAutoMalloc.h"
-#include "src/core/SkBlurPriv.h"
 #include "src/core/SkGpuBlurUtils.h"
 #include "src/core/SkRRectPriv.h"
 #include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrPaint.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
@@ -32,6 +31,7 @@ static constexpr auto kBlurredRRectMaskOrigin = kTopLeft_GrSurfaceOrigin;
 static void make_blurred_rrect_key(GrUniqueKey* key,
                                    const SkRRect& rrectToDraw,
                                    float xformedSigma) {
+    SkASSERT(!SkGpuBlurUtils::IsEffectivelyZeroSigma(xformedSigma));
     static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
 
     GrUniqueKey::Builder builder(key, kDomain, 9, "RoundRect Blur Mask");
@@ -54,6 +54,7 @@ static bool fillin_view_on_gpu(GrDirectContext* dContext,
                                const SkRRect& rrectToDraw,
                                const SkISize& dimensions,
                                float xformedSigma) {
+    SkASSERT(!SkGpuBlurUtils::IsEffectivelyZeroSigma(xformedSigma));
     std::unique_ptr<GrRenderTargetContext> rtc = GrRenderTargetContext::MakeWithFallback(
             dContext, GrColorType::kAlpha_8, nullptr, SkBackingFit::kExact, dimensions, 1,
             GrMipmapped::kNo, GrProtected::kNo, kBlurredRRectMaskOrigin);
@@ -93,12 +94,6 @@ static bool fillin_view_on_gpu(GrDirectContext* dContext,
     trampoline->fProxy = view.asTextureProxyRef();
 
     return true;
-}
-
-// TODO: merge w/ copy in SkGpuBlurUtils.cpp
-static int sigma_radius(float sigma) {
-    SkASSERT(sigma >= 0);
-    return static_cast<int>(ceilf(sigma * 3.0f));
 }
 
 // Evaluate the vertical blur at the specified 'y' value given the location of the top of the
@@ -155,7 +150,8 @@ static GrSurfaceProxyView create_mask_on_cpu(GrRecordingContext* rContext,
                                              const SkRRect& rrectToDraw,
                                              const SkISize& dimensions,
                                              float xformedSigma) {
-    int radius = sigma_radius(xformedSigma);
+    SkASSERT(!SkGpuBlurUtils::IsEffectivelyZeroSigma(xformedSigma));
+    int radius = SkGpuBlurUtils::SigmaRadius(xformedSigma);
     int kernelSize = 2 * radius + 1;
 
     SkASSERT(kernelSize % 2);
@@ -170,10 +166,10 @@ static GrSurfaceProxyView create_mask_on_cpu(GrRecordingContext* rContext,
 
     std::unique_ptr<float[]> kernel(new float[kernelSize]);
 
-    SkFillIn1DGaussianKernel(kernel.get(), xformedSigma, radius);
+    SkGpuBlurUtils::Compute1DGaussianKernel(kernel.get(), xformedSigma, radius);
 
     SkBitmap integral;
-    if (!SkCreateIntegralTable(6 * xformedSigma, &integral)) {
+    if (!SkGpuBlurUtils::CreateIntegralTable(6 * xformedSigma, &integral)) {
         return {};
     }
 
@@ -228,6 +224,7 @@ static std::unique_ptr<GrFragmentProcessor> find_or_create_rrect_blur_mask_fp(
         const SkRRect& rrectToDraw,
         const SkISize& dimensions,
         float xformedSigma) {
+    SkASSERT(!SkGpuBlurUtils::IsEffectivelyZeroSigma(xformedSigma));
     GrUniqueKey key;
     make_blurred_rrect_key(&key, rrectToDraw, xformedSigma);
 
@@ -308,16 +305,20 @@ std::unique_ptr<GrFragmentProcessor> GrRRectBlurEffect::Make(
         return nullptr;
     }
 
+    if (SkGpuBlurUtils::IsEffectivelyZeroSigma(xformedSigma)) {
+        return inputFP;
+    }
+
     // Make sure we can successfully ninepatch this rrect -- the blur sigma has to be
     // sufficiently small relative to both the size of the corner radius and the
     // width (and height) of the rrect.
     SkRRect rrectToDraw;
     SkISize dimensions;
-    SkScalar ignored[kSkBlurRRectMaxDivisions];
+    SkScalar ignored[SkGpuBlurUtils::kBlurRRectMaxDivisions];
 
-    bool ninePatchable =
-            SkComputeBlurredRRectParams(srcRRect, devRRect, sigma, xformedSigma, &rrectToDraw,
-                                        &dimensions, ignored, ignored, ignored, ignored);
+    bool ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(
+            srcRRect, devRRect, sigma, xformedSigma, &rrectToDraw, &dimensions, ignored, ignored,
+            ignored, ignored);
     if (!ninePatchable) {
         return nullptr;
     }
@@ -359,35 +360,35 @@ public:
         blurRadiusVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
                                                          kHalf_GrSLType, "blurRadius");
         fragBuilder->codeAppendf(
-                R"SkSL(half2 translatedFragPos = half2(sk_FragCoord.xy - %s.xy);
-half2 proxyCenter = half2((%s.zw - %s.xy) * 0.5);
+                R"SkSL(float2 translatedFragPosFloat = sk_FragCoord.xy - %s.xy;
+float2 proxyCenter = (%s.zw - %s.xy) * 0.5;
 half edgeSize = (2.0 * %s + %s) + 0.5;
-translatedFragPos -= proxyCenter;
-half2 fragDirection = sign(translatedFragPos);
-translatedFragPos = abs(translatedFragPos);
-translatedFragPos -= proxyCenter - edgeSize;
-translatedFragPos = max(translatedFragPos, 0.0);
-translatedFragPos *= fragDirection;
-translatedFragPos += half2(edgeSize);
+translatedFragPosFloat -= proxyCenter;
+half2 fragDirection = half2(sign(translatedFragPosFloat));
+translatedFragPosFloat = abs(translatedFragPosFloat);
+half2 translatedFragPosHalf = half2(translatedFragPosFloat - (proxyCenter - float(edgeSize)));
+translatedFragPosHalf = max(translatedFragPosHalf, 0.0);
+translatedFragPosHalf *= fragDirection;
+translatedFragPosHalf += half2(edgeSize);
 half2 proxyDims = half2(2.0 * edgeSize);
-half2 texCoord = translatedFragPos / proxyDims;)SkSL",
+half2 texCoord = translatedFragPosHalf / proxyDims;)SkSL",
                 args.fUniformHandler->getUniformCStr(proxyRectVar),
                 args.fUniformHandler->getUniformCStr(proxyRectVar),
                 args.fUniformHandler->getUniformCStr(proxyRectVar),
                 args.fUniformHandler->getUniformCStr(blurRadiusVar),
                 args.fUniformHandler->getUniformCStr(cornerRadiusVar));
-        SkString _sample17178 = this->invokeChild(0, args);
+        SkString _sample0 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
                 R"SkSL(
 half4 inputColor = %s;)SkSL",
-                _sample17178.c_str());
-        SkString _coords17226("float2(texCoord)");
-        SkString _sample17226 = this->invokeChild(1, args, _coords17226.c_str());
+                _sample0.c_str());
+        SkString _coords1("float2(texCoord)");
+        SkString _sample1 = this->invokeChild(1, args, _coords1.c_str());
         fragBuilder->codeAppendf(
                 R"SkSL(
 %s = inputColor * %s;
 )SkSL",
-                args.fOutputColor, _sample17226.c_str());
+                args.fOutputColor, _sample1.c_str());
     }
 
 private:

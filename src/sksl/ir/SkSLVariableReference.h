@@ -31,7 +31,7 @@ enum class VariableRefKind : int8_t {
  *
  * there is only one Variable 'x', but two VariableReferences to it.
  */
-class VariableReference : public Expression {
+class VariableReference final : public Expression {
 public:
     using RefKind = VariableRefKind;
 
@@ -39,19 +39,15 @@ public:
 
     VariableReference(int offset, const Variable* variable, RefKind refKind = RefKind::kRead);
 
-    ~VariableReference() override;
-
     VariableReference(const VariableReference&) = delete;
     VariableReference& operator=(const VariableReference&) = delete;
 
-    const Type& type() const override;
-
     const Variable* variable() const {
-        return this->variableReferenceData().fVariable;
+        return fVariable;
     }
 
     RefKind refKind() const {
-        return (RefKind) this->variableReferenceData().fRefKind;
+        return fRefKind;
     }
 
     void setRefKind(RefKind refKind);
@@ -72,6 +68,9 @@ public:
                                                   const DefinitionMap& definitions) override;
 
 private:
+    const Variable* fVariable;
+    VariableRefKind fRefKind;
+
     using INHERITED = Expression;
 };
 

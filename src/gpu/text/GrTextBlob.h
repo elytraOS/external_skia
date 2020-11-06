@@ -158,6 +158,20 @@ private:
 };
 
 // -- GrSubRun -------------------------------------------------------------------------------------
+// There are several types of subrun, which can be broken into two broad classes:
+//   * GrPathRun - handle very large single color glyphs using paths to render the glyph.
+//   * GrAtlasSubRun - this is an abstract class used for atlas drawing.
+//     There are three different ways GrAtlasSubRun is specialized.
+//      * GrDirectMaskSubRun - this is by far the most common type of subrun. The mask pixels are
+//        in 1:1 correspondence with the pixels on the device. The destination rectangles in this
+//        subrun are in device space. This subrun handles color glyphs.
+//      * GrTransformedMaskSubRun - handles glyph where the image in the atlas needs to be
+//        transformed to the screen. It is usually used for large color glyph which can't be
+//        drawn with paths or scaled distance fields. The destination rectangles are in source
+//        space.
+//      * GrSDFTSubRun - scaled distance field text handles largish single color glyphs that still
+//        can fit in the atlas; the sizes between direct subruns, and path subruns. The destination
+//        rectangles are in source space.
 class GrSubRun {
 public:
     virtual ~GrSubRun() = default;
@@ -219,7 +233,7 @@ public:
     virtual size_t vertexStride() const = 0;
     virtual int glyphCount() const = 0;
 
-    virtual std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+    virtual std::tuple<const GrClip*, GrOp::Owner>
     makeAtlasTextOp(const GrClip* clip,
                     const SkMatrixProvider& viewMatrix,
                     const SkGlyphRunList& glyphRunList,
@@ -305,7 +319,7 @@ public:
 
     int glyphCount() const override;
 
-    std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+    std::tuple<const GrClip*, GrOp::Owner>
     makeAtlasTextOp(const GrClip* clip,
                     const SkMatrixProvider& viewMatrix,
                     const SkGlyphRunList& glyphRunList,
@@ -346,7 +360,6 @@ public:
         GrIRect16 rect;
     };
 
-    // SubRun for masks
     GrTransformedMaskSubRun(GrMaskFormat format,
                             GrTextBlob* blob,
                             const SkRect& bounds,
@@ -367,7 +380,7 @@ public:
 
     bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) override;
 
-    std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+    std::tuple<const GrClip*, GrOp::Owner>
     makeAtlasTextOp(const GrClip* clip,
                     const SkMatrixProvider& viewMatrix,
                     const SkGlyphRunList& glyphRunList,
@@ -434,7 +447,7 @@ public:
 
     bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) override;
 
-    std::tuple<const GrClip*, std::unique_ptr<GrDrawOp>>
+    std::tuple<const GrClip*, GrOp::Owner>
     makeAtlasTextOp(const GrClip* clip,
                     const SkMatrixProvider& viewMatrix,
                     const SkGlyphRunList& glyphRunList,

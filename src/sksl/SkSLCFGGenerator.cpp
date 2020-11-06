@@ -27,6 +27,20 @@
 
 namespace SkSL {
 
+void BasicBlock::Node::setExpression(std::unique_ptr<Expression> expr, ProgramUsage* usage) {
+    SkASSERT(!this->isStatement());
+    usage->remove(fExpression->get());
+    *fExpression = std::move(expr);
+}
+
+void BasicBlock::Node::setStatement(std::unique_ptr<Statement> stmt, ProgramUsage* usage) {
+    SkASSERT(!this->isExpression());
+    // See comment in header - we assume that stmt was already counted in usage (it was a subset
+    // of fStatement). There is no way to verify that, unfortunately.
+    usage->remove(fStatement->get());
+    *fStatement = std::move(stmt);
+}
+
 BlockId CFG::newBlock() {
     BlockId result = fBlocks.size();
     fBlocks.emplace_back();
@@ -44,11 +58,11 @@ BlockId CFG::newIsolatedBlock() {
 }
 
 void CFG::addExit(BlockId from, BlockId to) {
+    BasicBlock::ExitArray& exits = fBlocks[from].fExits;
+    if (std::find(exits.begin(), exits.end(), to) == exits.end()) {
+        exits.push_back(to);
+    }
     if (from == 0 || fBlocks[from].fIsReachable) {
-        BasicBlock::ExitArray& exits = fBlocks[from].fExits;
-        if (std::find(exits.begin(), exits.end(), to) == exits.end()) {
-            exits.push_back(to);
-        }
         fBlocks[to].fIsReachable = true;
     }
 }
@@ -167,13 +181,13 @@ bool BasicBlock::tryRemoveExpression(std::vector<BasicBlock::Node>::iterator* it
         case Expression::Kind::kBinary: {
             BinaryExpression& b = expr->as<BinaryExpression>();
             if (b.getOperator() == Token::Kind::TK_EQ) {
-                if (!this->tryRemoveLValueBefore(iter, &b.left())) {
+                if (!this->tryRemoveLValueBefore(iter, b.left().get())) {
                     return false;
                 }
-            } else if (!this->tryRemoveExpressionBefore(iter, &b.left())) {
+            } else if (!this->tryRemoveExpressionBefore(iter, b.left().get())) {
                 return false;
             }
-            if (!this->tryRemoveExpressionBefore(iter, &b.right())) {
+            if (!this->tryRemoveExpressionBefore(iter, b.right().get())) {
                 return false;
             }
             SkASSERT((*iter)->expression()->get() == expr);
@@ -242,7 +256,7 @@ bool BasicBlock::tryRemoveExpression(std::vector<BasicBlock::Node>::iterator* it
             return true;
         case Expression::Kind::kPostfix:
             if (!this->tryRemoveExpressionBefore(iter,
-                                                 expr->as<PrefixExpression>().operand().get())) {
+                                                 expr->as<PostfixExpression>().operand().get())) {
                 return false;
             }
             *iter = fNodes.erase(*iter);
@@ -267,12 +281,12 @@ bool BasicBlock::tryInsertExpression(std::vector<BasicBlock::Node>::iterator* it
     switch ((*expr)->kind()) {
         case Expression::Kind::kBinary: {
             BinaryExpression& b = expr->get()->as<BinaryExpression>();
-            if (!this->tryInsertExpression(iter, &b.rightPointer())) {
+            if (!this->tryInsertExpression(iter, &b.right())) {
                 return false;
             }
 
             ++(*iter);
-            if (!this->tryInsertExpression(iter, &b.leftPointer())) {
+            if (!this->tryInsertExpression(iter, &b.left())) {
                 return false;
             }
             ++(*iter);
@@ -327,10 +341,10 @@ void CFGGenerator::addExpression(CFG& cfg, std::unique_ptr<Expression>* e, bool 
                     // this isn't as precise as it could be -- we don't bother to track that if we
                     // early exit from a logical and/or, we know which branch of an 'if' we're going
                     // to hit -- but it won't make much difference in practice.
-                    this->addExpression(cfg, &b.leftPointer(), constantPropagate);
+                    this->addExpression(cfg, &b.left(), constantPropagate);
                     BlockId start = cfg.fCurrent;
                     cfg.newBlock();
-                    this->addExpression(cfg, &b.rightPointer(), constantPropagate);
+                    this->addExpression(cfg, &b.right(), constantPropagate);
                     cfg.newBlock();
                     cfg.addExit(start, cfg.fCurrent);
                     cfg.currentBlock().fNodes.push_back(
@@ -338,16 +352,16 @@ void CFGGenerator::addExpression(CFG& cfg, std::unique_ptr<Expression>* e, bool 
                     break;
                 }
                 case Token::Kind::TK_EQ: {
-                    this->addExpression(cfg, &b.rightPointer(), constantPropagate);
-                    this->addLValue(cfg, &b.leftPointer());
+                    this->addExpression(cfg, &b.right(), constantPropagate);
+                    this->addLValue(cfg, &b.left());
                     cfg.currentBlock().fNodes.push_back(
                             BasicBlock::MakeExpression(e, constantPropagate));
                     break;
                 }
                 default:
-                    this->addExpression(cfg, &b.leftPointer(),
+                    this->addExpression(cfg, &b.left(),
                                         !Compiler::IsAssignment(b.getOperator()));
-                    this->addExpression(cfg, &b.rightPointer(), constantPropagate);
+                    this->addExpression(cfg, &b.right(), constantPropagate);
                     cfg.currentBlock().fNodes.push_back(
                             BasicBlock::MakeExpression(e, constantPropagate));
             }
@@ -513,8 +527,8 @@ void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
         }
         case Statement::Kind::kVarDeclaration: {
             VarDeclaration& vd = (*s)->as<VarDeclaration>();
-            if (vd.fValue) {
-                this->addExpression(cfg, &vd.fValue, /*constantPropagate=*/true);
+            if (vd.value()) {
+                this->addExpression(cfg, &vd.value(), /*constantPropagate=*/true);
             }
             cfg.currentBlock().fNodes.push_back(BasicBlock::MakeStatement(s));
             break;
@@ -612,26 +626,26 @@ void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
         }
         case Statement::Kind::kSwitch: {
             SwitchStatement& ss = (*s)->as<SwitchStatement>();
-            this->addExpression(cfg, &ss.fValue, /*constantPropagate=*/true);
+            this->addExpression(cfg, &ss.value(), /*constantPropagate=*/true);
             cfg.currentBlock().fNodes.push_back(BasicBlock::MakeStatement(s));
             BlockId start = cfg.fCurrent;
             BlockId switchExit = cfg.newIsolatedBlock();
             fLoopExits.push(switchExit);
-            for (const auto& c : ss.fCases) {
+            for (auto& c : ss.cases()) {
                 cfg.newBlock();
                 cfg.addExit(start, cfg.fCurrent);
-                if (c->fValue) {
+                if (c->value()) {
                     // technically this should go in the start block, but it doesn't actually matter
                     // because it must be constant. Not worth running two loops for.
-                    this->addExpression(cfg, &c->fValue, /*constantPropagate=*/true);
+                    this->addExpression(cfg, &c->value(), /*constantPropagate=*/true);
                 }
-                for (auto& caseStatement : c->fStatements) {
+                for (auto& caseStatement : c->statements()) {
                     this->addStatement(cfg, &caseStatement);
                 }
             }
             cfg.addExit(cfg.fCurrent, switchExit);
             // note that unlike GLSL, our grammar requires the default case to be last
-            if (ss.fCases.empty() || ss.fCases.back()->fValue) {
+            if (ss.cases().empty() || ss.cases().back()->value()) {
                 // switch does not have a default clause, mark that it can skip straight to the end
                 cfg.addExit(start, switchExit);
             }
@@ -654,7 +668,7 @@ CFG CFGGenerator::getCFG(FunctionDefinition& f) {
     CFG result;
     result.fStart = result.newBlock();
     result.fCurrent = result.fStart;
-    this->addStatement(result, &f.fBody);
+    this->addStatement(result, &f.body());
     result.newBlock();
     result.fExit = result.fCurrent;
     return result;

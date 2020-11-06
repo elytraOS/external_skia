@@ -30,7 +30,7 @@
 
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrImageContextPriv.h"
 #include "src/image/SkImage_Gpu.h"
 #endif
@@ -555,7 +555,7 @@ sk_sp<SkImage> SkImage::MakeFromCompressedTexture(GrRecordingContext*,
     return nullptr;
 }
 
-bool SkImage::MakeBackendTextureFromSkImage(GrContext*,
+bool SkImage::MakeBackendTextureFromSkImage(GrDirectContext*,
                                             sk_sp<SkImage>,
                                             GrBackendTexture*,
                                             BackendTextureReleaseProc*) {
@@ -582,7 +582,7 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext*, GrMipmapped, SkBudget
 }
 
 sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
-       GrContext*, SkYUVColorSpace, const GrBackendTexture[2], GrSurfaceOrigin,
+       GrRecordingContext*, SkYUVColorSpace, const GrBackendTexture[2], GrSurfaceOrigin,
        const GrBackendTexture&, sk_sp<SkColorSpace>, TextureReleaseProc, ReleaseContext) {
     return nullptr;
 }

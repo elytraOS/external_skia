@@ -171,7 +171,10 @@ private:
  */
 class SK_API SkYUVAPixmaps {
 public:
+    using DataType = SkYUVAPixmapInfo::DataType;
     static constexpr auto kMaxPlanes = SkYUVAPixmapInfo::kMaxPlanes;
+
+    static SkColorType RecommendedRGBAColorType(DataType);
 
     /** Allocate space for pixmaps' pixels in the SkYUVAPixmaps. */
     static SkYUVAPixmaps Allocate(const SkYUVAPixmapInfo& yuvaPixmapInfo);
@@ -181,6 +184,12 @@ public:
      * SkYUVAPixmaps.
      */
     static SkYUVAPixmaps FromData(const SkYUVAPixmapInfo&, sk_sp<SkData>);
+
+    /**
+     * Makes a deep copy of the src SkYUVAPixmaps. The returned SkYUVAPixmaps owns its planes'
+     * backing stores.
+     */
+    static SkYUVAPixmaps MakeCopy(const SkYUVAPixmaps& src);
 
     /**
      * Use passed in memory as backing store for pixmaps' pixels. Caller must ensure memory remains
@@ -211,6 +220,10 @@ public:
 
     const SkYUVAInfo& yuvaInfo() const { return fYUVAInfo; }
 
+    DataType dataType() const { return fDataType; }
+
+    SkYUVAPixmapInfo pixmapsInfo() const;
+
     /** Number of pixmap planes or 0 if this SkYUVAPixmaps is invalid. */
     int numPlanes() const { return this->isValid() ? fYUVAInfo.numPlanes() : 0; }
 
@@ -227,17 +240,27 @@ public:
     const SkPixmap& plane(int i) const { return fPlanes[SkToSizeT(i)]; }
 
     /**
+     * Computes a SkYUVAIndex representation of the planar layout. Returns true on success and
+     * false on failure. Will succeed whenever this->isValid() is true.
+     */
+    bool toYUVAIndices(SkYUVAIndex[SkYUVAIndex::kIndexCount]) const;
+
+    /** Does this SkPixmaps own the backing store of the planes? */
+    bool ownsStorage() const { return SkToBool(fData); }
+
+    /**
      * Conversion to legacy SkYUVA data structures.
      */
-    bool toLegacy(SkYUVASizeInfo*, SkYUVAIndex[4]) const;
+    bool toLegacy(SkYUVASizeInfo*, SkYUVAIndex[SkYUVAIndex::kIndexCount]) const;
 
 private:
     SkYUVAPixmaps(const SkYUVAPixmapInfo&, sk_sp<SkData>);
-    SkYUVAPixmaps(const SkYUVAInfo&, const SkPixmap[kMaxPlanes]);
+    SkYUVAPixmaps(const SkYUVAInfo&, DataType, const SkPixmap[kMaxPlanes]);
 
-    SkYUVAInfo fYUVAInfo;
     std::array<SkPixmap, kMaxPlanes> fPlanes = {};
     sk_sp<SkData> fData;
+    SkYUVAInfo fYUVAInfo;
+    DataType fDataType;
 };
 
 //////////////////////////////////////////////////////////////////////////////

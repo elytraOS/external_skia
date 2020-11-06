@@ -11,7 +11,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrColor.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -119,16 +119,14 @@ class GrPipelineDynamicStateTestOp : public GrDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static std::unique_ptr<GrDrawOp> Make(GrRecordingContext* context,
-                                          GrScissorTest scissorTest,
-                                          sk_sp<const GrBuffer> vbuff) {
-        GrOpMemoryPool* pool = context->priv().opMemoryPool();
-
-        return pool->allocate<GrPipelineDynamicStateTestOp>(scissorTest, std::move(vbuff));
+    static GrOp::Owner Make(GrRecordingContext* context,
+                            GrScissorTest scissorTest,
+                            sk_sp<const GrBuffer> vbuff) {
+        return GrOp::Make<GrPipelineDynamicStateTestOp>(context, scissorTest, std::move(vbuff));
     }
 
 private:
-    friend class GrOpMemoryPool;
+    friend class GrOp;
 
     GrPipelineDynamicStateTestOp(GrScissorTest scissorTest, sk_sp<const GrBuffer> vbuff)
         : INHERITED(ClassID())

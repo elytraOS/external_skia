@@ -43,7 +43,7 @@
 #include "src/core/SkRecordDraw.h"
 #include "src/core/SkRecorder.h"
 #include "src/core/SkTaskGroup.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/utils/SkMultiPictureDocumentPriv.h"
 #include "src/utils/SkOSPath.h"
@@ -71,8 +71,8 @@
 #endif
 
 #if defined(SK_XML)
-    #include "experimental/svg/model/SkSVGDOM.h"
     #include "include/svg/SkSVGCanvas.h"
+    #include "modules/svg/include/SkSVGDOM.h"
     #include "src/xml/SkXMLWriter.h"
 #endif
 
@@ -1326,6 +1326,7 @@ Result SVGSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
 
     SkAutoCanvasRestore acr(canvas, true);
     canvas->scale(fScale, fScale);
+    canvas->drawColor(SK_ColorWHITE);
     fDom->render(canvas);
 
     return Result::Ok();
@@ -2339,8 +2340,8 @@ Result ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkS
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 #ifdef TEST_VIA_SVG
-#include "experimental/svg/model/SkSVGDOM.h"
 #include "include/svg/SkSVGCanvas.h"
+#include "modules/svg/include/SkSVGDOM.h"
 #include "src/xml/SkXMLWriter.h"
 
 Result ViaSVG::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {

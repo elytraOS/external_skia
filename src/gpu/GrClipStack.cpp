@@ -12,8 +12,8 @@
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/GrClip.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDeferredProxyUploader.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetContextPriv.h"
@@ -1291,7 +1291,9 @@ GrClip::Effect GrClipStack::apply(GrRecordingContext* context, GrRenderTargetCon
         GrFPArgs args(context, *fMatrixProvider, kNone_SkFilterQuality, &kCoverageColorInfo);
         clipFP = as_SB(cs.shader())->asFragmentProcessor(args);
         if (clipFP) {
-            clipFP = GrFragmentProcessor::SwizzleOutput(std::move(clipFP), GrSwizzle::AAAA());
+            // The initial input is the coverage from the geometry processor, so this ensures it
+            // is multiplied properly with the alpha of the clip shader.
+            clipFP = GrFragmentProcessor::MulInputByChildAlpha(std::move(clipFP));
         }
     }
 

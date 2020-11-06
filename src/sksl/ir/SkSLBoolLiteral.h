@@ -16,19 +16,16 @@ namespace SkSL {
 /**
  * Represents 'true' or 'false'.
  */
-class BoolLiteral : public Expression {
+class BoolLiteral final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kBoolLiteral;
 
     BoolLiteral(const Context& context, int offset, bool value)
-    : INHERITED(offset, BoolLiteralData{context.fBool_Type.get(), value}) {}
-
-    const Type& type() const override {
-        return *this->boolLiteralData().fType;
-    }
+        : INHERITED(offset, kExpressionKind, context.fBool_Type.get())
+        , fValue(value) {}
 
     bool value() const {
-        return this->boolLiteralData().fValue;
+        return fValue;
     }
 
     String description() const override {
@@ -54,7 +51,10 @@ public:
 
 private:
     BoolLiteral(int offset, bool value, const Type* type)
-    : INHERITED(offset, BoolLiteralData{type, value}) {}
+        : INHERITED(offset, kExpressionKind, type)
+        , fValue(value) {}
+
+    bool fValue;
 
     using INHERITED = Expression;
 };

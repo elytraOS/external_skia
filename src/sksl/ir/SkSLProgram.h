@@ -11,6 +11,8 @@
 #include <vector>
 #include <memory>
 
+#include "include/private/SkTHash.h"
+#include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -32,6 +34,28 @@
 namespace SkSL {
 
 class Context;
+class Pool;
+
+/**
+ * Side-car class holding mutable information about a Program's IR
+ */
+class ProgramUsage {
+public:
+    struct VariableCounts { int fRead = 0; int fWrite = 0; };
+    VariableCounts get(const Variable&) const;
+    bool isDead(const Variable&) const;
+
+    int get(const FunctionDeclaration&) const;
+
+    void replace(const Expression* oldExpr, const Expression* newExpr);
+    void add(const Statement* stmt);
+    void remove(const Expression* expr);
+    void remove(const Statement* stmt);
+    void remove(const ProgramElement& element);
+
+    SkTHashMap<const Variable*, VariableCounts> fVariableCounts;
+    SkTHashMap<const FunctionDeclaration*, int> fCallCounts;
+};
 
 /**
  * Represents a fully-digested program, ready for code generation.
@@ -87,11 +111,6 @@ struct Program {
             };
         };
 
-#if defined(SKSL_STANDALONE) || !SK_SUPPORT_GPU
-        const StandaloneShaderCaps* fCaps = &standaloneCaps;
-#else
-        const GrShaderCaps* fCaps = nullptr;
-#endif
         // if false, sk_FragCoord is exactly the same as gl_FragCoord. If true, the y coordinate
         // must be flipped.
         bool fFlipY = false;
@@ -161,36 +180,58 @@ struct Program {
     Program(Kind kind,
             std::unique_ptr<String> source,
             Settings settings,
+            const ShaderCapsClass* caps,
             std::shared_ptr<Context> context,
             std::vector<std::unique_ptr<ProgramElement>> elements,
             std::unique_ptr<ModifiersPool> modifiers,
             std::shared_ptr<SymbolTable> symbols,
+            std::unique_ptr<Pool> pool,
             Inputs inputs)
     : fKind(kind)
     , fSource(std::move(source))
     , fSettings(settings)
+    , fCaps(caps)
     , fContext(context)
     , fSymbols(symbols)
+    , fPool(std::move(pool))
     , fInputs(inputs)
     , fElements(std::move(elements))
-    , fModifiers(std::move(modifiers)) {}
+    , fModifiers(std::move(modifiers)) {
+        fUsage = Analysis::GetUsage(*this);
+    }
+
+    ~Program() {
+        // Some or all of the program elements are in the pool. To free them safely, we must attach
+        // the pool before destroying any program elements. (Otherwise, we may accidentally call
+        // delete on a pooled node.)
+        fPool->attachToThread();
+        fElements.clear();
+        fContext.reset();
+        fSymbols.reset();
+        fModifiers.reset();
+        fPool->detachFromThread();
+    }
 
     const std::vector<std::unique_ptr<ProgramElement>>& elements() const { return fElements; }
 
     Kind fKind;
     std::unique_ptr<String> fSource;
     Settings fSettings;
+    const ShaderCapsClass* fCaps;
     std::shared_ptr<Context> fContext;
     // it's important to keep fElements defined after (and thus destroyed before) fSymbols,
     // because destroying elements can modify reference counts in symbols
     std::shared_ptr<SymbolTable> fSymbols;
+    std::unique_ptr<Pool> fPool;
     Inputs fInputs;
 
 private:
     std::vector<std::unique_ptr<ProgramElement>> fElements;
     std::unique_ptr<ModifiersPool> fModifiers;
+    std::unique_ptr<ProgramUsage> fUsage;
 
     friend class Compiler;
+    friend class Inliner;             // fUsage
     friend class SPIRVCodeGenerator;  // fModifiers
 };
 

@@ -7,7 +7,7 @@
 
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/ops/GrTextureOp.h"
@@ -47,8 +47,8 @@ static sk_sp<GrSurfaceProxy> create_proxy(GrRecordingContext* rContext) {
             SkBudgeted::kNo, GrProtected::kNo, GrInternalSurfaceFlags::kNone);
 }
 
-static std::unique_ptr<GrDrawOp> create_op(GrDirectContext* dContext, SkRect rect,
-                                           const GrSurfaceProxyView& proxyView, bool isAA) {
+static GrOp::Owner create_op(GrDirectContext* dContext, SkRect rect,
+                             const GrSurfaceProxyView& proxyView, bool isAA) {
     DrawQuad quad;
 
     quad.fDevice = GrQuad::MakeFromRect(rect.makeOutset(0.5f, 0.5f),  SkMatrix::I());
@@ -99,8 +99,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TextureOpTest, reporter, ctxInfo) {
     static const SkRect kOpDRect{ 32, 32, 48, 48 };
 
     // opA & opB can chain together but can't merge bc they have different proxies
-    std::unique_ptr<GrDrawOp> opA = create_op(dContext, kOpARect, proxyViewA, false);
-    std::unique_ptr<GrDrawOp> opB = create_op(dContext, kOpBRect, proxyViewB, false);
+    GrOp::Owner opA = create_op(dContext, kOpARect, proxyViewA, false);
+    GrOp::Owner opB = create_op(dContext, kOpBRect, proxyViewB, false);
 
     GrAppliedClip noClip = GrAppliedClip::Disabled();
     OpsTaskTestingAccess::OpChain chain1(std::move(opA), GrProcessorSet::EmptySetAnalysis(),
@@ -112,8 +112,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TextureOpTest, reporter, ctxInfo) {
     // opC & opD can also chain together but can't merge (bc, again, they have different
     // proxies). Note, however, that opA and opD do share a proxy so can be merged if opA's
     // anti-aliasing is upgraded to coverage.
-    std::unique_ptr<GrDrawOp> opC = create_op(dContext, kOpCRect, proxyViewC, true);
-    std::unique_ptr<GrDrawOp> opD = create_op(dContext, kOpDRect, proxyViewA, true);
+    GrOp::Owner opC = create_op(dContext, kOpCRect, proxyViewC, true);
+    GrOp::Owner opD = create_op(dContext, kOpDRect, proxyViewA, true);
 
     OpsTaskTestingAccess::OpChain chain2(std::move(opC), GrProcessorSet::EmptySetAnalysis(),
                                          &noClip, nullptr);
@@ -129,5 +129,5 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(TextureOpTest, reporter, ctxInfo) {
     //   opC - opD/opA - opB
     check_chain(&chain1, kOpCRect, kOpBRect, 3);
 
-    chain1.deleteOps(arenas.opMemoryPool());
+    chain1.deleteOps();
 }

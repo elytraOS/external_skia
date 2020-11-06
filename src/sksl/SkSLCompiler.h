@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 #include "src/sksl/SkSLASTFile.h"
+#include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCFGGenerator.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLErrorReporter.h"
@@ -49,6 +50,7 @@ class ExternalValue;
 class IRGenerator;
 class IRIntrinsicMap;
 struct PipelineStageArgs;
+class ProgramUsage;
 
 struct LoadedModule {
     std::shared_ptr<SymbolTable>                 fSymbols;
@@ -107,6 +109,17 @@ public:
         String fCoords;
     };
 
+    struct OptimizationContext {
+        // nodes we have already reported errors for and should not error on again
+        std::unordered_set<const IRNode*> fSilences;
+        // true if we have updated the CFG during this pass
+        bool fUpdated = false;
+        // true if we need to completely regenerate the CFG
+        bool fNeedsRescan = false;
+        // Metadata about function and variable usage within the program
+        ProgramUsage* fUsage = nullptr;
+    };
+
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     /**
      * Represents the arguments to GrGLSLShaderBuilder::emitFunction.
@@ -120,7 +133,7 @@ public:
     };
 #endif
 
-    Compiler(Flags flags = kNone_Flags);
+    Compiler(const ShaderCapsClass* caps, Flags flags = kNone_Flags);
 
     ~Compiler() override;
 
@@ -227,9 +240,7 @@ private:
     void simplifyExpression(DefinitionMap& definitions,
                             BasicBlock& b,
                             std::vector<BasicBlock::Node>::iterator* iter,
-                            std::unordered_set<const Variable*>* undefinedVariables,
-                            bool* outUpdated,
-                            bool* outNeedsRescan);
+                            OptimizationContext* context);
 
     /**
      * Simplifies the statement pointed to by iter (in both the IR and CFG structures), if
@@ -238,14 +249,12 @@ private:
     void simplifyStatement(DefinitionMap& definitions,
                            BasicBlock& b,
                            std::vector<BasicBlock::Node>::iterator* iter,
-                           std::unordered_set<const Variable*>* undefinedVariables,
-                           bool* outUpdated,
-                           bool* outNeedsRescan);
+                           OptimizationContext* context);
 
     /**
      * Optimizes a function based on control flow analysis. Returns true if changes were made.
      */
-    bool scanCFG(FunctionDefinition& f);
+    bool scanCFG(FunctionDefinition& f, ProgramUsage* usage);
 
     /**
      * Optimize every function in the program.
@@ -253,6 +262,8 @@ private:
     bool optimize(Program& program);
 
     Position position(int offset);
+
+    const ShaderCapsClass* fCaps = nullptr;
 
     std::shared_ptr<SymbolTable> fRootSymbolTable;
 

@@ -15,7 +15,8 @@
 #include "src/gpu/SkGr.h"
 #include "src/image/SkImage_GpuBase.h"
 
-class GrContext;
+class GrDirectContext;
+class GrRecordingContext;
 class GrTexture;
 
 class SkBitmap;
@@ -84,11 +85,15 @@ public:
                                              PromiseImageTextureContext textureContext,
                                              PromiseImageApiVersion);
 
-    static sk_sp<SkImage> ConvertYUVATexturesToRGB(GrRecordingContext*, SkYUVColorSpace,
-                                                   const GrBackendTexture [],
-                                                   const SkYUVAIndex [4],
-                                                   SkISize, GrSurfaceOrigin,
-                                                   GrRenderTargetContext*);
+    static sk_sp<SkImage> ConvertYUVATexturesToRGB(
+            GrRecordingContext*,
+            SkYUVColorSpace,
+            const GrBackendTexture[],
+            const SkYUVAIndex[SkYUVAIndex::kIndexCount],
+            SkISize,
+            GrSurfaceOrigin,
+            GrRenderTargetContext*,
+            sk_sp<GrRefCntedCallback> releaseHelper = nullptr);
 
 private:
     GrSurfaceProxyView fView;

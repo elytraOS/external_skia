@@ -69,6 +69,22 @@ private:
     std::shared_ptr<SymbolTable> fOldSymbols;
 };
 
+Rehydrator::Rehydrator(const Context* context, ModifiersPool* modifiers,
+                       std::shared_ptr<SymbolTable> symbolTable, ErrorReporter* errorReporter,
+                       const uint8_t* src, size_t length)
+                : fContext(*context)
+                , fModifiers(*modifiers)
+                , fErrors(errorReporter)
+                , fSymbolTable(std::move(symbolTable))
+                , fStart(src)
+    SkDEBUGCODE(, fEnd(fStart + length)) {
+    SkASSERT(fSymbolTable);
+    SkASSERT(fSymbolTable->isBuiltin());
+    // skip past string data
+    fIP = fStart;
+    fIP += this->readU16();
+}
+
 Layout Rehydrator::layout() {
     switch (this->readU8()) {
         case kBuiltinLayout_Command: {
@@ -266,11 +282,9 @@ const Type* Rehydrator::type() {
 std::vector<std::unique_ptr<ProgramElement>> Rehydrator::elements() {
     SkDEBUGCODE(uint8_t command = )this->readU8();
     SkASSERT(command == kElements_Command);
-    uint8_t count = this->readU8();
     std::vector<std::unique_ptr<ProgramElement>> result;
-    result.reserve(count);
-    for (int i = 0; i < count; ++i) {
-        result.push_back(this->element());
+    while (std::unique_ptr<ProgramElement> elem = this->element()) {
+        result.push_back(std::move(elem));
     }
     return result;
 }
@@ -288,7 +302,8 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
                 v.setInitialValue(symbols->takeOwnershipOfIRNode(
                         std::make_unique<IntLiteral>(fContext, /*offset=*/-1, value)));
             }
-            return std::unique_ptr<ProgramElement>(new Enum(-1, typeName, std::move(symbols)));
+            return std::make_unique<Enum>(/*offset=*/-1, typeName, std::move(symbols),
+                                          /*isSharedWithCpp=*/true, /*isBuiltin=*/true);
         }
         case Rehydrator::kFunctionDefinition_Command: {
             const FunctionDeclaration* decl = this->symbolRef<FunctionDeclaration>(
@@ -300,10 +315,11 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
                 refs.insert(this->symbolRef<FunctionDeclaration>(
                                                                Symbol::Kind::kFunctionDeclaration));
             }
-            FunctionDefinition* result = new FunctionDefinition(-1, *decl, std::move(body),
-                                                                std::move(refs));
-            decl->setDefinition(result);
-            return std::unique_ptr<ProgramElement>(result);
+            auto result = std::make_unique<FunctionDefinition>(/*offset=*/-1, decl,
+                                                               /*builtin=*/true, std::move(body),
+                                                               std::move(refs));
+            decl->setDefinition(result.get());
+            return std::move(result);
         }
         case Rehydrator::kInterfaceBlock_Command: {
             const Symbol* var = this->symbol();
@@ -312,7 +328,7 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
             StringFragment instanceName = this->readString();
             uint8_t sizeCount = this->readU8();
             ExpressionArray sizes;
-            sizes.reserve(sizeCount);
+            sizes.reserve_back(sizeCount);
             for (int i = 0; i < sizeCount; ++i) {
                 sizes.push_back(this->expression());
             }
@@ -321,12 +337,13 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
         }
         case Rehydrator::kVarDeclarations_Command: {
             std::unique_ptr<Statement> decl = this->statement();
-            return std::unique_ptr<ProgramElement>(
-                    new GlobalVarDeclaration(/*offset=*/-1, std::move(decl)));
+            return std::make_unique<GlobalVarDeclaration>(/*offset=*/-1, std::move(decl));
         }
+        case Rehydrator::kElementsComplete_Command:
+            return nullptr;
+
         default:
-            printf("unsupported element %d\n", kind);
-            SkASSERT(false);
+            SkDEBUGFAILF("unsupported element %d\n", kind);
             return nullptr;
     }
 }
@@ -338,7 +355,7 @@ std::unique_ptr<Statement> Rehydrator::statement() {
             AutoRehydratorSymbolTable symbols(this);
             int count = this->readU8();
             StatementArray statements;
-            statements.reserve(count);
+            statements.reserve_back(count);
             for (int i = 0; i < count; ++i) {
                 statements.push_back(this->statement());
             }
@@ -406,7 +423,7 @@ std::unique_ptr<Statement> Rehydrator::statement() {
                 std::unique_ptr<Expression> value = this->expression();
                 int statementCount = this->readU8();
                 StatementArray statements;
-                statements.reserve(statementCount);
+                statements.reserve_back(statementCount);
                 for (int j = 0; j < statementCount; ++j) {
                     statements.push_back(this->statement());
                 }
@@ -421,7 +438,7 @@ std::unique_ptr<Statement> Rehydrator::statement() {
             const Type* baseType = this->type();
             uint8_t sizeCount = this->readU8();
             ExpressionArray sizes;
-            sizes.reserve(sizeCount);
+            sizes.reserve_back(sizeCount);
             for (int i = 0; i < sizeCount; ++i) {
                 sizes.push_back(this->expression());
             }
@@ -466,7 +483,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
             const Type* type = this->type();
             uint8_t argCount = this->readU8();
             ExpressionArray args;
-            args.reserve(argCount);
+            args.reserve_back(argCount);
             for (int i = 0; i < argCount; ++i) {
                 args.push_back(this->expression());
             }
@@ -489,7 +506,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
                                                                 Symbol::Kind::kFunctionDeclaration);
             uint8_t argCount = this->readU8();
             ExpressionArray args;
-            args.reserve(argCount);
+            args.reserve_back(argCount);
             for (int i = 0; i < argCount; ++i) {
                 args.push_back(this->expression());
             }
@@ -524,12 +541,11 @@ std::unique_ptr<Expression> Rehydrator::expression() {
         case Rehydrator::kSwizzle_Command: {
             std::unique_ptr<Expression> base = this->expression();
             int count = this->readU8();
-            std::vector<int> components;
-            components.reserve(count);
+            ComponentArray components;
             for (int i = 0; i < count; ++i) {
                 components.push_back(this->readU8());
             }
-            return std::make_unique<Swizzle>(fContext, std::move(base), std::move(components));
+            return std::make_unique<Swizzle>(fContext, std::move(base), components);
         }
         case Rehydrator::kTernary_Command: {
             std::unique_ptr<Expression> test = this->expression();
@@ -560,8 +576,9 @@ std::shared_ptr<SymbolTable> Rehydrator::symbolTable(bool inherit) {
     SkASSERT(command == kSymbolTable_Command);
     uint16_t ownedCount = this->readU16();
     std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
-    std::shared_ptr<SymbolTable> result = inherit ? std::make_shared<SymbolTable>(fSymbolTable)
-                                                  : std::make_shared<SymbolTable>(fErrors);
+    std::shared_ptr<SymbolTable> result =
+            inherit ? std::make_shared<SymbolTable>(fSymbolTable, /*builtin=*/true)
+                    : std::make_shared<SymbolTable>(fErrors, /*builtin=*/true);
     fSymbolTable = result;
     std::vector<const Symbol*> ownedSymbols;
     ownedSymbols.reserve(ownedCount);

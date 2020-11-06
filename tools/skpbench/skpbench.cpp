@@ -18,7 +18,7 @@
 #include "src/core/SkOSFile.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/utils/SkMultiPictureDocument.h"
 #include "src/utils/SkOSPath.h"
@@ -34,7 +34,7 @@
 #include "tools/gpu/GrContextFactory.h"
 
 #ifdef SK_XML
-#include "experimental/svg/model/SkSVGDOM.h"
+#include "modules/svg/include/SkSVGDOM.h"
 #include "src/xml/SkDOM.h"
 #endif
 

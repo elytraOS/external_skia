@@ -19,29 +19,25 @@ namespace SkSL {
 /**
  * An expression modified by a unary operator appearing before it, such as '!flag'.
  */
-class PrefixExpression : public Expression {
+class PrefixExpression final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kPrefix;
 
     PrefixExpression(Token::Kind op, std::unique_ptr<Expression> operand)
-    : INHERITED(operand->fOffset, kExpressionKind, TypeTokenData{&operand->type(), op}) {
-        fExpressionChildren.push_back(std::move(operand));
-    }
-
-    const Type& type() const override {
-        return *this->typeTokenData().fType;
-    }
+        : INHERITED(operand->fOffset, kExpressionKind, &operand->type())
+        , fOperator(op)
+        , fOperand(std::move(operand)) {}
 
     Token::Kind getOperator() const {
-        return this->typeTokenData().fToken;
+        return fOperator;
     }
 
     std::unique_ptr<Expression>& operand() {
-        return fExpressionChildren[0];
+        return fOperand;
     }
 
     const std::unique_ptr<Expression>& operand() const {
-        return fExpressionChildren[0];
+        return fOperand;
     }
 
     bool isCompileTimeConstant() const override {
@@ -95,6 +91,9 @@ public:
     }
 
 private:
+    Token::Kind fOperator;
+    std::unique_ptr<Expression> fOperand;
+
     using INHERITED = Expression;
 };
 

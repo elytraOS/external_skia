@@ -18,29 +18,25 @@ namespace SkSL {
 /**
  * An external function invocation.
  */
-class ExternalFunctionCall : public Expression {
+class ExternalFunctionCall final : public Expression {
 public:
     static constexpr Kind kExpressionKind = Kind::kExternalFunctionCall;
 
     ExternalFunctionCall(int offset, const ExternalValue* function, ExpressionArray arguments)
-    : INHERITED(offset, kExpressionKind, ExternalValueData{&function->callReturnType(), function}) {
-        fExpressionChildren = std::move(arguments);
-    }
-
-    const Type& type() const override {
-        return *this->externalValueData().fType;
-    }
+        : INHERITED(offset, kExpressionKind, &function->callReturnType())
+        , fFunction(*function)
+        , fArguments(std::move(arguments)) {}
 
     ExpressionArray& arguments() {
-        return fExpressionChildren;
+        return fArguments;
     }
 
     const ExpressionArray& arguments() const {
-        return fExpressionChildren;
+        return fArguments;
     }
 
     const ExternalValue& function() const {
-        return *this->externalValueData().fValue;
+        return fFunction;
     }
 
     bool hasProperty(Property property) const override {
@@ -57,7 +53,7 @@ public:
 
     std::unique_ptr<Expression> clone() const override {
         ExpressionArray cloned;
-        cloned.reserve(this->arguments().size());
+        cloned.reserve_back(this->arguments().size());
         for (const auto& arg : this->arguments()) {
             cloned.push_back(arg->clone());
         }
@@ -76,6 +72,10 @@ public:
         result += ")";
         return result;
     }
+
+private:
+    const ExternalValue& fFunction;
+    ExpressionArray fArguments;
 
     using INHERITED = Expression;
 };

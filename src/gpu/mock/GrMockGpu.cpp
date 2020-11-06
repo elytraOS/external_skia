@@ -54,7 +54,7 @@ sk_sp<GrGpu> GrMockGpu::Make(const GrMockOptions* mockOptions,
     return sk_sp<GrGpu>(new GrMockGpu(direct, *mockOptions, contextOptions));
 }
 
-GrOpsRenderPass* GrMockGpu::getOpsRenderPass(GrRenderTarget* rt,
+GrOpsRenderPass* GrMockGpu::onGetOpsRenderPass(GrRenderTarget* rt,
                                              GrAttachment*,
                                              GrSurfaceOrigin origin,
                                              const SkIRect& bounds,
@@ -261,7 +261,7 @@ sk_sp<GrAttachment> GrMockGpu::makeStencilAttachmentForRenderTarget(const GrRend
     SkASSERT(numStencilSamples == rt->numSamples());
     fStats.incStencilAttachmentCreates();
     return sk_sp<GrAttachment>(
-            new GrMockAttachment(this, dimensions, GrAttachment::UsageFlags::kStencil,
+            new GrMockAttachment(this, dimensions, GrAttachment::UsageFlags::kStencilAttachment,
                                  rt->numSamples()));
 }
 

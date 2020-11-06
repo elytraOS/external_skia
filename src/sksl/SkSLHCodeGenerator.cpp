@@ -322,7 +322,7 @@ void HCodeGenerator::writeFields() {
 }
 
 String HCodeGenerator::GetHeader(const Program& program, ErrorReporter& errors) {
-    SymbolTable types(&errors);
+    SymbolTable types(&errors, /*builtin=*/true);
     Parser parser(program.fSource->c_str(), program.fSource->length(), types, errors);
     for (;;) {
         Token header = parser.nextRawToken();
@@ -356,7 +356,7 @@ bool HCodeGenerator::generateCode() {
                  "public:\n",
                  fFullName.c_str());
     for (const auto& p : fProgram.elements()) {
-        if (p->is<Enum>() && !p->as<Enum>().isBuiltin()) {
+        if (p->is<Enum>() && !p->as<Enum>().isSharedWithCpp()) {
             this->writef("%s\n", p->as<Enum>().code().c_str());
         }
     }

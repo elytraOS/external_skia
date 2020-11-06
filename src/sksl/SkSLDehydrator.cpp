@@ -267,9 +267,9 @@ void Dehydrator::write(const Expression* e) {
             case Expression::Kind::kBinary: {
                 const BinaryExpression& b = e->as<BinaryExpression>();
                 this->writeCommand(Rehydrator::kBinary_Command);
-                this->write(&b.left());
+                this->write(b.left().get());
                 this->writeU8((int) b.getOperator());
-                this->write(&b.right());
+                this->write(b.right().get());
                 this->write(b.type());
                 break;
             }
@@ -436,7 +436,7 @@ void Dehydrator::write(const Statement* s) {
                 this->write(f.test().get());
                 this->write(f.next().get());
                 this->write(f.statement().get());
-                this->write(f.symbols());
+                this->write(*f.symbols());
                 break;
             }
             case Statement::Kind::kIf: {
@@ -466,14 +466,14 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kSwitch: {
                 const SwitchStatement& ss = s->as<SwitchStatement>();
                 this->writeCommand(Rehydrator::kSwitch_Command);
-                this->writeU8(ss.fIsStatic);
-                AutoDehydratorSymbolTable symbols(this, ss.fSymbols);
-                this->write(ss.fValue.get());
-                this->writeU8(ss.fCases.size());
-                for (const std::unique_ptr<SwitchCase>& sc : ss.fCases) {
-                    this->write(sc->fValue.get());
-                    this->writeU8(sc->fStatements.size());
-                    for (const std::unique_ptr<Statement>& stmt : sc->fStatements) {
+                this->writeU8(ss.isStatic());
+                AutoDehydratorSymbolTable symbols(this, ss.symbols());
+                this->write(ss.value().get());
+                this->writeU8(ss.cases().size());
+                for (const std::unique_ptr<SwitchCase>& sc : ss.cases()) {
+                    this->write(sc->value().get());
+                    this->writeU8(sc->statements().size());
+                    for (const std::unique_ptr<Statement>& stmt : sc->statements()) {
                         this->write(stmt.get());
                     }
                 }
@@ -485,13 +485,13 @@ void Dehydrator::write(const Statement* s) {
             case Statement::Kind::kVarDeclaration: {
                 const VarDeclaration& v = s->as<VarDeclaration>();
                 this->writeCommand(Rehydrator::kVarDeclaration_Command);
-                this->writeU16(this->symbolId(v.fVar));
-                this->write(v.fBaseType);
-                this->writeU8(v.fSizes.size());
-                for (const std::unique_ptr<Expression>& sizeExpr : v.fSizes) {
-                    this->write(sizeExpr.get());
+                this->writeU16(this->symbolId(&v.var()));
+                this->write(v.baseType());
+                this->writeU8(v.sizes().count());
+                for (const std::unique_ptr<Expression>& size : v.sizes()) {
+                    this->write(size.get());
                 }
-                this->write(v.fValue.get());
+                this->write(v.value().get());
                 break;
             }
             case Statement::Kind::kWhile: {
@@ -529,11 +529,11 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kFunction: {
             const FunctionDefinition& f = e.as<FunctionDefinition>();
             this->writeCommand(Rehydrator::kFunctionDefinition_Command);
-            this->writeU16(this->symbolId(&f.fDeclaration));
-            this->write(f.fBody.get());
-            this->writeU8(f.fReferencedIntrinsics.size());
+            this->writeU16(this->symbolId(&f.declaration()));
+            this->write(f.body().get());
+            this->writeU8(f.referencedIntrinsics().size());
             std::set<uint16_t> ordered;
-            for (const FunctionDeclaration* ref : f.fReferencedIntrinsics) {
+            for (const FunctionDeclaration* ref : f.referencedIntrinsics()) {
                 ordered.insert(this->symbolId(ref));
             }
             for (uint16_t ref : ordered) {
@@ -541,14 +541,20 @@ void Dehydrator::write(const ProgramElement& e) {
             }
             break;
         }
+        case ProgramElement::Kind::kFunctionPrototype: {
+            // We don't need to emit function prototypes into the dehydrated data, because we don't
+            // ever need to re-emit the intrinsics files as raw GLSL/Metal. As long as the symbols
+            // exist in the symbol table, we're in good shape.
+            break;
+        }
         case ProgramElement::Kind::kInterfaceBlock: {
             const InterfaceBlock& i = e.as<InterfaceBlock>();
             this->writeCommand(Rehydrator::kInterfaceBlock_Command);
-            this->write(*i.fVariable);
-            this->write(i.fTypeName);
-            this->write(i.fInstanceName);
-            this->writeU8(i.fSizes.size());
-            for (const auto& s : i.fSizes) {
+            this->write(i.variable());
+            this->write(i.typeName());
+            this->write(i.instanceName());
+            this->writeU8(i.sizes().count());
+            for (const auto& s : i.sizes()) {
                 this->write(s.get());
             }
             break;
@@ -562,7 +568,7 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kGlobalVar: {
             const GlobalVarDeclaration& v = e.as<GlobalVarDeclaration>();
             this->writeCommand(Rehydrator::kVarDeclarations_Command);
-            this->write(v.fDecl.get());
+            this->write(v.declaration().get());
             break;
         }
     }
@@ -570,10 +576,10 @@ void Dehydrator::write(const ProgramElement& e) {
 
 void Dehydrator::write(const std::vector<std::unique_ptr<ProgramElement>>& elements) {
     this->writeCommand(Rehydrator::kElements_Command);
-    this->writeU8(elements.size());
     for (const auto& e : elements) {
         this->write(*e);
     }
+    this->writeCommand(Rehydrator::kElementsComplete_Command);
 }
 
 void Dehydrator::finish(OutputStream& out) {

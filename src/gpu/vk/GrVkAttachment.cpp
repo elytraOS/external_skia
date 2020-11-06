@@ -19,11 +19,26 @@ GrVkAttachment::GrVkAttachment(GrVkGpu* gpu,
                                UsageFlags supportedUsages,
                                const GrVkImageInfo& info,
                                sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
-                               sk_sp<const GrVkImageView> view)
+                               sk_sp<const GrVkImageView> view,
+                               SkBudgeted budgeted)
         : GrAttachment(gpu, dimensions, supportedUsages, info.fSampleCount, info.fProtected)
         , GrVkImage(gpu, info, std::move(mutableState), GrBackendObjectOwnership::kOwned)
         , fView(std::move(view)) {
-    this->registerWithCache(SkBudgeted::kYes);
+    this->registerWithCache(budgeted);
+}
+
+GrVkAttachment::GrVkAttachment(GrVkGpu* gpu,
+                               SkISize dimensions,
+                               UsageFlags supportedUsages,
+                               const GrVkImageInfo& info,
+                               sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
+                               sk_sp<const GrVkImageView> view,
+                               GrBackendObjectOwnership ownership,
+                               GrWrapCacheable cacheable)
+        : GrAttachment(gpu, dimensions, supportedUsages, info.fSampleCount, info.fProtected)
+        , GrVkImage(gpu, info, std::move(mutableState), ownership)
+        , fView(std::move(view)) {
+    this->registerWithCacheWrapped(cacheable);
 }
 
 sk_sp<GrVkAttachment> GrVkAttachment::MakeStencil(GrVkGpu* gpu,
@@ -32,8 +47,8 @@ sk_sp<GrVkAttachment> GrVkAttachment::MakeStencil(GrVkGpu* gpu,
                                                   VkFormat format) {
     VkImageUsageFlags vkUsageFlags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                      VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    return GrVkAttachment::Make(gpu, dimensions, UsageFlags::kStencil, sampleCnt, format,
-                                vkUsageFlags, GrProtected::kNo);
+    return GrVkAttachment::Make(gpu, dimensions, UsageFlags::kStencilAttachment, sampleCnt, format,
+                                vkUsageFlags, GrProtected::kNo, SkBudgeted::kYes);
 }
 
 sk_sp<GrVkAttachment> GrVkAttachment::MakeMSAA(GrVkGpu* gpu,
@@ -46,8 +61,8 @@ sk_sp<GrVkAttachment> GrVkAttachment::MakeMSAA(GrVkGpu* gpu,
     VkImageUsageFlags vkUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                      VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    return GrVkAttachment::Make(gpu, dimensions, UsageFlags::kMSAA, numSamples, format,
-                                vkUsageFlags, isProtected);
+    return GrVkAttachment::Make(gpu, dimensions, UsageFlags::kColorAttachment, numSamples, format,
+                                vkUsageFlags, isProtected, SkBudgeted::kYes);
 }
 
 sk_sp<GrVkAttachment> GrVkAttachment::Make(GrVkGpu* gpu,
@@ -56,7 +71,8 @@ sk_sp<GrVkAttachment> GrVkAttachment::Make(GrVkGpu* gpu,
                                            int sampleCnt,
                                            VkFormat format,
                                            VkImageUsageFlags vkUsageFlags,
-                                           GrProtected isProtected) {
+                                           GrProtected isProtected,
+                                           SkBudgeted budgeted) {
     GrVkImage::ImageDesc imageDesc;
     imageDesc.fImageType = VK_IMAGE_TYPE_2D;
     imageDesc.fFormat = format;
@@ -74,9 +90,9 @@ sk_sp<GrVkAttachment> GrVkAttachment::Make(GrVkGpu* gpu,
     }
 
     GrVkImageView::Type viewType;
-    if (attachmentUsages & UsageFlags::kStencil) {
+    if (attachmentUsages & UsageFlags::kStencilAttachment) {
         // If we have stencil usage than we should have any other usages
-        SkASSERT(attachmentUsages == UsageFlags::kStencil);
+        SkASSERT(attachmentUsages == UsageFlags::kStencilAttachment);
         viewType = GrVkImageView::kStencil_Type;
     } else {
         viewType = GrVkImageView::kColor_Type;
@@ -92,7 +108,39 @@ sk_sp<GrVkAttachment> GrVkAttachment::Make(GrVkGpu* gpu,
     sk_sp<GrBackendSurfaceMutableStateImpl> mutableState(
             new GrBackendSurfaceMutableStateImpl(info.fImageLayout, info.fCurrentQueueFamily));
     return sk_sp<GrVkAttachment>(new GrVkAttachment(gpu, dimensions, attachmentUsages, info,
-                                                    std::move(mutableState), std::move(imageView)));
+                                                    std::move(mutableState), std::move(imageView),
+                                                    budgeted));
+}
+
+sk_sp<GrAttachment> GrVkAttachment::MakeWrapped(
+        GrVkGpu* gpu,
+        SkISize dimensions,
+        const GrVkImageInfo& info,
+        sk_sp<GrBackendSurfaceMutableStateImpl> mutableState,
+        UsageFlags attachmentUsages,
+        GrWrapOwnership ownership,
+        GrWrapCacheable cacheable) {
+    GrVkImageView::Type viewType;
+    if (attachmentUsages & UsageFlags::kStencilAttachment) {
+        // If we have stencil usage than we should not have any other usages
+        SkASSERT(attachmentUsages == UsageFlags::kStencilAttachment);
+        viewType = GrVkImageView::kStencil_Type;
+    } else {
+        viewType = GrVkImageView::kColor_Type;
+    }
+
+    sk_sp<const GrVkImageView> imageView = GrVkImageView::Make(
+            gpu, info.fImage, info.fFormat, viewType, info.fLevelCount, info.fYcbcrConversionInfo);
+    if (!imageView) {
+        return nullptr;
+    }
+
+     GrBackendObjectOwnership backendOwnership = kBorrow_GrWrapOwnership == ownership
+            ? GrBackendObjectOwnership::kBorrowed : GrBackendObjectOwnership::kOwned;
+
+    return sk_sp<GrVkAttachment>(new GrVkAttachment(gpu, dimensions, attachmentUsages, info,
+                                                    std::move(mutableState), std::move(imageView),
+                                                    backendOwnership, cacheable));
 }
 
 GrVkAttachment::~GrVkAttachment() {

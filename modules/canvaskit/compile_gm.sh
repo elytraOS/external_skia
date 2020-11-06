@@ -57,13 +57,6 @@ GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_em
 
 
 GN_SHAPER="skia_use_icu=true skia_use_system_icu=false skia_use_harfbuzz=true skia_use_system_harfbuzz=false"
-#SHAPER_LIB="$BUILD_DIR/libharfbuzz.a $BUILD_DIR/libicu.a"
-SHAPER_LIB=""
-
-DO_DECODE="true"
-ENCODE_PNG="true"
-ENCODE_JPEG="false"
-ENCODE_WEBP="false"
 
 # Turn off exiting while we check for ninja (which may not be on PATH)
 set +e
@@ -78,10 +71,6 @@ set -e
 ./bin/fetch-gn
 
 echo "Compiling bitcode"
-
-# With emsdk 2.0.0 we get a false positive on tautological-value-range-compare. This appears to be
-# fixed in the emsdk 2.0.4 toolchain. Disable the warning while we maintain support for 2.0.0.
-EXTRA_CFLAGS+="\"-Wno-tautological-value-range-compare\","
 
 # Inspired by https://github.com/Zubnix/skia-wasm-port/blob/master/build_bindings.sh
 ./bin/gn gen ${BUILD_DIR} \
@@ -106,15 +95,15 @@ EXTRA_CFLAGS+="\"-Wno-tautological-value-range-compare\","
   skia_use_webgl=true \
   skia_use_fontconfig=false \
   skia_use_freetype=true \
-  skia_use_libheif=false \
-  skia_use_libjpeg_turbo_decode=${DO_DECODE} \
-  skia_use_libjpeg_turbo_encode=${ENCODE_JPEG} \
-  skia_use_libpng_decode=${DO_DECODE} \
-  skia_use_libpng_encode=${ENCODE_PNG} \
-  skia_use_libwebp_decode=${DO_DECODE} \
-  skia_use_libwebp_encode=${ENCODE_WEBP} \
+  skia_use_libheif=true \
+  skia_use_libjpeg_turbo_decode=true \
+  skia_use_libjpeg_turbo_encode=true \
+  skia_use_libpng_decode=true \
+  skia_use_libpng_encode=true \
+  skia_use_libwebp_decode=true \
+  skia_use_libwebp_encode=true \
   skia_use_lua=false \
-  skia_use_piex=false \
+  skia_use_piex=true \
   skia_use_system_freetype2=false \
   skia_use_system_libjpeg_turbo=false \
   skia_use_system_libpng=false \
@@ -127,9 +116,9 @@ EXTRA_CFLAGS+="\"-Wno-tautological-value-range-compare\","
   ${GN_SHAPER} \
   ${GN_GPU} \
   ${GN_FONT} \
-  skia_use_expat=false \
-  skia_enable_ccpr=false \
-  \
+  skia_use_expat=true \
+  skia_enable_ccpr=true \
+  skia_enable_svg=true \
   skia_enable_skshaper=true \
   skia_enable_nvpr=false \
   skia_enable_skparagraph=true \
@@ -154,6 +143,43 @@ if [[ `uname` != "Linux" ]]; then
   STRICTNESS=""
 fi
 
+GMS_TO_BUILD="gm/*.cpp"
+TESTS_TO_BUILD="tests/*.cpp"
+# When developing locally, it can be faster to focus only on the gms or tests you care about
+# (since they all have to be recompiled/relinked) every time. To do so, mark the following as true
+if false; then
+   GMS_TO_BUILD="gm/bleed.cpp gm/gm.cpp"
+   TESTS_TO_BUILD="tests/OctoBoundsTest.cpp tests/Test.cpp"
+fi
+
+# These gms do not compile or link with the WASM code. Thus, we omit them.
+GLOBIGNORE="gm/cgms.cpp:"\
+"gm/compressed_textures.cpp:"\
+"gm/fiddle.cpp:"\
+"gm/xform.cpp:"\
+"gm/video_decoder.cpp:"
+
+# These tests do not compile with the WASM code (require other deps).
+GLOBIGNORE+="tests/CodecTest.cpp:"\
+"tests/ColorSpaceTest.cpp:"\
+"tests/DrawOpAtlasTest.cpp:"\
+"tests/EncodeTest.cpp:"\
+"tests/FontMgrAndroidParserTest.cpp:"\
+"tests/FontMgrFontConfigTest.cpp:"\
+"tests/SkVMTest.cpp:"
+
+# These tests do complex things with TestContexts, which is not easily supported for the WASM
+# test harness. Thus we omit them.
+GLOBIGNORE+="tests/BackendAllocationTest.cpp:"\
+"tests/EGLImageTest.cpp:"\
+"tests/ImageTest.cpp:"\
+"tests/SurfaceSemaphoreTest.cpp:"\
+"tests/TextureBindingsResetTest.cpp:"\
+"tests/VkHardwareBufferTest.cpp:"
+
+# All the tests in these files crash.
+GLOBIGNORE+="tests/GrThreadSafeCacheTest.cpp"
+
 # Emscripten prefers that the .a files go last in order, otherwise, it
 # may drop symbols that it incorrectly thinks aren't used. One day,
 # Emscripten will use LLD, which may relax this requirement.
@@ -162,27 +188,32 @@ EMCC_DEBUG=1 ${EMCXX} \
     -I. \
     -DSK_DISABLE_AAA \
     -DSK_FORCE_8_BYTE_ALIGNMENT \
+    -DGR_OP_ALLOCATE_USE_NEW \
     $WASM_GPU \
     -std=c++17 \
+    --profiling-funcs \
+    --profiling \
     --bind \
     --no-entry \
     --pre-js $BASE_DIR/gm.js \
+    tools/Resources.cpp \
     $BASE_DIR/gm_bindings.cpp \
-    gm/bleed.cpp \
-    gm/gm.cpp \
+    $GMS_TO_BUILD \
+    $TESTS_TO_BUILD \
     $GM_LIB \
     $BUILD_DIR/libskshaper.a \
-    $SHAPER_LIB \
+    $BUILD_DIR/libsvg.a \
     $BUILD_DIR/libskia.a \
     $BUILTIN_FONT \
     -s LLD_REPORT_UNDEFINED \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXPORT_NAME="InitWasmGMTests" \
+    -s EXPORTED_FUNCTIONS=['_malloc','_free'] \
     -s FORCE_FILESYSTEM=0 \
     -s FILESYSTEM=0 \
     -s MODULARIZE=1 \
     -s NO_EXIT_RUNTIME=1 \
-    -s INITIAL_MEMORY=128MB \
+    -s INITIAL_MEMORY=256MB \
     -s WASM=1 \
     $STRICTNESS \
     -o $BUILD_DIR/wasm_gm_tests.js

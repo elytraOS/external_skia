@@ -20,7 +20,8 @@ namespace SkSL {
  * separate (sequential) statements. For instance, the SkSL 'int x = 2, y[3];' produces two
  * VarDeclaration instances (wrapped in an unscoped Block).
  */
-struct VarDeclaration : public Statement {
+class VarDeclaration final : public Statement {
+public:
     static constexpr Kind kStatementKind = Kind::kVarDeclaration;
 
     VarDeclaration(const Variable* var,
@@ -33,37 +34,64 @@ struct VarDeclaration : public Statement {
             , fSizes(std::move(sizes))
             , fValue(std::move(value)) {}
 
+    const Type& baseType() const {
+        return fBaseType;
+    }
+
+    const Variable& var() const {
+        return *fVar;
+    }
+
+    void setVar(const Variable* var) {
+        fVar = var;
+    }
+
+    const ExpressionArray& sizes() const {
+        return fSizes;
+    }
+
+    std::unique_ptr<Expression>& value() {
+        return fValue;
+    }
+
+    const std::unique_ptr<Expression>& value() const {
+        return fValue;
+    }
+
     std::unique_ptr<Statement> clone() const override {
         ExpressionArray sizesClone;
-        sizesClone.reserve(fSizes.size());
-        for (const auto& s : fSizes) {
-            if (s) {
-                sizesClone.push_back(s->clone());
+        sizesClone.reserve_back(this->sizes().count());
+        for (const std::unique_ptr<Expression>& size : this->sizes()) {
+            if (size) {
+                sizesClone.push_back(size->clone());
             } else {
                 sizesClone.push_back(nullptr);
             }
         }
-        return std::make_unique<VarDeclaration>(fVar, &fBaseType, std::move(sizesClone),
-                                                fValue ? fValue->clone() : nullptr);
+        return std::make_unique<VarDeclaration>(&this->var(),
+                                                &this->baseType(),
+                                                std::move(sizesClone),
+                                                this->value() ? this->value()->clone() : nullptr);
     }
 
     String description() const override {
-        String result = fVar->modifiers().description() + fBaseType.description() + " " +
-                        fVar->name();
-        for (const auto& size : fSizes) {
+        String result = this->var().modifiers().description() + this->baseType().description() +
+                        " " + this->var().name();
+        for (const std::unique_ptr<Expression>& size : this->sizes()) {
             if (size) {
                 result += "[" + size->description() + "]";
             } else {
                 result += "[]";
             }
         }
-        if (fValue) {
-            result += " = " + fValue->description();
+        if (this->value()) {
+            result += " = " + this->value()->description();
         }
         result += ";";
         return result;
     }
 
+private:
     const Variable* fVar;
     const Type& fBaseType;
     ExpressionArray fSizes;
@@ -76,25 +104,34 @@ struct VarDeclaration : public Statement {
  * A variable declaration appearing at global scope. A global declaration like 'int x, y;' produces
  * two GlobalVarDeclaration elements, each containing the declaration of one variable.
  */
-struct GlobalVarDeclaration : public ProgramElement {
+class GlobalVarDeclaration final : public ProgramElement {
+public:
     static constexpr Kind kProgramElementKind = Kind::kGlobalVar;
 
-    // decl must be a unique_ptr<VarDeclaration>, but to simplify construction, we take a Statement
     GlobalVarDeclaration(int offset, std::unique_ptr<Statement> decl)
-            : INHERITED(offset, kProgramElementKind) {
-        SkASSERT(decl->is<VarDeclaration>());
-        fDecl.reset(static_cast<VarDeclaration*>(decl.release()));
+            : INHERITED(offset, kProgramElementKind)
+            , fDeclaration(std::move(decl)) {
+        SkASSERT(this->declaration()->is<VarDeclaration>());
+    }
+
+    std::unique_ptr<Statement>& declaration() {
+        return fDeclaration;
+    }
+
+    const std::unique_ptr<Statement>& declaration() const {
+        return fDeclaration;
     }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<GlobalVarDeclaration>(fOffset, fDecl->clone());
+        return std::make_unique<GlobalVarDeclaration>(fOffset, this->declaration()->clone());
     }
 
     String description() const override {
-        return fDecl->description();
+        return this->declaration()->description();
     }
 
-    std::unique_ptr<VarDeclaration> fDecl;
+private:
+    std::unique_ptr<Statement> fDeclaration;
 
     using INHERITED = ProgramElement;
 };

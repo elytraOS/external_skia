@@ -16,8 +16,8 @@
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/GrBackendUtils.h"
-#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDataUtils.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrNativeRect.h"
@@ -230,7 +230,7 @@ GrVkGpu::GrVkGpu(GrDirectContext* direct, const GrVkBackendContext& backendConte
     SkASSERT(!backendContext.fOwnsInstanceAndDevice);
     SkASSERT(fMemoryAllocator);
 
-    fCompiler = new SkSL::Compiler();
+    fCompiler = new SkSL::Compiler(fVkCaps->shaderCaps());
 
     fCaps.reset(SkRef(fVkCaps.get()));
 
@@ -320,7 +320,7 @@ void GrVkGpu::disconnect(DisconnectType type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrOpsRenderPass* GrVkGpu::getOpsRenderPass(
+GrOpsRenderPass* GrVkGpu::onGetOpsRenderPass(
         GrRenderTarget* rt,
         GrAttachment* stencil,
         GrSurfaceOrigin origin,
@@ -738,8 +738,8 @@ static size_t fill_in_regions(GrStagingBufferManager* stagingBufferManager,
         numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
-    regions->reserve(numMipLevels);
-    individualMipOffsets->reserve(numMipLevels);
+    regions->reserve_back(numMipLevels);
+    individualMipOffsets->reserve_back(numMipLevels);
 
     size_t bytesPerBlock = GrVkFormatBytesPerBlock(vkFormat);
 
@@ -2111,9 +2111,7 @@ void GrVkGpu::prepareSurfacesForBackendAccessAndStateUpdates(
 void GrVkGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
                               GrGpuFinishedContext finishedContext) {
     SkASSERT(finishedProc);
-    sk_sp<GrRefCntedCallback> finishedCallback(
-            new GrRefCntedCallback(finishedProc, finishedContext));
-    this->addFinishedCallback(std::move(finishedCallback));
+    this->addFinishedCallback(GrRefCntedCallback::Make(finishedProc, finishedContext));
 }
 
 void GrVkGpu::addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback) {

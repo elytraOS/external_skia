@@ -48,30 +48,28 @@ public:
     GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
                                       bool hasMixedSampledCoverage, GrClampType) override;
 
-    enum MaskType {
-        kGrayscaleCoverageMask_MaskType,
-        kLCDCoverageMask_MaskType,
-        kColorBitmapMask_MaskType,
-        kAliasedDistanceField_MaskType,
-        kGrayscaleDistanceField_MaskType,
-        kLCDDistanceField_MaskType,
-        kLCDBGRDistanceField_MaskType,
+    enum class MaskType : uint32_t {
+        kGrayscaleCoverage,
+        kLCDCoverage,
+        kColorBitmap,
+        kAliasedDistanceField,
+        kGrayscaleDistanceField,
+        kLCDDistanceField,
+        kLCDBGRDistanceField
     };
 
-    MaskType maskType() const { return fMaskType; }
-
 #if GR_TEST_UTILS
-    static std::unique_ptr<GrDrawOp> CreateOpTestingOnly(GrRenderTargetContext* rtc,
-                                                         const SkPaint& skPaint,
-                                                         const SkFont& font,
-                                                         const SkMatrixProvider& mtxProvider,
-                                                         const char* text,
-                                                         int x,
-                                                         int y);
+    static GrOp::Owner CreateOpTestingOnly(GrRenderTargetContext* rtc,
+                                           const SkPaint& skPaint,
+                                           const SkFont& font,
+                                           const SkMatrixProvider& mtxProvider,
+                                           const char* text,
+                                           int x,
+                                           int y);
 #endif
 
 private:
-    friend class GrOpMemoryPool; // for ctor
+    friend class GrOp; // for ctor
 
     // The minimum number of Geometry we will try to allocate.
     static constexpr auto kMinGeometryAllocated = 12;
@@ -136,31 +134,32 @@ private:
 
     GrMaskFormat maskFormat() const {
         switch (fMaskType) {
-            case kLCDCoverageMask_MaskType:
+            case MaskType::kLCDCoverage:
                 return kA565_GrMaskFormat;
-            case kColorBitmapMask_MaskType:
+            case MaskType::kColorBitmap:
                 return kARGB_GrMaskFormat;
-            case kGrayscaleCoverageMask_MaskType:
-            case kAliasedDistanceField_MaskType:
-            case kGrayscaleDistanceField_MaskType:
-            case kLCDDistanceField_MaskType:
-            case kLCDBGRDistanceField_MaskType:
+            case MaskType::kGrayscaleCoverage:
+            case MaskType::kAliasedDistanceField:
+            case MaskType::kGrayscaleDistanceField:
+            case MaskType::kLCDDistanceField:
+            case MaskType::kLCDBGRDistanceField:
                 return kA8_GrMaskFormat;
         }
-        return kA8_GrMaskFormat;  // suppress warning
+        // SkUNREACHABLE;
+        return kA8_GrMaskFormat;
     }
 
     bool usesDistanceFields() const {
-        return kAliasedDistanceField_MaskType == fMaskType ||
-               kGrayscaleDistanceField_MaskType == fMaskType ||
-               kLCDDistanceField_MaskType == fMaskType ||
-               kLCDBGRDistanceField_MaskType == fMaskType;
+        return MaskType::kAliasedDistanceField == fMaskType ||
+               MaskType::kGrayscaleDistanceField == fMaskType ||
+               MaskType::kLCDDistanceField == fMaskType ||
+               MaskType::kLCDBGRDistanceField == fMaskType;
     }
 
     bool isLCD() const {
-        return kLCDCoverageMask_MaskType == fMaskType ||
-               kLCDDistanceField_MaskType == fMaskType ||
-               kLCDBGRDistanceField_MaskType == fMaskType;
+        return MaskType::kLCDCoverage == fMaskType ||
+               MaskType::kLCDDistanceField == fMaskType ||
+               MaskType::kLCDBGRDistanceField == fMaskType;
     }
 
     inline void createDrawForGeneratedGlyphs(
@@ -170,11 +169,11 @@ private:
     bool usesLocalCoords() const { return fUsesLocalCoords; }
     int numGlyphs() const { return fNumGlyphs; }
 
-    CombineResult onCombineIfPossible(GrOp* t, GrRecordingContext::Arenas*,
-                                      const GrCaps& caps) override;
+    CombineResult onCombineIfPossible(GrOp* t, SkArenaAlloc*, const GrCaps& caps) override;
 
     GrGeometryProcessor* setupDfProcessor(SkArenaAlloc*,
                                           const GrShaderCaps&,
+                                          const SkMatrix& localMatrix,
                                           const GrSurfaceProxyView* views,
                                           unsigned int numActiveViews) const;
 

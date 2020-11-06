@@ -231,12 +231,6 @@ void SkPath::swap(SkPath& that) {
     }
 }
 
-SkPathView SkPath::view() const {
-    return fPathRef->view(this->getFillType(), this->getConvexity());
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
 bool SkPath::isInterpolatable(const SkPath& compare) const {
     // need the same structure (verbs, conicweights) and same point-count
     return fPathRef->fPoints.count() == compare.fPathRef->fPoints.count() &&
@@ -474,7 +468,7 @@ bool SkPath::isRect(SkRect* rect, bool* isClosed, SkPathDirection* direction) co
     SkDEBUGCODE(this->validate();)
     int currVerb = 0;
     const SkPoint* pts = fPathRef->points();
-    return SkPathPriv::IsRectContour(this->view(), false, &currVerb, &pts, isClosed, direction, rect);
+    return SkPathPriv::IsRectContour(*this, false, &currVerb, &pts, isClosed, direction, rect);
 }
 
 bool SkPath::isOval(SkRect* bounds) const {
@@ -525,11 +519,8 @@ int SkPath::getVerbs(uint8_t dst[], int max) const {
 size_t SkPath::approximateBytesUsed() const {
     size_t size = sizeof (SkPath);
     if (fPathRef != nullptr) {
-        size += fPathRef->countPoints() * sizeof(SkPoint)
-              + fPathRef->countVerbs()
-              + fPathRef->countWeights() * sizeof(SkScalar);
+        size += fPathRef->approximateBytesUsed();
     }
-
     return size;
 }
 
@@ -773,15 +764,6 @@ SkPath& SkPath::close() {
 
 static void assert_known_direction(SkPathDirection dir) {
     SkASSERT(SkPathDirection::kCW == dir || SkPathDirection::kCCW == dir);
-}
-
-SkPath& SkPath::addRect(const SkRect& rect, SkPathDirection dir) {
-    return this->addRect(rect, dir, 0);
-}
-
-SkPath& SkPath::addRect(SkScalar left, SkScalar top, SkScalar right,
-                     SkScalar bottom, SkPathDirection dir) {
-    return this->addRect(SkRect::MakeLTRB(left, top, right, bottom), dir, 0);
 }
 
 SkPath& SkPath::addRect(const SkRect &rect, SkPathDirection dir, unsigned startIndex) {
@@ -3431,7 +3413,7 @@ SkPath SkPath::Polygon(const SkPoint pts[], int count, bool isClosed,
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool SkPathPriv::IsRectContour(const SkPathView& path, bool allowPartial, int* currVerb,
+bool SkPathPriv::IsRectContour(const SkPath& path, bool allowPartial, int* currVerb,
                                const SkPoint** ptsPtr, bool* isClosed, SkPathDirection* direction,
                                SkRect* rect) {
     int corners = 0;
@@ -3448,9 +3430,9 @@ bool SkPathPriv::IsRectContour(const SkPathView& path, bool allowPartial, int* c
     bool closedOrMoved = false;
     bool autoClose = false;
     bool insertClose = false;
-    int verbCnt = path.fVerbs.count();
+    int verbCnt = path.fPathRef->countVerbs();
     while (*currVerb < verbCnt && (!allowPartial || !autoClose)) {
-        uint8_t verb = insertClose ? (uint8_t) SkPath::kClose_Verb : path.fVerbs[*currVerb];
+        uint8_t verb = insertClose ? (uint8_t) SkPath::kClose_Verb : path.fPathRef->atVerb(*currVerb);
         switch (verb) {
             case SkPath::kClose_Verb:
                 savePts = pts;
@@ -3572,9 +3554,10 @@ bool SkPathPriv::IsRectContour(const SkPathView& path, bool allowPartial, int* c
 }
 
 
-bool SkPathPriv::IsNestedFillRects(const SkPathView& path, SkRect rects[2], SkPathDirection dirs[2]) {
+bool SkPathPriv::IsNestedFillRects(const SkPath& path, SkRect rects[2], SkPathDirection dirs[2]) {
+    SkDEBUGCODE(path.validate();)
     int currVerb = 0;
-    const SkPoint* pts = path.fPoints.begin();
+    const SkPoint* pts = path.fPathRef->points();
     SkPathDirection testDirs[2];
     SkRect testRects[2];
     if (!IsRectContour(path, true, &currVerb, &pts, nullptr, &testDirs[0], &testRects[0])) {
@@ -3709,7 +3692,7 @@ static SkPath clip(const SkPath& path, const SkHalfPlane& plane) {
         SkPoint       fPrev = {0,0};
     } rec;
 
-    SkEdgeClipper::ClipPath(rotated.view(), clip, false,
+    SkEdgeClipper::ClipPath(rotated, clip, false,
                             [](SkEdgeClipper* clipper, bool newCtr, void* ctx) {
         Rec* rec = (Rec*)ctx;
 

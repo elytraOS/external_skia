@@ -13,7 +13,7 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkBitmapCache.h"
 #include "src/core/SkTLList.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrProxyProvider.h"
@@ -380,7 +380,7 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
                 : fFulfillProc(fulfillProc)
                 , fReleaseProc(releaseProc)
                 , fVersion(version) {
-            fDoneCallback = sk_make_sp<GrRefCntedCallback>(doneProc, context);
+            fDoneCallback = GrRefCntedCallback::Make(doneProc, context);
         }
         PromiseLazyInstantiateCallback(PromiseLazyInstantiateCallback&&) = default;
         PromiseLazyInstantiateCallback(const PromiseLazyInstantiateCallback&) {
@@ -434,7 +434,7 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
             sk_sp<SkPromiseImageTexture> promiseTexture = fFulfillProc(textureContext);
             // From here on out our contract is that the release proc must be called, even if
             // the return from fulfill was invalid or we fail for some other reason.
-            auto releaseCallback = sk_make_sp<GrRefCntedCallback>(fReleaseProc, textureContext);
+            auto releaseCallback = GrRefCntedCallback::Make(fReleaseProc, textureContext);
             if (!promiseTexture) {
                 fFulfillProcFailed = true;
                 return {};

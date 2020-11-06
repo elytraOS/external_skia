@@ -15,19 +15,16 @@ namespace SkSL {
 /**
  * A symbol representing a new name for an existing symbol.
  */
-class SymbolAlias : public Symbol {
+class SymbolAlias final : public Symbol {
 public:
     static constexpr Kind kSymbolKind = Kind::kSymbolAlias;
 
     SymbolAlias(int offset, StringFragment name, const Symbol* origSymbol)
-    : INHERITED(offset, SymbolAliasData{name, origSymbol}) {}
-
-    StringFragment name() const override {
-        return this->symbolAliasData().fName;
-    }
+        : INHERITED(offset, kSymbolKind, name)
+        , fOrigSymbol(origSymbol) {}
 
     const Symbol* origSymbol() const {
-        return this->symbolAliasData().fOrigSymbol;
+        return fOrigSymbol;
     }
 
     String description() const override {
@@ -35,6 +32,8 @@ public:
     }
 
 private:
+    const Symbol* fOrigSymbol;
+
     using INHERITED = Symbol;
 };
 
