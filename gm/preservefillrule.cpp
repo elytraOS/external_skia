@@ -82,6 +82,10 @@ private:
         }
 
         auto dContext = GrAsDirectContext(rContext);
+        if (!dContext) {
+            *errorMsg = "Requires a direct context.";
+            return skiagm::DrawResult::kSkip;
+        }
 
         auto starRect = SkRect::MakeWH(fStarSize, fStarSize);
         SkPath star7_winding = ToolUtils::make_star(starRect, 7);
@@ -109,7 +113,7 @@ private:
             canvas->drawPath(star7_evenOdd, paint);
             canvas->drawPath(star5_winding, paint);
             canvas->drawPath(star5_evenOdd, paint);
-            rtc->flush(SkSurface::BackendSurfaceAccess::kNoAccess, GrFlushInfo(), nullptr);
+            dContext->priv().flushSurface(rtc->asSurfaceProxy());
 
             // Ensure the path cache is behaving in such a way that we are actually testing what we
             // think we are.

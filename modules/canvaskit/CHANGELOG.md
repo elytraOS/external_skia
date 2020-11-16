@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2020-11-12
+
 ## Added
  - `MakeFractalNoise`, `MakeImprovedNoise`, and `MakeTurbulence` have been added to
    `CanvasKit.Shader`.
@@ -13,10 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `getLineMetrics` to Paragraph.
  - `Canvas.saveLayerPaint` as an experimental, undocumented "fast path" if one only needs to pass 
    the paint.
+ - Support for .woff and .woff2 fonts. Disable .woff2 for reduced code size by supplying
+   no_woff2 to compile.sh. (This removes the code to do brotli decompression).
 
 ### Breaking
  - `CanvasKit.MakePathFromSVGString` was renamed to `CanvasKit.Path.MakeFromSVGString`
  - `CanvasKit.MakePathFromOp` was renamed to `CanvasKit.Path.MakeFromOp`
+ - The API for `Canvas.readPixels` and `Image.readPixels` has been reworked to more accurately
+   reflect the C++ backend and each other. bytesPerRow is now a required parameter. They take an
+   ImageInfo object to specify the output format. Additionally they take an optional malloc'd
+   object as the last parameter. If provided, the data will be copied into there instead of
+   allocating a new buffer.
 
 ### Changed
  - We now compile CanvasKit with emsdk 2.0.6 when testing and deploying to npm.
@@ -24,13 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `CanvasKit.Shader.Blend`, `...Color`, and `...Lerp` have been renamed to
    `CanvasKit.Shader.MakeBlend`, `...MakeColor` and `...MakeLerp` to align with naming conventions.
    The old names will be removed in an upcoming release.
- - `readPixels` now takes a malloc'd object as the last parameter. If provided, the data will be 
-    copied into there instead of allocating a new buffer.
 
 ### Removed
  - `CanvasKit.MakePathFromCmds`; Was deprecated in favor of `CanvasKit.Path.MakeFromCmds`.
  - `new CanvasKit.Path(path)` in favor of existing `path.copy()`.
  - Unused internal APIs (_getRasterN32PremulSurface, Drawable)
+ - `measureText` from the CanvasContext2D emulation layer du to deprecation of measureText.
+
+### Deprecated
+ - `Font.getWidths` in favor of `Font.getGlyphIDs` and `Font.getGlyphWidths`.
+ - `Font.measureText` in favor of the Paragraph APIs (which actually do shaping).
 
 ### Type Changes (index.d.ts)
  - Return value for MakeFromCmds correctly reflects the possibility of null.

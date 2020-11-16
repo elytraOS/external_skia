@@ -269,7 +269,8 @@ static void run_ddl_benchmark(sk_gpu_test::TestContext* testContext, GrDirectCon
 
     promiseImageHelper.uploadAllToGPU(nullptr, context);
 
-    DDLTileHelper tiles(context, dstCharacterization, viewport, FLAGS_ddlTilingWidthHeight);
+    DDLTileHelper tiles(context, dstCharacterization, viewport, FLAGS_ddlTilingWidthHeight,
+                        /* addRandomPaddingToDst */ false);
 
     tiles.createBackendTextures(nullptr, context);
 
@@ -693,11 +694,7 @@ static sk_sp<SkPicture> create_warmup_skp() {
 
 static sk_sp<SkPicture> create_skp_from_svg(SkStream* stream, const char* filename) {
 #ifdef SK_XML
-    SkDOM xml;
-    if (!xml.build(*stream)) {
-        exitf(ExitErr::kData, "failed to parse xml in file %s", filename);
-    }
-    sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromDOM(xml);
+    sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(*stream);
     if (!svg) {
         exitf(ExitErr::kData, "failed to build svg dom from file %s", filename);
     }

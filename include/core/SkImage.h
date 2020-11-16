@@ -13,6 +13,7 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkM44.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkTileMode.h"
@@ -40,22 +41,6 @@ class GrContextThreadSafeProxy;
 class GrYUVABackendTextures;
 
 struct SkYUVAIndex;
-
-enum class SkSamplingMode {
-    kNearest,   // single sample point (nearest neighbor)
-    kLinear,    // interporate between 2x2 sample points (bilinear interpolation)
-};
-
-enum class SkMipmapMode {
-    kNone,      // ignore mipmap levels, sample from the "base"
-    kNearest,   // sample from the nearest level
-    kLinear,    // interpolate between the two nearest levels
-};
-
-struct SkFilterOptions {
-    SkSamplingMode  fSampling;
-    SkMipmapMode    fMipmap;
-};
 
 class SkMipmapBuilder {
 public:
@@ -430,11 +415,10 @@ public:
 
     /** Deprecated.
         Creates an SkImage from YUV[A] planar textures by copying them to another caller-provided
-        texture and retaining that result texture in the SkImage. This should be preferred over
-        MakeFromYUVTexturesCopyWithExternalBackend and MakeFromNV12TexturesCopyWithExternalBackend.
-        However, this is deprecated and instead clients should make a SkSurface from
-        'rgbaResultTexture` using SkSurface::MakeFromBackendTexture, make an image from the planes
-        using MakeFromYUVATextures, and finally draw the image to the surface.
+        texture and retaining that result texture in the SkImage.  However, this is deprecated and
+        instead clients should make a SkSurface from 'rgbaResultTexture` using
+        SkSurface::MakeFromBackendTexture, make an image from the planes using MakeFromYUVATextures,
+        and finally draw the image to the surface.
 
         Note that the draw that converts to RGBA is not issued to the underlying API until a flush/
         submit occurs so the YUVA textures are not safe to delete or overwrite until yuvaReleaseProc
@@ -528,43 +512,6 @@ public:
                                               GrMipMapped buildMips = GrMipmapped::kNo,
                                               bool limitToMaxTextureSize = false,
                                               sk_sp<SkColorSpace> imageColorSpace = nullptr);
-
-    /** To be deprecated.
-    */
-    static sk_sp<SkImage> MakeFromYUVTexturesCopyWithExternalBackend(
-            GrRecordingContext* context,
-            SkYUVColorSpace yuvColorSpace,
-            const GrBackendTexture yuvTextures[3],
-            GrSurfaceOrigin textureOrigin,
-            const GrBackendTexture& backendTexture,
-            sk_sp<SkColorSpace> imageColorSpace = nullptr);
-
-    /** Creates SkImage from copy of nv12Textures, an array of textures on GPU.
-        nv12Textures[0] contains pixels for YUV component y plane.
-        nv12Textures[1] contains pixels for YUV component u plane,
-        followed by pixels for YUV component v plane.
-        Returned SkImage has the dimensions nv12Textures[2] and stores pixels in backendTexture.
-        yuvColorSpace describes how YUV colors convert to RGB colors.
-
-        @param context            GPU context
-        @param yuvColorSpace   How the YUV values are converted to RGB
-        @param nv12Textures       array of YUV textures on GPU
-        @param textureOrigin      origin of textures in nv12Textures and of backendTexture
-        @param backendTexture     the resource that stores the final pixels
-        @param imageColorSpace    range of colors; may be nullptr
-        @param textureReleaseProc function called when backendTexture can be released
-        @param releaseContext     state passed to textureReleaseProc
-        @return                   created SkImage, or nullptr
-    */
-    static sk_sp<SkImage> MakeFromNV12TexturesCopyWithExternalBackend(
-            GrRecordingContext* context,
-            SkYUVColorSpace yuvColorSpace,
-            const GrBackendTexture nv12Textures[2],
-            GrSurfaceOrigin textureOrigin,
-            const GrBackendTexture& backendTexture,
-            sk_sp<SkColorSpace> imageColorSpace = nullptr,
-            TextureReleaseProc textureReleaseProc = nullptr,
-            ReleaseContext releaseContext = nullptr);
 
     enum class BitDepth {
         kU8,  //!< uses 8-bit unsigned int per color component
@@ -731,36 +678,10 @@ public:
     /**
      *  Make a shader with the specified tiling and mipmap sampling.
      */
-    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkFilterOptions&,
+    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions&,
                                const SkMatrix* localMatrix = nullptr) const;
 
-    /*
-     *  Specify B and C (each between 0...1) to create a shader that applies the corresponding
-     *  cubic reconstruction filter to the image.
-     *
-     *  Example values:
-     *      B = 1/3, C = 1/3        "Mitchell" filter
-     *      B = 0,   C = 1/2        "Catmull-Rom" filter
-     *
-     *  See "Reconstruction Filters in Computer Graphics"
-     *          Don P. Mitchell
-     *          Arun N. Netravali
-     *          1988
-     *  https://www.cs.utexas.edu/~fussell/courses/cs384g-fall2013/lectures/mitchell/Mitchell.pdf
-     *
-     *  Desmos worksheet https://www.desmos.com/calculator/aghdpicrvr
-     *  Nice overview https://entropymine.com/imageworsener/bicubic/
-     */
-    struct CubicResampler {
-        float B, C;
-    };
-
-    /**
-     *  Make a shader with the specified tiling and CubicResampler parameters.
-     *  Returns nullptr if the resampler values are outside of [0...1]
-     */
-    sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, CubicResampler,
-                                      const SkMatrix* localMatrix = nullptr) const;
+    using CubicResampler = SkCubicResampler;
 
     /** Creates SkShader from SkImage. SkShader dimensions are taken from SkImage. SkShader uses
         SkTileMode rules to fill drawn area outside SkImage. localMatrix permits

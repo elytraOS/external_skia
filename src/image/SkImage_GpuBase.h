@@ -75,27 +75,29 @@ public:
             SkDeferredDisplayListRecorder::PromiseImageTextureFulfillProc;
     using PromiseImageTextureReleaseProc =
             SkDeferredDisplayListRecorder::PromiseImageTextureReleaseProc;
-    using PromiseImageTextureDoneProc = SkDeferredDisplayListRecorder::PromiseImageTextureDoneProc;
+
+    static bool RenderYUVAToRGBA(const GrCaps&,
+                                 GrRenderTargetContext*,
+                                 const SkRect&,
+                                 SkYUVColorSpace,
+                                 sk_sp<GrColorSpaceXform>,
+                                 GrSurfaceProxyView[4],
+                                 const SkYUVAIndex[4]);
 
 protected:
     SkImage_GpuBase(sk_sp<GrImageContext>, SkISize size, uint32_t uniqueID, SkColorType,
                     SkAlphaType, sk_sp<SkColorSpace>);
 
-    using PromiseImageApiVersion = SkDeferredDisplayListRecorder::PromiseImageApiVersion;
     // Helper for making a lazy proxy for a promise image. The PromiseDoneProc we be called,
     // if not null, immediately if this function fails. Othwerwise, it is installed in the
     // proxy along with the TextureFulfillProc and TextureReleaseProc. PromiseDoneProc must not
     // be null.
-    static sk_sp<GrTextureProxy> MakePromiseImageLazyProxy(
-            GrRecordingContext*, int width, int height, GrBackendFormat, GrMipmapped,
-            PromiseImageTextureFulfillProc, PromiseImageTextureReleaseProc,
-            PromiseImageTextureDoneProc, PromiseImageTextureContext, PromiseImageApiVersion);
-
-    static bool RenderYUVAToRGBA(const GrCaps&, GrRenderTargetContext*,
-                                 const SkRect&, SkYUVColorSpace,
-                                 sk_sp<GrColorSpaceXform>,
-                                 GrSurfaceProxyView [4],
-                                 const SkYUVAIndex [4]);
+    static sk_sp<GrTextureProxy> MakePromiseImageLazyProxy(GrRecordingContext*,
+                                                           SkISize dimensions,
+                                                           GrBackendFormat,
+                                                           GrMipmapped,
+                                                           PromiseImageTextureFulfillProc,
+                                                           sk_sp<GrRefCntedCallback> releaseHelper);
 
     sk_sp<GrImageContext> fContext;
 

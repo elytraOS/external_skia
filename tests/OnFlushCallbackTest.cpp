@@ -366,12 +366,11 @@ public:
      * This callback creates the atlas and updates the AtlasedRectOps to read from it
      */
     void preFlush(GrOnFlushResourceProvider* resourceProvider,
-                  const uint32_t* opsTaskIDs,
-                  int numOpsTaskIDs) override {
+                  SkSpan<const uint32_t> renderTaskIDs) override {
         // Until MDB is landed we will most-likely only have one opsTask.
         SkTDArray<LinkedListHeader*> lists;
-        for (int i = 0; i < numOpsTaskIDs; ++i) {
-            if (LinkedListHeader* list = this->getList(opsTaskIDs[i])) {
+        for (uint32_t taskID : renderTaskIDs) {
+            if (LinkedListHeader* list = this->getList(taskID)) {
                 lists.push_back(list);
             }
         }
@@ -599,7 +598,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(OnFlushCallbackTest, reporter, ctxInfo) {
         rtc->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(), r);
     }
 
-    rtc->flush(SkSurface::BackendSurfaceAccess::kNoAccess, GrFlushInfo(), nullptr);
+    dContext->priv().flushSurface(rtc->asSurfaceProxy());
 
     SkBitmap readBack;
     readBack.allocN32Pixels(kFinalWidth, kFinalHeight);

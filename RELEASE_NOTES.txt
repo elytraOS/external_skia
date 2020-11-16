@@ -4,10 +4,43 @@ This file includes a list of high level updates for each milestone release.
 
 * * *
 
+Milestone 89
+------------
+
+  * The following YUV image factories have been removed:
+    SkImage::MakeFromYUVTexturesCopyWithExternalBackend
+    SkImage::MakeFromNV12TexturesCopyWithExternalBackend
+    Replacement pattern outlined below.
+        1) Make image using MakeFromYUVATextures
+        2) Make a SkSurface around result texture using SkSurface::MakeFromBackendTexture
+        3) surface->getCanvas()->drawImage(image, 0, 0);
+        4) surface->flushAndSubmit()
+        5) Optional: SkImage::MakeFromBackendTexture() to use as SkImage.
+    https://review.skia.org/334596
+
+  * Added a new interface for GrDirectContext creation in Metal, using
+    a new struct called GrMtlBackendContext. The previous interface taking
+    a MTLDevice and MTLCommandQueue is deprecated.
+    https://review.skia.org/334426
+
+* * *
+
 Milestone 88
 ------------
 
-  * <insert new release notes here>
+  * SkYUVAInfo now has separate enums for division of channels among planes and
+    the subsampling. The previous combined enum, PlanarConfig, is deprecated.
+    https://review.skia.org/334102
+
+  * Simplified SkDeferredDisplayListRecorder promise image API. Removed "release"
+    callback and renamed "done" callback to "release". The new "release" proc can
+    be null. Added a new SkYUVAInfo-based factory for YUVA promise texture images
+    and deprecated the old SkYUVAIndex-based one.
+    https://review.skia.org/331836
+    https://review.skia.org/333519
+
+  * Limit the types and intrinsics supported in SkRuntimeEffect to GLSL ES 1.00
+    https://review.skia.org/332597
 
   * Add AVIF support to SkHeifCodec.
 

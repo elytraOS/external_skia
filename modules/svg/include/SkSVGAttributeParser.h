@@ -17,35 +17,13 @@ public:
     SkSVGAttributeParser(const char[]);
 
     bool parseColor(SkSVGColorType*);
-    bool parseClipPath(SkSVGClip*);
-    bool parseFillRule(SkSVGFillRule*);
     bool parseFilter(SkSVGFilterType*);
     bool parseNumber(SkSVGNumberType*);
     bool parseInteger(SkSVGIntegerType*);
-    bool parseLength(SkSVGLength*);
     bool parseViewBox(SkSVGViewBoxType*);
-    bool parseTransform(SkSVGTransformType*);
-    bool parsePaint(SkSVGPaint*);
-    bool parseLineCap(SkSVGLineCap*);
-    bool parseLineJoin(SkSVGLineJoin*);
     bool parsePoints(SkSVGPointsType*);
-    bool parseIRI(SkSVGStringType*);
-    bool parseSpreadMethod(SkSVGSpreadMethod*);
     bool parseStopColor(SkSVGStopColor*);
-    bool parseObjectBoundingBoxUnits(SkSVGObjectBoundingBoxUnits*);
-    bool parseVisibility(SkSVGVisibility*);
-    bool parseDashArray(SkSVGDashArray*);
     bool parsePreserveAspectRatio(SkSVGPreserveAspectRatio*);
-
-    bool parseFontFamily(SkSVGFontFamily*);
-    bool parseFontSize(SkSVGFontSize*);
-    bool parseFontStyle(SkSVGFontStyle*);
-    bool parseFontWeight(SkSVGFontWeight*);
-    bool parseTextAnchor(SkSVGTextAnchor*);
-
-    bool parseEOSToken();
-    bool parseCommaWspToken();
-    bool parseExpectedStringToken(const char*);
 
     // TODO: Migrate all parse*() functions to this style (and delete the old version)
     //      so they can be used by parse<T>():
@@ -54,42 +32,43 @@ public:
 
     template <typename T> using ParseResult = SkTLazy<T>;
 
+    template <typename T> static ParseResult<T> parse(const char* value) {
+        ParseResult<T> result;
+        T parsedValue;
+        if (SkSVGAttributeParser(value).parse(&parsedValue)) {
+            result.set(std::move(parsedValue));
+        }
+        return result;
+    }
+
     template <typename T>
     static ParseResult<T> parse(const char* expectedName,
                                 const char* name,
-                                const char* value,
-                                bool (*parseFnc)(const char*, T*)) {
-        if (strcmp(name, expectedName) != 0) {
-            return ParseResult<T>();
-        }
-
-        T parsedValue;
-        if (parseFnc(value, &parsedValue)) {
-            return ParseResult<T>(&parsedValue);
+                                const char* value) {
+        if (!strcmp(name, expectedName)) {
+            return parse<T>(value);
         }
 
         return ParseResult<T>();
     }
 
-    template <typename T>
-    static ParseResult<T> parse(const char* expectedName, const char* name, const char* value) {
-        const auto parseFnc = +[](const char* str, T* v) {
-            SkSVGAttributeParser parser(str);
-            return parser.parse(v);
-        };
-        return parse(expectedName, name, value, parseFnc);
-    }
 
 private:
     // Stack-only
     void* operator new(size_t) = delete;
     void* operator new(size_t, void*) = delete;
 
+    template <typename T>
+    bool parse(T*);
+
     template <typename F>
     bool advanceWhile(F func);
 
     bool parseWSToken();
+    bool parseEOSToken();
     bool parseSepToken();
+    bool parseCommaWspToken();
+    bool parseExpectedStringToken(const char*);
     bool parseScalarToken(SkScalar*);
     bool parseInt32Token(int32_t*);
     bool parseHexToken(uint32_t*);
@@ -114,7 +93,15 @@ private:
     bool parseParenthesized(const char* prefix, Func, T* result);
 
     template <typename T, typename TArray>
-    bool parseEnumMap(const TArray& arr, T* result);
+    bool parseEnumMap(const TArray& arr, T* result) {
+        for (size_t i = 0; i < SK_ARRAY_COUNT(arr); ++i) {
+            if (this->parseExpectedStringToken(std::get<0>(arr[i]))) {
+                *result = std::get<1>(arr[i]);
+                return true;
+            }
+        }
+        return false;
+    }
 
     // The current position in the input string.
     const char* fCurPos;

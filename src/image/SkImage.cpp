@@ -141,7 +141,7 @@ sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
 }
 
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
-                                    const SkFilterOptions& options,
+                                    const SkSamplingOptions& options,
                                     const SkMatrix* localMatrix) const {
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
                                options, localMatrix);
@@ -151,12 +151,6 @@ sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkMatrix* localMatrix, SkFilterQuality filtering) const {
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, localMatrix,
                                SkImageShader::FilterEnum(filtering));
-}
-
-sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy, CubicResampler cubic,
-                                           const SkMatrix* localMatrix) const {
-    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, cubic,
-                               localMatrix);
 }
 
 sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
@@ -581,12 +575,6 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrDirectContext*, GrMipmapped, SkBudget
     return nullptr;
 }
 
-sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopyWithExternalBackend(
-       GrRecordingContext*, SkYUVColorSpace, const GrBackendTexture[2], GrSurfaceOrigin,
-       const GrBackendTexture&, sk_sp<SkColorSpace>, TextureReleaseProc, ReleaseContext) {
-    return nullptr;
-}
-
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -644,4 +632,24 @@ sk_sp<SkImage> SkImage::withDefaultMipmaps() const {
 
 sk_sp<SkImage> SkMipmapBuilder::attachTo(const SkImage* src) {
     return src->withMipmaps(fMM);
+}
+
+SkSamplingOptions SkSamplingOptions::Make(SkFilterQuality fq) {
+    switch (fq) {
+        case SkFilterQuality::kLow_SkFilterQuality:
+            return SkSamplingOptions({
+                SkSamplingMode::kLinear,
+                SkMipmapMode::kNone
+            });
+        case SkFilterQuality::kMedium_SkFilterQuality:
+            return SkSamplingOptions({
+                SkSamplingMode::kLinear,
+                SkMipmapMode::kNearest
+            });
+        case SkFilterQuality::kHigh_SkFilterQuality:
+            return SkSamplingOptions({1.0f/3, 1.0f/3});
+        case SkFilterQuality::kNone_SkFilterQuality:
+            break;  // fall out
+    }
+    return SkSamplingOptions(); // kNone_SkFilterQuality
 }
