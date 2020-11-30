@@ -187,7 +187,7 @@ SkRuntimeEffect::EffectResult SkRuntimeEffect::Make(SkString sksl) {
     const SkSL::Context& ctx(compiler->context());
 
     // Go through program elements, pulling out information that we need
-    for (const auto& elem : program->elements()) {
+    for (const SkSL::ProgramElement* elem : program->elements()) {
         // Variables (uniform, varying, etc.)
         if (elem->is<SkSL::GlobalVarDeclaration>()) {
             const SkSL::GlobalVarDeclaration& global = elem->as<SkSL::GlobalVarDeclaration>();
@@ -563,12 +563,29 @@ static skvm::Color program_fn(skvm::Builder* p,
                 binary([](skvm::F32 x, skvm::F32 y) { return skvm::max(x,y); });
                 break;
 
+            case Inst::kMod:
+                binary([](skvm::F32 x, skvm::F32 y) { return x - y * skvm::floor(x / y); });
+                break;
+
             case Inst::kPow:
                 binary([](skvm::F32 x, skvm::F32 y) { return skvm::approx_powf(x,y); });
                 break;
 
             case Inst::kLerp:
                 ternary([](skvm::F32 x, skvm::F32 y, skvm::F32 t) { return skvm::lerp(x, y, t); });
+                break;
+
+            case Inst::kSign:
+                unary([](skvm::F32 x) {
+                    return select(x < 0, -1.0f,
+                           select(x > 0, +1.0f, 0.0f));
+                });
+                break;
+
+            case Inst::kStep:
+                binary([](skvm::F32 edge, skvm::F32 x) {
+                    return select(x < edge, 0.0f, 1.0f);
+                });
                 break;
 
             case Inst::kAbs:   unary(skvm::abs);         break;

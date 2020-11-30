@@ -46,30 +46,32 @@ enum class SkSVGTag {
 
 #define SVG_PRES_ATTR(attr_name, attr_type, attr_inherited)                  \
 private:                                                                     \
-    bool set##attr_name(SkSVGAttributeParser::ParseResult<attr_type>&& pr) { \
+    bool set##attr_name(SkSVGAttributeParser::ParseResult<                   \
+                            SkSVGProperty<attr_type, attr_inherited>>&& pr) {\
         if (pr.isValid()) { this->set##attr_name(std::move(*pr)); }          \
         return pr.isValid();                                                 \
     }                                                                        \
+                                                                             \
 public:                                                                      \
-    const attr_type* get##attr_name() const {                                \
-        return fPresentationAttributes.f##attr_name.getMaybeNull();          \
+    const SkSVGProperty<attr_type, attr_inherited>& get##attr_name() const { \
+        return fPresentationAttributes.f##attr_name;                         \
     }                                                                        \
-    void set##attr_name(const attr_type& v) {                                \
-        if (!attr_inherited || v.type() != attr_type::Type::kInherit) {      \
-            fPresentationAttributes.f##attr_name.set(v);                     \
+    void set##attr_name(const SkSVGProperty<attr_type, attr_inherited>& v) { \
+        auto* dest = &fPresentationAttributes.f##attr_name;                  \
+        if (!dest->isInheritable() || v.isValue()) {                         \
+            /* TODO: If dest is not inheritable, handle v == "inherit" */    \
+            *dest = v;                                                       \
         } else {                                                             \
-            /* kInherited values are semantically equivalent to              \
-               the absence of a local presentation attribute.*/              \
-            fPresentationAttributes.f##attr_name.reset();                    \
+            dest->set(SkSVGPropertyState::kInherit);                         \
         }                                                                    \
     }                                                                        \
-    void set##attr_name(attr_type&& v) {                                     \
-        if (!attr_inherited || v.type() != attr_type::Type::kInherit) {      \
-            fPresentationAttributes.f##attr_name.set(std::move(v));          \
+    void set##attr_name(SkSVGProperty<attr_type, attr_inherited>&& v) {      \
+        auto* dest = &fPresentationAttributes.f##attr_name;                  \
+        if (!dest->isInheritable() || v.isValue()) {                         \
+            /* TODO: If dest is not inheritable, handle v == "inherit" */    \
+            *dest = std::move(v);                                            \
         } else {                                                             \
-            /* kInherited values are semantically equivalent to              \
-               the absence of a local presentation attribute.*/              \
-            fPresentationAttributes.f##attr_name.reset();                    \
+            dest->set(SkSVGPropertyState::kInherit);                         \
         }                                                                    \
     }
 

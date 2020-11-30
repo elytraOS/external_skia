@@ -217,28 +217,6 @@ DEF_TEST(SkVM_eliminate_dead_code, r) {
     REPORTER_ASSERT(r, program.size() == 0);
 }
 
-DEF_TEST(SkVM_Usage, r) {
-    skvm::Builder b;
-    {
-        skvm::Arg arg = b.varying<int>(),
-                  buf = b.varying<int>();
-        skvm::I32 l = b.load32(arg);
-        skvm::I32 a = b.add(l, l);
-        skvm::I32 s = b.add(a, b.splat(7));
-        b.store32(buf, s);
-    }
-
-    skvm::Usage usage{b.program()};
-    REPORTER_ASSERT(r, b.program()[0].op == skvm::Op::load32);
-    REPORTER_ASSERT(r, usage[0].size() == 2);
-    REPORTER_ASSERT(r, b.program()[1].op == skvm::Op::add_i32);
-    REPORTER_ASSERT(r, usage[1].size() == 1);
-    REPORTER_ASSERT(r, b.program()[2].op == skvm::Op::splat);
-    REPORTER_ASSERT(r, usage[2].size() == 1);
-    REPORTER_ASSERT(r, b.program()[3].op == skvm::Op::add_i32);
-    REPORTER_ASSERT(r, usage[3].size() == 1);
-}
-
 DEF_TEST(SkVM_Pointless, r) {
     // Let's build a program with no memory arguments.
     // It should all be pegged as dead code, but we should be able to "run" it.
@@ -876,10 +854,10 @@ DEF_TEST(SkVM_NewOps, r) {
         const size_t kPtr = sizeof(const int*);
 
         x = b.add(x, b.uniform32(uniforms, kPtr+0));
-        x = b.mul(x, b.uniform8 (uniforms, kPtr+4));
-        x = b.sub(x, b.uniform16(uniforms, kPtr+6));
+        x = b.mul(x, b.uniform32(uniforms, kPtr+4));
+        x = b.sub(x, b.uniform32(uniforms, kPtr+8));
 
-        skvm::I32 limit = b.uniform32(uniforms, kPtr+8);
+        skvm::I32 limit = b.uniform32(uniforms, kPtr+12);
         x = b.select(b.lt(x, b.splat(0)), b.splat(0), x);
         x = b.select(b.gt(x, limit     ), limit     , x);
 
@@ -911,8 +889,8 @@ DEF_TEST(SkVM_NewOps, r) {
         struct {
             const uint8_t* img;
             int      add   = 5;
-            uint8_t  mul   = 3;
-            uint16_t sub   = 18;
+            int      mul   = 3;
+            int      sub   = 18;
             int      limit = M-1;
         } uniforms{img};
 
@@ -1692,7 +1670,9 @@ DEF_TEST(SkVM_Assembler, r) {
         a.fdiv4s(A::v4, A::v3, A::v1);
         a.fmin4s(A::v4, A::v3, A::v1);
         a.fmax4s(A::v4, A::v3, A::v1);
-        a.fneg4s(A::v4, A::v3);
+
+        a.fneg4s (A::v4, A::v3);
+        a.fsqrt4s(A::v4, A::v3);
 
         a.fmla4s(A::v4, A::v3, A::v1);
         a.fmls4s(A::v4, A::v3, A::v1);
@@ -1724,7 +1704,9 @@ DEF_TEST(SkVM_Assembler, r) {
         0x64,0xfc,0x21,0x6e,
         0x64,0xf4,0xa1,0x4e,
         0x64,0xf4,0x21,0x4e,
+
         0x64,0xf8,0xa0,0x6e,
+        0x64,0xf8,0xa1,0x6e,
 
         0x64,0xcc,0x21,0x4e,
         0x64,0xcc,0xa1,0x4e,
@@ -1790,30 +1772,42 @@ DEF_TEST(SkVM_Assembler, r) {
         a.scvtf4s (A::v4, A::v3);
         a.fcvtzs4s(A::v4, A::v3);
         a.fcvtns4s(A::v4, A::v3);
+        a.frintp4s(A::v4, A::v3);
+        a.frintm4s(A::v4, A::v3);
     },{
         0x64,0xd8,0x21,0x4e,
         0x64,0xb8,0xa1,0x4e,
         0x64,0xa8,0x21,0x4e,
+        0x64,0x88,0xa1,0x4e,
+        0x64,0x98,0x21,0x4e,
     });
 
     test_asm(r, [&](A& a) {
         a.sub (A::sp, A::sp, 32);  // sub   sp, sp, #32
         a.strq(A::v0, A::sp, 1);   // str   q0, [sp, #16]
         a.strq(A::v1, A::sp);      // str   q1, [sp]
+        a.strd(A::v0, A::sp, 6);   // str   s0, [sp, #48]
         a.strs(A::v0, A::sp, 6);   // str   s0, [sp, #24]
+        a.strh(A::v0, A::sp, 10);  // str   h0, [sp, #20]
         a.strb(A::v0, A::sp, 47);  // str   b0, [sp, #47]
         a.ldrb(A::v9, A::sp, 42);  // ldr   b9, [sp, #42]
+        a.ldrh(A::v9, A::sp, 47);  // ldr   h9, [sp, #94]
         a.ldrs(A::v7, A::sp, 10);  // ldr   s7, [sp, #40]
+        a.ldrd(A::v7, A::sp,  1);  // ldr   d7, [sp, #8]
         a.ldrq(A::v5, A::sp, 128); // ldr   q5, [sp, #2048]
         a.add (A::sp, A::sp, 32);  // add   sp, sp, #32
     },{
          0xff,0x83,0x00,0xd1,
          0xe0,0x07,0x80,0x3d,
          0xe1,0x03,0x80,0x3d,
+         0xe0,0x1b,0x00,0xfd,
          0xe0,0x1b,0x00,0xbd,
+         0xe0,0x2b,0x00,0x7d,
          0xe0,0xbf,0x00,0x3d,
          0xe9,0xab,0x40,0x3d,
+         0xe9,0xbf,0x40,0x7d,
          0xe7,0x2b,0x40,0xbd,
+         0xe7,0x07,0x40,0xfd,
          0xe5,0x03,0xc2,0x3d,
          0xff,0x83,0x00,0x91,
     });
@@ -1845,6 +1839,9 @@ DEF_TEST(SkVM_Assembler, r) {
         a.b(&l);
         a.cbnz(A::x2, &l);
         a.cbz(A::x2, &l);
+
+        a.add(A::x3, A::x2, A::x1);             // add x3,x2,x1
+        a.add(A::x3, A::x2, A::x1, A::ASR, 3);  // add x3,x2,x1, asr #3
     },{
         0x00,0x00,0x20,0xd4,
         0xe0,0xff,0x3f,0xd4,
@@ -1870,6 +1867,9 @@ DEF_TEST(SkVM_Assembler, r) {
         0xae,0xff,0xff,0x54,   // b.al #-12
         0x82,0xff,0xff,0xb5,   // cbnz x2, #-16
         0x62,0xff,0xff,0xb4,   // cbz x2, #-20
+
+        0x43,0x00,0x01,0x8b,
+        0x43,0x0c,0x81,0x8b,
     });
 
     // Can we cbz() to a not-yet-defined label?
@@ -1936,6 +1936,18 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
+        a.dup4s  (A::v0, A::x8);
+        a.ld1r4s (A::v0, A::x8);  // echo 'ld1r.4s {v0}, [x8]' | llvm-mc --show-encoding
+        a.ld1r8h (A::v0, A::x8);
+        a.ld1r16b(A::v0, A::x8);
+    },{
+        0x00,0x0d,0x04,0x4e,
+        0x00,0xc9,0x40,0x4d,
+        0x00,0xc5,0x40,0x4d,
+        0x00,0xc1,0x40,0x4d,
+    });
+
+    test_asm(r, [&](A& a) {
         a.xtns2h(A::v0, A::v0);
         a.xtnh2b(A::v0, A::v0);
         a.strs  (A::v0, A::x0);
@@ -1945,7 +1957,9 @@ DEF_TEST(SkVM_Assembler, r) {
         a.uxtlh2s(A::v0, A::v0);
 
         a.uminv4s(A::v3, A::v4);
-        a.fmovs  (A::x3, A::v4);  // fmov w3,s4
+        a.movs   (A::x3, A::v4,0);  // mov.s w3,v4[0]
+        a.movs   (A::x3, A::v4,1);  // mov.s w3,v4[1]
+        a.inss   (A::v4, A::x3,3);  // ins.s v4[3],w3
     },{
         0x00,0x28,0x61,0x0e,
         0x00,0x28,0x21,0x0e,
@@ -1956,7 +1970,9 @@ DEF_TEST(SkVM_Assembler, r) {
         0x00,0xa4,0x10,0x2f,
 
         0x83,0xa8,0xb1,0x6e,
-        0x83,0x00,0x26,0x1e,
+        0x83,0x3c,0x04,0x0e,
+        0x83,0x3c,0x0c,0x0e,
+        0x64,0x1c,0x1c,0x4e,
     });
 
     test_asm(r, [&](A& a) {
@@ -1965,6 +1981,18 @@ DEF_TEST(SkVM_Assembler, r) {
     },{
         0x00,0x01,0x40,0x3d,
         0x00,0x01,0x00,0x3d,
+    });
+
+    test_asm(r, [&](A& a) {
+        a.ldrd(A::x0, A::x1, 3);   // ldr  x0, [x1, #24]
+        a.ldrs(A::x0, A::x1, 3);   // ldr  w0, [x1, #12]
+        a.ldrh(A::x0, A::x1, 3);   // ldrh w0, [x1, #6]
+        a.ldrb(A::x0, A::x1, 3);   // ldrb w0, [x1, #3]
+    },{
+        0x20,0x0c,0x40,0xf9,
+        0x20,0x0c,0x40,0xb9,
+        0x20,0x0c,0x40,0x79,
+        0x20,0x0c,0x40,0x39,
     });
 
     test_asm(r, [&](A& a) {
@@ -2372,139 +2400,31 @@ DEF_TEST(SkVM_args, r) {
     });
 }
 
-DEF_TEST(SkVM_Q14, r) {
-    // Some nice round Q14 test values from -1.0 (0xc000) to +1.0 (0x4000) by 16ths (0x0400).
-    const uint16_t src[] = {
-        0xc000, 0xc400, 0xc800, 0xcc00,  0xd000, 0xd400, 0xd800, 0xdc00,
-        0xe000, 0xe400, 0xe800, 0xec00,  0xf000, 0xf400, 0xf800, 0xfc00,
-        0x0000,
-        0x0400, 0x0800, 0x0c00, 0x1000,  0x1400, 0x1800, 0x1c00, 0x2000,
-        0x2400, 0x2800, 0x2c00, 0x3000,  0x3400, 0x3800, 0x3c00, 0x4000,
-    };
+DEF_TEST(SkVM_badpack, r) {
+    // Test case distilled from actual failing draw,
+    // originally with a bad arm64 implementation of pack().
+    skvm::Builder p;
+    {
+        skvm::Arg uniforms = p.uniform(),
+                  dst      = p.varying<uint16_t>();
 
-    // These test cases are essentially mechanically generated to get coverage...
-    // I've spot checked here and there and things seem correct, but I wouldn't
-    // be surprised to find that there were bugs.  Using nice round numbers to
-    // avoid having to think about low-bit precision for now.
-    struct {
-        skvm::Q14 (*fn)(skvm::Q14);
-        uint16_t expected[33];
-    } cases[] = {
-        {[](skvm::Q14 x) { return x; },   // Just double checking the test harness works.
-         {0xc000, 0xc400, 0xc800, 0xcc00,  0xd000, 0xd400, 0xd800, 0xdc00,
-          0xe000, 0xe400, 0xe800, 0xec00,  0xf000, 0xf400, 0xf800, 0xfc00,
-          0x0000,
-          0x0400, 0x0800, 0x0c00, 0x1000,  0x1400, 0x1800, 0x1c00, 0x2000,
-          0x2400, 0x2800, 0x2c00, 0x3000,  0x3400, 0x3800, 0x3c00, 0x4000}},
+        skvm::I32 r = round(bit_cast(p.uniform32(uniforms, 8)) * 15),
+                  a = p.splat(0xf);
 
-        {[](skvm::Q14 x) { return x*x; }, // square ±1/16 (0x0400) -> 1/256 (0x0040), etc.
-         {0x4000, 0x3840, 0x3100, 0x2a40, 0x2400, 0x1e40, 0x1900, 0x1440,
-          0x1000, 0x0c40, 0x0900, 0x0640, 0x0400, 0x0240, 0x0100, 0x0040,
-          0x0000,
-          0x0040, 0x0100, 0x0240, 0x0400, 0x0640, 0x0900, 0x0c40, 0x1000,
-          0x1440, 0x1900, 0x1e40, 0x2400, 0x2a40, 0x3100, 0x3840, 0x4000}},
-
-        {[](skvm::Q14 x) { return -(x*-x); }, // square, version B
-         {0x4000, 0x3840, 0x3100, 0x2a40, 0x2400, 0x1e40, 0x1900, 0x1440,
-          0x1000, 0x0c40, 0x0900, 0x0640, 0x0400, 0x0240, 0x0100, 0x0040,
-          0x0000,
-          0x0040, 0x0100, 0x0240, 0x0400, 0x0640, 0x0900, 0x0c40, 0x1000,
-          0x1440, 0x1900, 0x1e40, 0x2400, 0x2a40, 0x3100, 0x3840, 0x4000}},
-
-        {[](skvm::Q14 x) { return x>>1; },  // divide by 2
-         {0xe000, 0xe200, 0xe400, 0xe600, 0xe800, 0xea00, 0xec00, 0xee00,
-          0xf000, 0xf200, 0xf400, 0xf600, 0xf800, 0xfa00, 0xfc00, 0xfe00,
-          0x0000,
-          0x0200, 0x0400, 0x0600, 0x0800, 0x0a00, 0x0c00, 0x0e00, 0x1000,
-          0x1200, 0x1400, 0x1600, 0x1800, 0x1a00, 0x1c00, 0x1e00, 0x2000}},
-
-        {[](skvm::Q14 x) { return shr(x,1); },  // logical shift by 1
-         {0x6000, 0x6200, 0x6400, 0x6600, 0x6800, 0x6a00, 0x6c00, 0x6e00,
-          0x7000, 0x7200, 0x7400, 0x7600, 0x7800, 0x7a00, 0x7c00, 0x7e00,
-          0x0000,
-          0x0200, 0x0400, 0x0600, 0x0800, 0x0a00, 0x0c00, 0x0e00, 0x1000,
-          0x1200, 0x1400, 0x1600, 0x1800, 0x1a00, 0x1c00, 0x1e00, 0x2000}},
-
-        {[](skvm::Q14 x) { return x - (x>>2); },  // 3/4 x, version A
-         {0xd000, 0xd300, 0xd600, 0xd900, 0xdc00, 0xdf00, 0xe200, 0xe500,
-          0xe800, 0xeb00, 0xee00, 0xf100, 0xf400, 0xf700, 0xfa00, 0xfd00,
-          0x0000,
-          0x0300, 0x0600, 0x0900, 0x0c00, 0x0f00, 0x1200, 0x1500, 0x1800,
-          0x1b00, 0x1e00, 0x2100, 0x2400, 0x2700, 0x2a00, 0x2d00, 0x3000}},
-
-        {[](skvm::Q14 x) { return (x>>1) + (x>>2); },  // 3/4 x, version B
-         {0xd000, 0xd300, 0xd600, 0xd900, 0xdc00, 0xdf00, 0xe200, 0xe500,
-          0xe800, 0xeb00, 0xee00, 0xf100, 0xf400, 0xf700, 0xfa00, 0xfd00,
-          0x0000,
-          0x0300, 0x0600, 0x0900, 0x0c00, 0x0f00, 0x1200, 0x1500, 0x1800,
-          0x1b00, 0x1e00, 0x2100, 0x2400, 0x2700, 0x2a00, 0x2d00, 0x3000}},
-
-        {[](skvm::Q14 x) { return ((x>>2) + (x>>3))<<1; },  // 3/4 x, version C
-         {0xd000, 0xd300, 0xd600, 0xd900, 0xdc00, 0xdf00, 0xe200, 0xe500,
-          0xe800, 0xeb00, 0xee00, 0xf100, 0xf400, 0xf700, 0xfa00, 0xfd00,
-          0x0000,
-          0x0300, 0x0600, 0x0900, 0x0c00, 0x0f00, 0x1200, 0x1500, 0x1800,
-          0x1b00, 0x1e00, 0x2100, 0x2400, 0x2700, 0x2a00, 0x2d00, 0x3000}},
-
-        // TODO: I'm not sure if this one is working correctly or not.  Should only work for >=0?
-        {[](skvm::Q14 x) { return unsigned_avg(x, x>>1); },  // 3/4 x, version D
-         {0xd000, 0xd300, 0xd600, 0xd900, 0xdc00, 0xdf00, 0xe200, 0xe500,
-          0xe800, 0xeb00, 0xee00, 0xf100, 0xf400, 0xf700, 0xfa00, 0xfd00,
-          0x0000,
-          0x0300, 0x0600, 0x0900, 0x0c00, 0x0f00, 0x1200, 0x1500, 0x1800,
-          0x1b00, 0x1e00, 0x2100, 0x2400, 0x2700, 0x2a00, 0x2d00, 0x3000}},
-
-        {[](skvm::Q14 x) { return min(x, +0.5f); },  // clamp down to 0x2000, version A
-         {0xc000, 0xc400, 0xc800, 0xcc00, 0xd000, 0xd400, 0xd800, 0xdc00,
-          0xe000, 0xe400, 0xe800, 0xec00, 0xf000, 0xf400, 0xf800, 0xfc00,
-          0x0000,
-          0x0400, 0x0800, 0x0c00, 0x1000, 0x1400, 0x1800, 0x1c00, 0x2000,
-          0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000}},
-
-        {[](skvm::Q14 x) { return select(x < +0.5f, x, +0.5f); },  // clamp down to 0x2000, vB
-         {0xc000, 0xc400, 0xc800, 0xcc00, 0xd000, 0xd400, 0xd800, 0xdc00,
-          0xe000, 0xe400, 0xe800, 0xec00, 0xf000, 0xf400, 0xf800, 0xfc00,
-          0x0000,
-          0x0400, 0x0800, 0x0c00, 0x1000, 0x1400, 0x1800, 0x1c00, 0x2000,
-          0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000, 0x2000}},
-
-        {[](skvm::Q14 x) { return select(x == 1.0f, 0.5f, x); },
-         {0xc000, 0xc400, 0xc800, 0xcc00,  0xd000, 0xd400, 0xd800, 0xdc00,
-          0xe000, 0xe400, 0xe800, 0xec00,  0xf000, 0xf400, 0xf800, 0xfc00,
-          0x0000,
-          0x0400, 0x0800, 0x0c00, 0x1000,  0x1400, 0x1800, 0x1c00, 0x2000,
-          0x2400, 0x2800, 0x2c00, 0x3000,  0x3400, 0x3800, 0x3c00, 0x2000}},
-
-        {[](skvm::Q14 x) { return max(x, -0.5f); },  // clamp up to 0xe000
-         {0xe000, 0xe000, 0xe000, 0xe000,  0xe000, 0xe000, 0xe000, 0xe000,
-          0xe000, 0xe400, 0xe800, 0xec00,  0xf000, 0xf400, 0xf800, 0xfc00,
-          0x0000,
-          0x0400, 0x0800, 0x0c00, 0x1000,  0x1400, 0x1800, 0x1c00, 0x2000,
-          0x2400, 0x2800, 0x2c00, 0x3000,  0x3400, 0x3800, 0x3c00, 0x4000}},
-    };
-
-    for (const auto& test : cases) {
-        skvm::Builder b;
-        {
-            skvm::Arg dst = b.varying<uint16_t>(),
-                      src = b.varying<uint16_t>();
-
-            skvm::Q14 x = to_Q14(b.load16(src));
-            store16(dst, to_I32(test.fn(x)));
-        }
-
-        test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
-            uint16_t dst[33];
-            program.eval(33, dst,src);
-            for (int i = 0; i < 33; i++) {
-                if (test.expected[32]) {
-                    REPORTER_ASSERT(r, test.expected[i] == dst[i]);
-                } else {
-                    if (i == 0 || i == 8 || i == 16 || i == 17 || i == 25) SkDebugf("\n");
-                    SkDebugf("0x%04x, ", dst[i]);
-                }
-            }
-        });
+        skvm::I32 _4444 = p.splat(0);
+        _4444 = pack(_4444, r, 12);
+        _4444 = pack(_4444, a,  0);
+        store16(dst, _4444);
     }
 
+    test_jit_and_interpreter(p.done(), [&](const skvm::Program& program){
+        const float uniforms[] = { 0.0f, 0.0f,
+                                   1.0f, 0.0f, 0.0f, 1.0f };
+
+        uint16_t dst[17] = {0};
+        program.eval(17, uniforms,dst);
+        for (int i = 0; i < 17; i++) {
+            REPORTER_ASSERT(r, dst[i] == 0xf00f, "got %04x, want %04x\n", dst[i], 0xf00f);
+        }
+    });
 }

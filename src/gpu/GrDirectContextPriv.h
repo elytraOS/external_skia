@@ -131,7 +131,8 @@ public:
         return fContext->onGetSmallPathAtlasMgr();
     }
 
-    void copyRenderTasksFromDDL(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest);
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>, GrRenderTargetProxy* newDest,
+                       SkIPoint offset);
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&);
 

@@ -565,6 +565,10 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// ChOps VMs are at a newer version of MacOS.
 			d["os"] = "Mac-10.14.6"
 		}
+		if os == "Mac10.15" && b.parts["model"] == "VMware7.1" {
+			// ChOps VMs are at a newer version of MacOS.
+			d["os"] = "Mac-10.15.7"
+		}
 		if b.parts["model"] == "LenovoYogaC630" {
 			// This is currently a unique snowflake.
 			d["os"] = "Windows-10"
@@ -941,40 +945,6 @@ func (b *jobBuilder) createPushAppsFromWASMDockerImage() {
 			"--alsologtostderr",
 		)
 		b.dep(b.buildTaskDrivers())
-		b.dep(b.createDockerImage(true))
-		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
-		b.isolate("empty.isolate")
-		b.serviceAccount(b.cfg.ServiceAccountCompile)
-		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
-		b.usesDocker()
-		b.cache(CACHES_DOCKER...)
-	})
-}
-
-// createPushAppsFromSkiaWASMDockerImages creates and pushes docker images of some apps
-// (eg: debugger-assets) using the skia-release and skia-wasm-release
-// docker images.
-func (b *jobBuilder) createPushAppsFromSkiaWASMDockerImages() {
-	b.addTask(b.Name, func(b *taskBuilder) {
-		// TODO(borenet): Make this task not use Git.
-		b.usesGit()
-		b.cmd(
-			"./push_apps_from_skia_wasm_images",
-			"--project_id", "skia-swarming-bots",
-			"--task_id", specs.PLACEHOLDER_TASK_ID,
-			"--task_name", b.Name,
-			"--workdir", ".",
-			"--gerrit_project", "buildbot",
-			"--gerrit_url", "https://skia-review.googlesource.com",
-			"--repo", specs.PLACEHOLDER_REPO,
-			"--revision", specs.PLACEHOLDER_REVISION,
-			"--patch_issue", specs.PLACEHOLDER_ISSUE,
-			"--patch_set", specs.PLACEHOLDER_PATCHSET,
-			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
-			"--alsologtostderr",
-		)
-		b.dep(b.buildTaskDrivers())
-		b.dep(b.createDockerImage(false))
 		b.dep(b.createDockerImage(true))
 		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
 		b.isolate("empty.isolate")

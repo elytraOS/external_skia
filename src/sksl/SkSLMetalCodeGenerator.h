@@ -14,7 +14,6 @@
 #include <unordered_set>
 
 #include "src/sksl/SkSLCodeGenerator.h"
-#include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
@@ -105,8 +104,12 @@ protected:
     };
 
     enum SpecialIntrinsic {
-        kTexture_SpecialIntrinsic,
+        kDistance_SpecialIntrinsic,
+        kDot_SpecialIntrinsic,
+        kLength_SpecialIntrinsic,
         kMod_SpecialIntrinsic,
+        kNormalize_SpecialIntrinsic,
+        kTexture_SpecialIntrinsic,
     };
 
     enum MetalIntrinsic {

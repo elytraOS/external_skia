@@ -377,6 +377,52 @@ GrOpsTask::~GrOpsTask() {
     this->deleteOps();
 }
 
+void GrOpsTask::addOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
+                      GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
+    auto addDependency = [&](GrSurfaceProxy* p, GrMipmapped mipmapped) {
+        this->addDependency(drawingMgr, p, mipmapped, textureResolveManager, caps);
+    };
+
+    op->visitProxies(addDependency);
+
+    this->recordOp(std::move(op), GrProcessorSet::EmptySetAnalysis(), nullptr, nullptr, caps);
+}
+
+void GrOpsTask::addDrawOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
+                          const GrProcessorSet::Analysis& processorAnalysis,
+                          GrAppliedClip&& clip, const DstProxyView& dstProxyView,
+                          GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
+    auto addDependency = [&](GrSurfaceProxy* p, GrMipmapped mipmapped) {
+        this->addSampledTexture(p);
+        this->addDependency(drawingMgr, p, mipmapped, textureResolveManager, caps);
+    };
+
+    op->visitProxies(addDependency);
+    clip.visitProxies(addDependency);
+    if (dstProxyView.proxy()) {
+        if (GrDstSampleTypeUsesTexture(dstProxyView.dstSampleType())) {
+            this->addSampledTexture(dstProxyView.proxy());
+        }
+        addDependency(dstProxyView.proxy(), GrMipmapped::kNo);
+        if (this->target(0).proxy() == dstProxyView.proxy()) {
+            // Since we are sampling and drawing to the same surface we will need to use
+            // texture barriers.
+            SkASSERT(GrDstSampleTypeDirectlySamplesDst(dstProxyView.dstSampleType()));
+            fRenderPassXferBarriers |= GrXferBarrierFlags::kTexture;
+        }
+        SkASSERT(dstProxyView.dstSampleType() != GrDstSampleType::kAsInputAttachment ||
+                 dstProxyView.offset().isZero());
+    }
+
+    if (processorAnalysis.usesNonCoherentHWBlending()) {
+        fRenderPassXferBarriers |= GrXferBarrierFlags::kBlend;
+    }
+
+    this->recordOp(std::move(op), processorAnalysis, clip.doesClip() ? &clip : nullptr,
+                   &dstProxyView, caps);
+}
+
+
 void GrOpsTask::endFlush(GrDrawingManager* drawingMgr) {
     fLastClipStackGenID = SK_InvalidUniqueID;
     this->deleteOps();
@@ -405,10 +451,11 @@ void GrOpsTask::onPrePrepare(GrRecordingContext* context) {
     for (const auto& chain : fOpChains) {
         if (chain.shouldExecute()) {
             chain.head()->prePrepare(context,
-                                     &fTargets[0],
+                                     this->target(0),
                                      chain.appliedClip(),
                                      chain.dstProxyView(),
-                                     fRenderPassXferBarriers);
+                                     fRenderPassXferBarriers,
+                                     fColorLoadOp);
         }
     }
 }
@@ -435,10 +482,11 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
             TRACE_EVENT0("skia.gpu", chain.head()->name());
 #endif
             GrOpFlushState::OpArgs opArgs(chain.head(),
-                                          &fTargets[0],
+                                          this->target(0),
                                           chain.appliedClip(),
                                           chain.dstProxyView(),
-                                          fRenderPassXferBarriers);
+                                          fRenderPassXferBarriers,
+                                          fColorLoadOp);
 
             flushState->setOpArgs(&opArgs);
 
@@ -587,10 +635,11 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 #endif
 
         GrOpFlushState::OpArgs opArgs(chain.head(),
-                                      &fTargets[0],
+                                      this->target(0),
                                       chain.appliedClip(),
                                       chain.dstProxyView(),
-                                      fRenderPassXferBarriers);
+                                      fRenderPassXferBarriers,
+                                      fColorLoadOp);
 
         flushState->setOpArgs(&opArgs);
         chain.head()->execute(flushState, chain.bounds());
@@ -875,8 +924,8 @@ void GrOpsTask::forwardCombine(const GrCaps& caps) {
     }
 }
 
-GrRenderTask::ExpectedOutcome GrOpsTask::onMakeClosed(
-        const GrCaps& caps, SkIRect* targetUpdateBounds) {
+GrRenderTask::ExpectedOutcome GrOpsTask::onMakeClosed(const GrCaps& caps,
+                                                      SkIRect* targetUpdateBounds) {
     this->forwardCombine(caps);
     if (!this->isNoOp()) {
         GrSurfaceProxy* proxy = this->target(0).proxy();

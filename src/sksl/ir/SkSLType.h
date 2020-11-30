@@ -91,6 +91,7 @@ public:
         kFloat,
         kSigned,
         kUnsigned,
+        kBoolean,
         kNonnumeric
     };
 
@@ -261,10 +262,17 @@ public:
     }
 
     /**
+     * Returns true if this type is a bool.
+     */
+    bool isBoolean() const {
+        return fNumberKind == NumberKind::kBoolean;
+    }
+
+    /**
      * Returns true if this is a numeric scalar type.
      */
     bool isNumber() const {
-        return fNumberKind != NumberKind::kNonnumeric;
+        return this->isFloat() || this->isInteger();
     }
 
     /**
@@ -292,7 +300,23 @@ public:
      * Returns true if this is a signed or unsigned integer.
      */
     bool isInteger() const {
-        return isSigned() || isUnsigned();
+        return this->isSigned() || this->isUnsigned();
+    }
+
+    /**
+     * Returns true if this is an "opaque type" (an external object which the shader references in
+     * some fashion). https://www.khronos.org/opengl/wiki/Data_Type_(GLSL)#Opaque_types
+     */
+    bool isOpaque() const {
+        switch (fTypeKind) {
+            case TypeKind::kOther:
+            case TypeKind::kSampler:
+            case TypeKind::kSeparateSampler:
+            case TypeKind::kTexture:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
@@ -393,6 +417,18 @@ public:
     bool isArrayed() const {
         SkASSERT(TypeKind::kSampler == fTypeKind || TypeKind::kTexture == fTypeKind);
         return fIsArrayed;
+    }
+
+    bool isScalar() const {
+        return fTypeKind == TypeKind::kScalar;
+    }
+
+    bool isVector() const {
+        return fTypeKind == TypeKind::kVector;
+    }
+
+    bool isMatrix() const {
+        return fTypeKind == TypeKind::kMatrix;
     }
 
     bool isMultisampled() const {

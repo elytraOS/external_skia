@@ -10,6 +10,7 @@
 #include "include/core/SkPicture.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkTextBlob.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/utils/SkPaintFilterCanvas.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkClipOpPriv.h"
@@ -140,6 +141,8 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
     DebugPaintFilterCanvas filterCanvas(originalCanvas);
     SkCanvas* finalCanvas = fOverdrawViz ? &filterCanvas : originalCanvas;
 
+    auto dContext = GrAsDirectContext(finalCanvas->recordingContext());
+
     // If we have a GPU backend we can also visualize the op information
     GrAuditTrail* at = nullptr;
     if (fDrawGpuOpBounds || m != -1) {
@@ -153,7 +156,9 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
             // We need to flush any pending operations, or they might combine with commands below.
             // Previous operations were not registered with the audit trail when they were
             // created, so if we allow them to combine, the audit trail will fail to find them.
-            finalCanvas->flush();
+            if (dContext) {
+                dContext->flush();
+            }
             acb = new GrAuditTrail::AutoCollectOps(at, i);
         }
         if (fCommandVector[i]->isVisible()) {
@@ -196,7 +201,9 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
         // just in case there is global reordering, we flush the canvas before querying
         // GrAuditTrail
         GrAuditTrail::AutoEnable ae(at);
-        finalCanvas->flush();
+        if (dContext) {
+            dContext->flush();
+        }
 
         // we pick three colorblind-safe colors, 75% alpha
         static const SkColor kTotalBounds     = SkColorSetARGB(0xC0, 0x6A, 0x3D, 0x9A);
@@ -278,7 +285,11 @@ void DebugCanvas::drawAndCollectOps(SkCanvas* canvas) {
         // in case there is some kind of global reordering
         {
             GrAuditTrail::AutoEnable ae(at);
-            canvas->flush();
+
+            auto dContext = GrAsDirectContext(canvas->recordingContext());
+            if (dContext) {
+                dContext->flush();
+            }
         }
     }
 }
@@ -358,17 +369,27 @@ void DebugCanvas::didConcat44(const SkM44& m) {
 }
 
 void DebugCanvas::didScale(SkScalar x, SkScalar y) {
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
     this->didConcat(SkMatrix::Scale(x, y));
+#else
+    this->didConcat44(SkM44::Scale(x, y));
+#endif
 }
 
 void DebugCanvas::didTranslate(SkScalar x, SkScalar y) {
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
     this->didConcat(SkMatrix::Translate(x, y));
+#else
+    this->didConcat44(SkM44::Translate(x, y));
+#endif
 }
 
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
 void DebugCanvas::didConcat(const SkMatrix& matrix) {
     this->addDrawCommand(new ConcatCommand(matrix));
     this->INHERITED::didConcat(matrix);
 }
+#endif
 
 void DebugCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) {
     // Parse layer-releated annotations added in SkiaPipeline.cpp and RenderNodeDrawable.cpp
@@ -587,10 +608,17 @@ bool DebugCanvas::onDoSaveBehind(const SkRect* subset) {
     return false;
 }
 
+void DebugCanvas::didSetM44(const SkM44& matrix) {
+    this->addDrawCommand(new SetM44Command(matrix));
+    this->INHERITED::didSetM44(matrix);
+}
+
+#ifdef SK_SUPPORT_LEGACY_CANVASMATRIX33
 void DebugCanvas::didSetMatrix(const SkMatrix& matrix) {
     this->addDrawCommand(new SetMatrixCommand(matrix));
     this->INHERITED::didSetMatrix(matrix);
 }
+#endif
 
 void DebugCanvas::toggleCommand(int index, bool toggle) {
     SkASSERT(index < fCommandVector.count());

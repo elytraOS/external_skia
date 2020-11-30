@@ -732,8 +732,7 @@ def base_defines(os_conditions):
         # JPEG is in codec_limited
         "SK_CODEC_DECODES_JPEG",
         "SK_ENCODE_JPEG",
-        # Needed for some tests in dm
-        "SK_ENABLE_SKSL_INTERPRETER",
+        "SK_HAS_ANDROID_CODEC",
     ] + skia_select(
         os_conditions,
         [
@@ -770,7 +769,6 @@ def base_defines(os_conditions):
                 "SK_DISABLE_LEGACY_SHADERCONTEXT",
                 "SK_DISABLE_TRACING",
                 "SK_GL",
-                "GR_GL_CHECK_ALLOC_WITH_GET_ERROR=0",
                 "SK_SUPPORT_GPU=1",
                 "SK_DISABLE_AAA",
                 "SK_DISABLE_EFFECT_DESERIALIZATION",
