@@ -114,6 +114,9 @@ void SPIRVCodeGenerator::setupIntrinsics() {
                                                                 SpvOpUndef, SpvOpUndef, SpvOpAny);
     fIntrinsicMap[String("all")]              = std::make_tuple(kSPIRV_IntrinsicKind, SpvOpUndef,
                                                                 SpvOpUndef, SpvOpUndef, SpvOpAll);
+    fIntrinsicMap[String("not")]              = std::make_tuple(kSPIRV_IntrinsicKind, SpvOpUndef,
+                                                                SpvOpUndef, SpvOpUndef,
+                                                                SpvOpLogicalNot);
     fIntrinsicMap[String("equal")]            = std::make_tuple(kSPIRV_IntrinsicKind,
                                                                 SpvOpFOrdEqual, SpvOpIEqual,
                                                                 SpvOpIEqual, SpvOpLogicalEqual);
@@ -396,7 +399,7 @@ void SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memor
     size_t offset = 0;
     for (int32_t i = 0; i < (int32_t) type.fields().size(); i++) {
         const Type::Field& field = type.fields()[i];
-        if (!memoryLayout.layoutIsSupported(*field.fType)) {
+        if (!MemoryLayout::LayoutIsSupported(*field.fType)) {
             fErrors.error(type.fOffset, "type '" + field.fType->name() + "' is not permitted here");
             return;
         }
@@ -439,9 +442,7 @@ void SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memor
                                    SpvDecorationRelaxedPrecision, fDecorationBuffer);
         }
         offset += size;
-        Type::TypeKind kind = field.fType->typeKind();
-        if ((kind == Type::TypeKind::kArray || kind == Type::TypeKind::kStruct) &&
-            offset % alignment != 0) {
+        if ((field.fType->isArray() || field.fType->isStruct()) && offset % alignment != 0) {
             offset += alignment - offset % alignment;
         }
     }
@@ -480,7 +481,7 @@ SpvId SPIRVCodeGenerator::getType(const Type& type) {
 SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layout) {
     const Type& type = this->getActualType(rawType);
     String key = type.name();
-    if (type.typeKind() == Type::TypeKind::kStruct || type.typeKind() == Type::TypeKind::kArray) {
+    if (type.isStruct() || type.isArray()) {
         key += to_string((int)layout.fStd);
     }
     auto entry = fTypeMap.find(key);
@@ -502,6 +503,9 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
                     SkASSERT(false);
                 }
                 break;
+            case Type::TypeKind::kEnum:
+                this->writeInstruction(SpvOpTypeInt, result, 32, 1, fConstantBuffer);
+                break;
             case Type::TypeKind::kVector:
                 this->writeInstruction(SpvOpTypeVector, result,
                                        this->getType(type.componentType(), layout),
@@ -516,6 +520,10 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
                 this->writeStruct(type, layout, result);
                 break;
             case Type::TypeKind::kArray: {
+                if (!MemoryLayout::LayoutIsSupported(type)) {
+                    fErrors.error(type.fOffset, "type '" + type.name() + "' is not permitted here");
+                    return this->nextId();
+                }
                 if (type.columns() > 0) {
                     IntLiteral count(fContext, -1, type.columns());
                     this->writeInstruction(SpvOpTypeArray, result,
@@ -556,7 +564,7 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
             case Type::TypeKind::kTexture: {
                 this->writeInstruction(SpvOpTypeImage, result,
                                        this->getType(*fContext.fFloat_Type, layout),
-                                       type.dimensions(), type.isDepth(), type.isArrayed(),
+                                       type.dimensions(), type.isDepth(), type.isArrayedTexture(),
                                        type.isMultisampled(), type.isSampled() ? 1 : 2,
                                        SpvImageFormatUnknown, fConstantBuffer);
                 fImageTypeMap[key] = result;
@@ -1524,7 +1532,7 @@ SpvId SPIRVCodeGenerator::writeVectorConstructor(const Constructor& c, OutputStr
 
 SpvId SPIRVCodeGenerator::writeArrayConstructor(const Constructor& c, OutputStream& out) {
     const Type& type = c.type();
-    SkASSERT(type.typeKind() == Type::TypeKind::kArray);
+    SkASSERT(type.isArray());
     // go ahead and write the arguments so we don't try to write new instructions in the middle of
     // an instruction
     std::vector<SpvId> arguments;
@@ -1897,8 +1905,8 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                                    &intfStruct,
                                                    /*builtin=*/false,
                                                    Variable::Storage::kGlobal));
-                InterfaceBlock intf(/*offset=*/-1, intfVar, name, /*instanceName=*/"",
-                                    /*sizes=*/ExpressionArray(),
+                InterfaceBlock intf(/*offset=*/-1, intfVar, name,
+                                    /*instanceName=*/"", /*arraySize=*/0,
                                     std::make_shared<SymbolTable>(&fErrors, /*builtin=*/false));
 
                 fRTHeightStructId = this->writeInterfaceBlock(intf, false);
@@ -2543,7 +2551,7 @@ SpvId SPIRVCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 SpvId SPIRVCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     const Type& type = i.type();
     ConstantType constantType;
-    if (type == *fContext.fInt_Type) {
+    if (type == *fContext.fInt_Type || type.typeKind() == Type::TypeKind::kEnum) {
         constantType = ConstantType::kInt;
     } else if (type == *fContext.fUInt_Type) {
         constantType = ConstantType::kUInt;
@@ -2715,7 +2723,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
                                 fDefaultLayout;
     SpvId result = this->nextId();
     const Type* type = &intf.variable().type();
-    if (!memoryLayout.layoutIsSupported(*type)) {
+    if (!MemoryLayout::LayoutIsSupported(*type)) {
         fErrors.error(type->fOffset, "type '" + type->name() + "' is not permitted here");
         return this->nextId();
     }

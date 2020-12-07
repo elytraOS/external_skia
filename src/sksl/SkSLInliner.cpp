@@ -195,10 +195,11 @@ static bool contains_recursive_call(const FunctionDeclaration& funcDecl) {
 }
 
 static const Type* copy_if_needed(const Type* src, SymbolTable& symbolTable) {
-    if (src->typeKind() == Type::TypeKind::kArray) {
+    if (src->isArray()) {
+        const Type* innerType = copy_if_needed(&src->componentType(), symbolTable);
         return symbolTable.takeOwnershipOfSymbol(std::make_unique<Type>(src->name(),
                                                                         src->typeKind(),
-                                                                        src->componentType(),
+                                                                        *innerType,
                                                                         src->columns()));
     }
     return src;
@@ -323,10 +324,11 @@ String Inliner::uniqueNameForInlineVar(const String& baseName, SymbolTable* symb
 
 std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
                                                       VariableRewriteMap* varMap,
+                                                      SymbolTable* symbolTableForExpression,
                                                       const Expression& expression) {
     auto expr = [&](const std::unique_ptr<Expression>& e) -> std::unique_ptr<Expression> {
         if (e) {
-            return this->inlineExpression(offset, varMap, *e);
+            return this->inlineExpression(offset, varMap, symbolTableForExpression, *e);
         }
         return nullptr;
     };
@@ -355,8 +357,8 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kConstructor: {
             const Constructor& constructor = expression.as<Constructor>();
-            return std::make_unique<Constructor>(offset, &constructor.type(),
-                                                 argList(constructor.arguments()));
+            const Type* type = copy_if_needed(&constructor.type(), *symbolTableForExpression);
+            return std::make_unique<Constructor>(offset, type, argList(constructor.arguments()));
         }
         case Expression::Kind::kExternalFunctionCall: {
             const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
@@ -448,7 +450,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
     };
     auto expr = [&](const std::unique_ptr<Expression>& e) -> std::unique_ptr<Expression> {
         if (e) {
-            return this->inlineExpression(offset, varMap, *e);
+            return this->inlineExpression(offset, varMap, symbolTableForStatement, *e);
         }
         return nullptr;
     };
@@ -537,12 +539,8 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
         }
         case Statement::Kind::kVarDeclaration: {
             const VarDeclaration& decl = statement.as<VarDeclaration>();
-            ExpressionArray sizes;
-            sizes.reserve_back(decl.sizes().count());
-            for (const std::unique_ptr<Expression>& size : decl.sizes()) {
-                sizes.push_back(expr(size));
-            }
             std::unique_ptr<Expression> initialValue = expr(decl.value());
+            int arraySize = decl.arraySize();
             const Variable& old = decl.var();
             // We assign unique names to inlined variables--scopes hide most of the problems in this
             // regard, but see `InlinerAvoidsVariableNameOverlap` for a counterexample where unique
@@ -561,7 +559,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
                                                old.storage(),
                                                initialValue.get()));
             (*varMap)[&old] = std::make_unique<VariableReference>(offset, clone);
-            return std::make_unique<VarDeclaration>(clone, baseTypePtr, std::move(sizes),
+            return std::make_unique<VarDeclaration>(clone, baseTypePtr, arraySize,
                                                     std::move(initialValue));
         }
         case Statement::Kind::kWhile: {
@@ -641,11 +639,11 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         // initial value).
         std::unique_ptr<Statement> variable;
         if (initialValue && (modifiers.fFlags & Modifiers::kOut_Flag)) {
-            variable = std::make_unique<VarDeclaration>(
-                    variableSymbol, type, /*sizes=*/ExpressionArray{}, (*initialValue)->clone());
+            variable = std::make_unique<VarDeclaration>(variableSymbol, type, /*arraySize=*/0,
+                                                        (*initialValue)->clone());
         } else {
-            variable = std::make_unique<VarDeclaration>(
-                    variableSymbol, type, /*sizes=*/ExpressionArray{}, std::move(*initialValue));
+            variable = std::make_unique<VarDeclaration>(variableSymbol, type, /*arraySize=*/0,
+                                                        std::move(*initialValue));
         }
 
         // Add the new variable-declaration statement to our block of extra statements.

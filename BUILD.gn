@@ -76,9 +76,6 @@ config("skia_private") {
   ]
 
   defines = [ "SK_GAMMA_APPLY_TO_A8" ]
-  if (skia_enable_gpu) {
-    defines += [ "GR_OP_ALLOCATE_USE_NEW" ]
-  }
   if (skia_use_fixed_gamma_text) {
     defines += [
       "SK_GAMMA_EXPONENT=1.4",
@@ -560,6 +557,7 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
   executable("skslc") {
     defines = [
       "SKSL_STANDALONE",
+      "SK_ENABLE_SKSL_INTERPRETER",
       "SK_ENABLE_SPIRV_VALIDATION",
     ]
     sources = [
@@ -2035,6 +2033,15 @@ if (skia_enable_tools) {
         "modules/skottie:utils",
         "modules/svg",
       ]
+    }
+
+    # optional separate library to dlopen when running CanvasStateTests.
+    shared_library("canvas_state_lib") {
+      sources = [
+        "tests/CanvasStateHelpers.cpp",
+        "tests/CanvasStateHelpers.h",
+      ]
+      deps = [ ":skia" ]
     }
   }
 

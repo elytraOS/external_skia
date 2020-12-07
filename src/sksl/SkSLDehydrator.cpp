@@ -36,6 +36,7 @@
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSetting.h"
 #include "src/sksl/ir/SkSLStatement.h"
+#include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLSwitchCase.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
@@ -489,10 +490,7 @@ void Dehydrator::write(const Statement* s) {
                 this->writeCommand(Rehydrator::kVarDeclaration_Command);
                 this->writeU16(this->symbolId(&v.var()));
                 this->write(v.baseType());
-                this->writeU8(v.sizes().count());
-                for (const std::unique_ptr<Expression>& size : v.sizes()) {
-                    this->write(size.get());
-                }
+                this->writeS8(v.arraySize());
                 this->write(v.value().get());
                 break;
             }
@@ -555,10 +553,7 @@ void Dehydrator::write(const ProgramElement& e) {
             this->write(i.variable());
             this->write(i.typeName());
             this->write(i.instanceName());
-            this->writeU8(i.sizes().count());
-            for (const auto& s : i.sizes()) {
-                this->write(s.get());
-            }
+            this->writeS8(i.arraySize());
             break;
         }
         case ProgramElement::Kind::kModifiers:
@@ -567,6 +562,12 @@ void Dehydrator::write(const ProgramElement& e) {
         case ProgramElement::Kind::kSection:
             SkASSERT(false);
             break;
+        case ProgramElement::Kind::kStructDefinition: {
+            const StructDefinition& structDef = e.as<StructDefinition>();
+            this->writeCommand(Rehydrator::kStructDefinition_Command);
+            this->write(structDef.type());
+            break;
+        }
         case ProgramElement::Kind::kGlobalVar: {
             const GlobalVarDeclaration& v = e.as<GlobalVarDeclaration>();
             this->writeCommand(Rehydrator::kVarDeclarations_Command);

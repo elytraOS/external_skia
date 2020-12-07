@@ -6,6 +6,12 @@ This file includes a list of high level updates for each milestone release.
 
 Milestone 89
 ------------
+  * Remove support for deprecated kDontClipToLayer_SaveLayerFlag in SkCanvas::SaveLayerRec
+    https://review.skia.org/339988
+
+  * Expose more info in SkCodec::FrameInfo
+    https://review.skia.org/339857
+
   * Added dither control to the SkImageFilters::Shader factory.
     https://review.skia.org/338156
 
@@ -36,6 +42,8 @@ Milestone 89
     a new struct called GrMtlBackendContext. The previous interface taking
     a MTLDevice and MTLCommandQueue is deprecated.
     https://review.skia.org/334426
+
+  * SkCanvas::flush has been deprecated.
 
 * * *
 

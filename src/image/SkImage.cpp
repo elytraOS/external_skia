@@ -21,6 +21,7 @@
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMipmap.h"
+#include "src/core/SkMipmapBuilder.h"
 #include "src/core/SkNextID.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/image/SkImage_Base.h"
@@ -633,23 +634,16 @@ sk_sp<SkImage> SkMipmapBuilder::attachTo(const SkImage* src) {
 SkSamplingOptions::SkSamplingOptions(SkFilterQuality fq) {
     switch (fq) {
         case SkFilterQuality::kHigh_SkFilterQuality:
-            fUseCubic = true;
-            fCubic = {1.0f/3, 1.0f/3};
+            *this = SkSamplingOptions(SkCubicResampler{1/3.0f, 1/3.0f});
             break;
         case SkFilterQuality::kMedium_SkFilterQuality:
-            fUseCubic = false;
-            fFilter = SkFilterMode::kLinear;
-            fMipmap = SkMipmapMode::kNearest;
+            *this = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNearest);
             break;
         case SkFilterQuality::kLow_SkFilterQuality:
-            fUseCubic = false;
-            fFilter = SkFilterMode::kLinear;
-            fMipmap = SkMipmapMode::kNone;
+            *this = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNone);
             break;
         case SkFilterQuality::kNone_SkFilterQuality:
-            fUseCubic = false;
-            fFilter = SkFilterMode::kNearest;
-            fMipmap = SkMipmapMode::kNone;
+            *this = SkSamplingOptions(SkFilterMode::kNearest, SkMipmapMode::kNone);
             break;
     }
 }
