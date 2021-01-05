@@ -198,8 +198,6 @@ private:
     std::unique_ptr<Statement> convertFor(const ASTNode& f);
     std::unique_ptr<Expression> convertIdentifier(const ASTNode& identifier);
     std::unique_ptr<Statement> convertIf(const ASTNode& s);
-    std::unique_ptr<Expression> convertIndex(std::unique_ptr<Expression> base,
-                                             const ASTNode& index);
     std::unique_ptr<InterfaceBlock> convertInterfaceBlock(const ASTNode& s);
     Modifiers convertModifiers(const Modifiers& m);
     std::unique_ptr<Expression> convertPrefixExpression(const ASTNode& expression);
@@ -208,6 +206,9 @@ private:
     std::unique_ptr<Expression> convertCallExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertFieldExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertIndexExpression(const ASTNode& expression);
+    std::unique_ptr<Expression> convertIndex(std::unique_ptr<Expression> base,
+                                             const ASTNode& index);
+    std::unique_ptr<Expression> convertEmptyIndex(std::unique_ptr<Expression> base);
     std::unique_ptr<Expression> convertPostfixExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertScopeExpression(const ASTNode& expression);
     std::unique_ptr<StructDefinition> convertStructDefinition(const ASTNode& expression);
@@ -229,9 +230,15 @@ private:
     void checkValid(const Expression& expr);
     bool typeContainsPrivateFields(const Type& type);
     bool setRefKind(Expression& expr, VariableReference::RefKind kind);
-    bool getConstantInt(const Expression& value, int64_t* out);
+    bool getConstantInt(const Expression& value, SKSL_INT* out);
     void copyIntrinsicIfNeeded(const FunctionDeclaration& function);
     void findAndDeclareBuiltinVariables();
+
+    // Runtime effects (and the interpreter, which uses the same CPU runtime) require adherence to
+    // the strict rules from The OpenGL ES Shading Language Version 1.00. (Including Appendix A).
+    bool strictES2Mode() const {
+        return fKind == Program::kRuntimeEffect_Kind || fKind == Program::kGeneric_Kind;
+    }
 
     Program::Inputs fInputs;
     const Program::Settings* fSettings = nullptr;

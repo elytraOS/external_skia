@@ -28,7 +28,7 @@ static sk_sp<SkSurface> make_surface(SkCanvas* canvas, const SkImageInfo& info) 
 
 static sk_sp<SkShader> make_shader(const SkRect& bounds) {
     sk_sp<SkImage> image(GetResourceAsImage("images/mandrill_128.png"));
-    return image ? image->makeShader() : nullptr;
+    return image ? image->makeShader(SkSamplingOptions()) : nullptr;
 }
 
 #define N   128
@@ -184,7 +184,6 @@ protected:
                       SkScalar dx, SkScalar dy) {
         SkPaint paint;
         paint.setAntiAlias(true);
-        paint.setFilterQuality(filter);
 
         SkAutoCanvasRestore acr(canvas, true);
 
@@ -194,7 +193,7 @@ protected:
         canvas->scale(fScale, fScale);
         canvas->rotate(fAngle);
         canvas->drawImage(fImage.get(), -SkScalarHalf(fImage->width()), -SkScalarHalf(fImage->height()),
-                          &paint);
+                          SkSamplingOptions(filter), &paint);
 
         if (false) {
             acr.restore();

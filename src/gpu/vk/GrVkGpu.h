@@ -13,6 +13,7 @@
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrStagingBufferManager.h"
 #include "src/gpu/vk/GrVkCaps.h"
+#include "src/gpu/vk/GrVkMSAALoadManager.h"
 #include "src/gpu/vk/GrVkMemory.h"
 #include "src/gpu/vk/GrVkMeshBuffer.h"
 #include "src/gpu/vk/GrVkResourceProvider.h"
@@ -33,10 +34,6 @@ class GrVkRenderPass;
 class GrVkSecondaryCommandBuffer;
 class GrVkTexture;
 struct GrVkInterface;
-
-namespace SkSL {
-    class Compiler;
-}  // namespace SkSL
 
 class GrVkGpu : public GrGpu {
 public:
@@ -132,9 +129,11 @@ public:
                                bool byRegion,
                                VkImageMemoryBarrier* barrier) const;
 
-    SkSL::Compiler* shaderCompiler() const {
-        return fCompiler;
-    }
+    bool loadMSAAFromResolve(GrVkCommandBuffer* commandBuffer,
+                             const GrVkRenderPass& renderPass,
+                             GrSurface* dst,
+                             GrSurface* src,
+                             const SkIRect& srcRect);
 
     bool onRegenerateMipMapLevels(GrTexture* tex) override;
 
@@ -179,8 +178,9 @@ public:
 
     bool beginRenderPass(const GrVkRenderPass*,
                          const VkClearValue* colorClear,
-                         GrVkRenderTarget*, GrSurfaceOrigin,
-                         const SkIRect& bounds, bool forSecondaryCB);
+                         GrVkRenderTarget*,
+                         const SkIRect& renderPassBounds,
+                         bool forSecondaryCB);
     void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin, const SkIRect& bounds);
 
     // Returns true if VkResult indicates success and also checks for device lost or OOM. Every
@@ -354,6 +354,8 @@ private:
     GrVkResourceProvider                                  fResourceProvider;
     GrStagingBufferManager                                fStagingBufferManager;
 
+    GrVkMSAALoadManager                                   fMSAALoadManager;
+
     GrVkCommandPool*                                      fMainCmdPool;
     // just a raw pointer; object's lifespan is managed by fCmdPool
     GrVkPrimaryCommandBuffer*                             fMainCmdBuffer;
@@ -365,10 +367,6 @@ private:
 
     VkPhysicalDeviceProperties                            fPhysDevProps;
     VkPhysicalDeviceMemoryProperties                      fPhysDevMemProps;
-
-    // compiler used for compiling sksl into spirv. We only want to create the compiler once since
-    // there is significant overhead to the first compile of any compiler.
-    SkSL::Compiler*                                       fCompiler;
 
     // We need a bool to track whether or not we've already disconnected all the gpu resources from
     // vulkan context.

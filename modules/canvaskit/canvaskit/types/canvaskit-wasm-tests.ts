@@ -112,11 +112,17 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     canvas.drawImage(img, 0, -43, paint);
     canvas.drawImageAtCurrentFrame(aImg, 0, -43);
     canvas.drawImageAtCurrentFrame(aImg, 0, -43, paint);
-    canvas.drawImageNine(img, someRect, someRect, paint);
-    canvas.drawImageNine(img, CK.XYWHiRect(10, 20, 40, 40), someRect, paint);
+    canvas.drawImageCubic(img, 0, -43, 1 / 3, 1 / 4, null);
+    canvas.drawImageOptions(img, 0, -43, CK.FilterMode.Nearest, CK.MipmapMode.Nearest, paint);
+    canvas.drawImageNine(img, someRect, someRect, CK.FilterMode.Nearest);
+    canvas.drawImageNine(img, CK.XYWHiRect(10, 20, 40, 40), someRect, CK.FilterMode.Linear, paint);
     canvas.drawImageRect(img, someRect, someRect, paint);
     canvas.drawImageRect(img, CK.XYWHRect(90, 90, 40, 40), someRect, paint);
     canvas.drawImageRect(img, someRect, someRect, paint, true);
+    canvas.drawImageRectCubic(img, someRect, someRect, 1 / 5, 1 / 6);
+    canvas.drawImageRectCubic(img, someRect, someRect, 1 / 5, 1 / 6, paint);
+    canvas.drawImageRectOptions(img, someRect, someRect, CK.FilterMode.Linear, CK.MipmapMode.None);
+    canvas.drawImageRectOptions(img, someRect, someRect, CK.FilterMode.Linear, CK.MipmapMode.None, paint);
     canvas.drawLine(1, 2, 3, 4, paint);
     canvas.drawOval(someRect, paint);
     canvas.drawPaint(paint);
@@ -250,7 +256,11 @@ function imageTests(CK: CanvasKit, imgElement?: HTMLImageElement) {
     const bytes = CK.getDataBytes(dTwo); // $ExpectType Uint8Array
     const h = img.height();
     const w = img.width();
-    const shader = img.makeShader(CK.TileMode.Decal, CK.TileMode.Repeat); // $ExpectType Shader
+    const s1 = img.makeShaderCubic(CK.TileMode.Decal, CK.TileMode.Repeat, 1 / 3, 1 / 3); // $ExpectType Shader
+    const mm = img.makeCopyWithDefaultMipmaps(); // $ExpectType Image
+    const s2 = mm.makeShaderOptions(CK.TileMode.Decal, CK.TileMode.Repeat, // $ExpectType Shader
+        CK.FilterMode.Nearest, CK.MipmapMode.Linear,
+        CK.Matrix.identity());
     const pixels = img.readPixels(85, 1000, { // $ExpectType Float32Array | Uint8Array | null
         width: 79,
         height: 205,
@@ -344,6 +354,7 @@ function fontMgrTests(CK: CanvasKit) {
 function globalTests(CK: CanvasKit) {
     const ctx = CK.currentContext();
     CK.setCurrentContext(ctx);
+    CK.deleteContext(ctx);
     const n = CK.getDecodeCacheLimitBytes();
     const u = CK.getDecodeCacheUsedBytes();
     CK.setDecodeCacheLimitBytes(1000);
@@ -358,7 +369,6 @@ function paintTests(CK: CanvasKit, colorFilter?: ColorFilter, imageFilter?: Imag
     const newPaint = paint.copy(); // $ExpectType Paint
     const bm = paint.getBlendMode();
     const color = paint.getColor(); // $ExpectType Float32Array
-    const fq = paint.getFilterQuality();
     const sc = paint.getStrokeCap();
     const sj = paint.getStrokeJoin();
     const limit = paint.getStrokeMiter(); // $ExpectType number
@@ -373,7 +383,6 @@ function paintTests(CK: CanvasKit, colorFilter?: ColorFilter, imageFilter?: Imag
     paint.setColorFilter(colorFilter);
     paint.setColorInt(CK.ColorAsInt(20, 30, 40));
     paint.setColorInt(CK.ColorAsInt(20, 30, 40), CK.ColorSpace.SRGB);
-    paint.setFilterQuality(CK.FilterQuality.Medium);
     paint.setImageFilter(imageFilter);
     paint.setMaskFilter(maskFilter);
     paint.setPathEffect(pathEffect);
@@ -408,7 +417,7 @@ function pathTests(CK: CanvasKit) {
     path.addOval(someRect);
     path.addOval(someRect, true, 3);
     path.addPath(p2);
-    path.addPoly([[20, 20], [40, 40], [20, 40]], true);
+    path.addPoly([20, 20,  40, 40,  20, 40], true);
     path.addRect(someRect);
     path.addRect(someRect, true);
     path.addRRect(someRRect);
@@ -876,17 +885,17 @@ function vectorTests(CK: CanvasKit) {
 
 function verticesTests(CK: CanvasKit) {
     const points = [
-        [ 70, 170 ], [ 40, 90 ], [ 130, 150 ], [ 100, 50 ],
-        [ 225, 150 ], [ 225, 60 ], [ 310, 180 ], [ 330, 100 ]
+         70, 170,   40, 90,  130, 150,  100, 50,
+        225, 150,  225, 60,  310, 180,  330, 100,
     ];
     const textureCoordinates = [
-        [ 0, 240 ], [ 0, 0 ], [ 80, 240 ], [ 80, 0 ],
-        [ 160, 240 ], [ 160, 0 ], [ 240, 240 ], [ 240, 0 ]
+          0, 240,    0, 0,   80, 240,   80, 0,
+        160, 240,  160, 0,  240, 240,  240, 0,
     ];
     const vertices = CK.MakeVertices(CK.VertexMode.TrianglesStrip, // $ExpectType Vertices
         points, textureCoordinates);
 
-    const points2 = [[ 0, 0 ], [ 250, 0 ], [ 100, 100 ], [ 0, 250 ]];
+    const points2 = new Float32Array(points);
     // 1d float color array
     const colors = Float32Array.of(
         1, 0, 0, 1, // red
@@ -894,7 +903,7 @@ function verticesTests(CK: CanvasKit) {
         0, 0, 1, 1, // blue
         1, 0, 1, 1); // purple
     const vertices2 = CK.MakeVertices(CK.VertexMode.TriangleFan,
-        points, null, colors, null, true);
+        points2, null, colors, null, true);
 
     const rect = vertices.bounds(); // $ExpectType Float32Array
     vertices.bounds(rect);

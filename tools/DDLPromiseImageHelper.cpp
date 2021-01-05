@@ -71,7 +71,8 @@ void DDLPromiseImageHelper::PromiseImageInfo::setMipLevels(const SkBitmap& baseL
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 PromiseImageCallbackContext::~PromiseImageCallbackContext() {
-    SkASSERT(fDoneCnt == fNumImages);
+    // See comment in release() about YUVA image creation failures.
+    // SkASSERT(fDoneCnt == fNumImages);1
     SkASSERT(!fTotalFulfills || fDoneCnt);
 
     if (fPromiseImageTexture) {
@@ -121,8 +122,12 @@ static GrBackendTexture create_yuva_texture(GrDirectContext* direct,
     auto markFinished = [](void* context) {
         *(bool*)context = true;
     };
-    auto beTex = direct->createBackendTexture(&pm, 1, GrRenderable::kNo, GrProtected::kNo,
-                                              markFinished, &finishedBECreate);
+    auto beTex = direct->createBackendTexture(pm,
+                                              kTopLeft_GrSurfaceOrigin,
+                                              GrRenderable::kNo,
+                                              GrProtected::kNo,
+                                              markFinished,
+                                              &finishedBECreate);
     if (beTex.isValid()) {
         direct->submit();
         while (!finishedBECreate) {
@@ -164,9 +169,13 @@ void DDLPromiseImageHelper::CreateBETexturesForPromiseImage(GrDirectContext* dir
         auto markFinished = [](void* context) {
             *(bool*)context = true;
         };
-        auto backendTex = direct->createBackendTexture(mipLevels.get(), info->numMipLevels(),
-                                                       GrRenderable::kNo, GrProtected::kNo,
-                                                       markFinished, &finishedBECreate);
+        auto backendTex = direct->createBackendTexture(mipLevels.get(),
+                                                       info->numMipLevels(),
+                                                       kTopLeft_GrSurfaceOrigin,
+                                                       GrRenderable::kNo,
+                                                       GrProtected::kNo,
+                                                       markFinished,
+                                                       &finishedBECreate);
         SkASSERT(backendTex.isValid());
         direct->submit();
         while (!finishedBECreate) {
@@ -306,7 +315,7 @@ sk_sp<SkImage> DDLPromiseImageHelper::CreatePromiseImages(const void* rawData,
     // texture wouldn't fit on the GPU. Create a separate bitmap-backed image for each thread.
     if (!curImage.isYUV() && !curImage.callbackContext(0)) {
         SkASSERT(curImage.baseLevel().isImmutable());
-        return SkImage::MakeFromBitmap(curImage.baseLevel());
+        return curImage.baseLevel().asImage();
     }
 
     SkASSERT(curImage.index() == *indexPtr);
@@ -332,6 +341,9 @@ sk_sp<SkImage> DDLPromiseImageHelper::CreatePromiseImages(const void* rawData,
                 PromiseImageCallbackContext::PromiseImageFulfillProc,
                 PromiseImageCallbackContext::PromiseImageReleaseProc,
                 contexts);
+        if (!image) {
+            return nullptr;
+        }
         for (int i = 0; i < textureCount; ++i) {
             curImage.callbackContext(i)->wasAddedToImage();
         }

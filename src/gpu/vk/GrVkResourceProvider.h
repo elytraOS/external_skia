@@ -54,6 +54,7 @@ public:
     GR_DEFINE_RESOURCE_HANDLE_CLASS(CompatibleRPHandle);
 
     using SelfDependencyFlags = GrVkRenderPass::SelfDependencyFlags;
+    using LoadFromResolve = GrVkRenderPass::LoadFromResolve;
 
     // Finds or creates a simple render pass that matches the target, increments the refcount,
     // and returns. The caller can optionally pass in a pointer to a CompatibleRPHandle. If this is
@@ -61,11 +62,14 @@ public:
     // compatible GrVkRenderPasses without the need inspecting a GrVkRenderTarget.
     const GrVkRenderPass* findCompatibleRenderPass(const GrVkRenderTarget& target,
                                                    CompatibleRPHandle* compatibleHandle,
+                                                   bool withResolve,
                                                    bool withStencil,
-                                                   SelfDependencyFlags selfDepFlags);
+                                                   SelfDependencyFlags selfDepFlags,
+                                                   LoadFromResolve);
     const GrVkRenderPass* findCompatibleRenderPass(GrVkRenderPass::AttachmentsDescriptor*,
                                                    GrVkRenderPass::AttachmentFlags,
                                                    SelfDependencyFlags selfDepFlags,
+                                                   LoadFromResolve,
                                                    CompatibleRPHandle* compatibleHandle = nullptr);
 
     const GrVkRenderPass* findCompatibleExternalRenderPass(VkRenderPass,
@@ -79,15 +83,19 @@ public:
     // TODO: sk_sp?
     const GrVkRenderPass* findRenderPass(GrVkRenderTarget* target,
                                          const GrVkRenderPass::LoadStoreOps& colorOps,
+                                         const GrVkRenderPass::LoadStoreOps& resolveOps,
                                          const GrVkRenderPass::LoadStoreOps& stencilOps,
                                          CompatibleRPHandle* compatibleHandle,
+                                         bool withResolve,
                                          bool withStencil,
-                                         SelfDependencyFlags selfDepFlags);
+                                         SelfDependencyFlags selfDepFlags,
+                                         LoadFromResolve);
 
     // The CompatibleRPHandle must be a valid handle previously set by a call to findRenderPass or
     // findCompatibleRenderPass.
     const GrVkRenderPass* findRenderPass(const CompatibleRPHandle& compatibleHandle,
                                          const GrVkRenderPass::LoadStoreOps& colorOps,
+                                         const GrVkRenderPass::LoadStoreOps& resolveOps,
                                          const GrVkRenderPass::LoadStoreOps& stencilOps);
 
     GrVkCommandPool* findOrCreateCommandPool();
@@ -129,9 +137,23 @@ public:
             VkRenderPass compatibleRenderPass,
             GrGpu::Stats::ProgramCacheResult* stat);
 
+    const GrVkPipeline* findOrCreateMSAALoadPipeline(
+            const GrVkRenderPass& renderPass,
+            const GrVkRenderTarget* dst,
+            VkPipelineShaderStageCreateInfo*,
+            VkPipelineLayout);
+
     void getSamplerDescriptorSetHandle(VkDescriptorType type,
                                        const GrVkUniformHandler&,
                                        GrVkDescriptorSetManager::Handle* handle);
+
+    // This is a convenience function to return a descriptor set for zero sammples. When making a
+    // VkPipelineLayout we must pass in an array of valid descriptor set handles. However, we have
+    // set up our system to have the descriptor sets be in the order uniform, sampler, input. So
+    // if we have a uniform and input we will need to have a valid handle for the sampler as well.
+    // When using the GrVkMSAALoadManager this is the case, but we also don't have a
+    // GrVkUniformHandler to pass into the more general function. Thus we use this call instead.
+    void getZeroSamplerDescriptorSetHandle(GrVkDescriptorSetManager::Handle* handle);
 
     // Returns the compatible VkDescriptorSetLayout to use for uniform buffers. The caller does not
     // own the VkDescriptorSetLayout and thus should not delete it. This function should be used
@@ -240,7 +262,8 @@ private:
 
         bool isCompatible(const GrVkRenderPass::AttachmentsDescriptor&,
                           GrVkRenderPass::AttachmentFlags,
-                          SelfDependencyFlags selfDepFlags) const;
+                          SelfDependencyFlags selfDepFlags,
+                          LoadFromResolve) const;
 
         const GrVkRenderPass* getCompatibleRenderPass() const {
             // The first GrVkRenderpass should always exist since we create the basic load store
@@ -251,6 +274,7 @@ private:
 
         GrVkRenderPass* getRenderPass(GrVkGpu* gpu,
                                       const GrVkRenderPass::LoadStoreOps& colorOps,
+                                      const GrVkRenderPass::LoadStoreOps& resolveOps,
                                       const GrVkRenderPass::LoadStoreOps& stencilOps);
 
         void releaseResources();
@@ -266,6 +290,14 @@ private:
 
     // Central cache for creating pipelines
     VkPipelineCache fPipelineCache;
+
+    struct MSAALoadPipeline {
+        const GrVkPipeline* fPipeline;
+        const GrVkRenderPass* fRenderPass;
+    };
+
+    // Cache of previously created msaa load pipelines
+    SkTArray<MSAALoadPipeline> fMSAALoadPipelines;
 
     SkSTArray<4, CompatibleRenderPassSet> fRenderPassArray;
 

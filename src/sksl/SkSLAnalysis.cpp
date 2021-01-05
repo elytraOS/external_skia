@@ -35,7 +35,6 @@
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
-#include "src/sksl/ir/SkSLWhileStatement.h"
 
 // Expressions
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -50,7 +49,6 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLInlineMarker.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
-#include "src/sksl/ir/SkSLNullLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLSetting.h"
@@ -262,15 +260,14 @@ private:
 // know if the base (`x`) is assignable; the index expression (`1`) doesn't need to be.
 class IsAssignableVisitor {
 public:
-    IsAssignableVisitor(VariableReference** assignableVar, ErrorReporter* errors)
-            : fAssignableVar(assignableVar), fErrors(errors) {
-        if (fAssignableVar) {
-            *fAssignableVar = nullptr;
-        }
-    }
+    IsAssignableVisitor(ErrorReporter* errors) : fErrors(errors) {}
 
-    bool visit(Expression& expr) {
+    bool visit(Expression& expr, Analysis::AssignmentInfo* info) {
         this->visitExpression(expr);
+        if (info) {
+            info->fAssignedVar = fAssignedVar;
+            info->fIsSwizzled = fIsSwizzled;
+        }
         return fErrors->errorCount() == 0;
     }
 
@@ -283,9 +280,9 @@ public:
                                                Modifiers::kVarying_Flag)) {
                     fErrors->error(expr.fOffset,
                                    "cannot modify immutable variable '" + var->name() + "'");
-                } else if (fAssignableVar) {
-                    SkASSERT(*fAssignableVar == nullptr);
-                    *fAssignableVar = &varRef;
+                } else {
+                    SkASSERT(fAssignedVar == nullptr);
+                    fAssignedVar = &varRef;
                 }
                 break;
             }
@@ -295,14 +292,17 @@ public:
 
             case Expression::Kind::kSwizzle: {
                 const Swizzle& swizzle = expr.as<Swizzle>();
+                fIsSwizzled = true;
                 this->checkSwizzleWrite(swizzle);
                 this->visitExpression(*swizzle.base());
                 break;
             }
-            case Expression::Kind::kIndex:
-                this->visitExpression(*expr.as<IndexExpression>().base());
+            case Expression::Kind::kIndex: {
+                Expression& inner = *expr.as<IndexExpression>().base();
+                fIsSwizzled |= inner.type().isVector();
+                this->visitExpression(inner);
                 break;
-
+            }
             case Expression::Kind::kExternalValue: {
                 const ExternalValue& var = expr.as<ExternalValueReference>().value();
                 if (!var.canWrite()) {
@@ -332,8 +332,9 @@ private:
         }
     }
 
-    VariableReference** fAssignableVar;
     ErrorReporter* fErrors;
+    VariableReference* fAssignedVar = nullptr;
+    bool fIsSwizzled = false;
 
     using INHERITED = ProgramVisitor;
 };
@@ -442,10 +443,9 @@ bool Analysis::StatementWritesToVariable(const Statement& stmt, const Variable& 
     return VariableWriteVisitor(&var).visit(stmt);
 }
 
-bool Analysis::IsAssignable(Expression& expr, VariableReference** assignableVar,
-                            ErrorReporter* errors) {
+bool Analysis::IsAssignable(Expression& expr, AssignmentInfo* info, ErrorReporter* errors) {
     TrivialErrorReporter trivialErrors;
-    return IsAssignableVisitor{assignableVar, errors ? errors : &trivialErrors}.visit(expr);
+    return IsAssignableVisitor{errors ? errors : &trivialErrors}.visit(expr, info);
 }
 
 bool Analysis::IsTrivialExpression(const Expression& expr) {
@@ -488,7 +488,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitExpression(EXPR e) {
         case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kIntLiteral:
-        case Expression::Kind::kNullLiteral:
         case Expression::Kind::kSetting:
         case Expression::Kind::kTypeReference:
         case Expression::Kind::kVariableReference:
@@ -613,10 +612,6 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
         case Statement::Kind::kVarDeclaration: {
             auto& v = s.template as<VarDeclaration>();
             return v.value() && this->visitExpression(*v.value());
-        }
-        case Statement::Kind::kWhile: {
-            auto& w = s.template as<WhileStatement>();
-            return this->visitExpression(*w.test()) || this->visitStatement(*w.statement());
         }
         default:
             SkUNREACHABLE;

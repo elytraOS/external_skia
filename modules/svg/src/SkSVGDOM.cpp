@@ -18,6 +18,7 @@
 #include "modules/svg/include/SkSVGEllipse.h"
 #include "modules/svg/include/SkSVGFeColorMatrix.h"
 #include "modules/svg/include/SkSVGFeComposite.h"
+#include "modules/svg/include/SkSVGFeFlood.h"
 #include "modules/svg/include/SkSVGFeTurbulence.h"
 #include "modules/svg/include/SkSVGFilter.h"
 #include "modules/svg/include/SkSVGG.h"
@@ -93,17 +94,6 @@ bool SetLengthAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     return true;
 }
 
-bool SetNumberAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
-                        const char* stringValue) {
-    auto parseResult = SkSVGAttributeParser::parse<SkSVGNumberType>(stringValue);
-    if (!parseResult.isValid()) {
-        return false;
-    }
-
-    node->setAttribute(attr, SkSVGNumberValue(*parseResult));
-    return true;
-}
-
 bool SetViewBoxAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
                          const char* stringValue) {
     SkSVGViewBoxType viewBox;
@@ -113,18 +103,6 @@ bool SetViewBoxAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     }
 
     node->setAttribute(attr, SkSVGViewBoxValue(viewBox));
-    return true;
-}
-
-bool SetStopColorAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
-                           const char* stringValue) {
-    SkSVGStopColor stopColor;
-    SkSVGAttributeParser parser(stringValue);
-    if (!parser.parseStopColor(&stopColor)) {
-        return false;
-    }
-
-    node->setAttribute(attr, SkSVGStopColorValue(stopColor));
     return true;
 }
 
@@ -259,8 +237,6 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "r"                  , { SkSVGAttribute::kR                , SetLengthAttribute       }},
     { "rx"                 , { SkSVGAttribute::kRx               , SetLengthAttribute       }},
     { "ry"                 , { SkSVGAttribute::kRy               , SetLengthAttribute       }},
-    { "stop-color"         , { SkSVGAttribute::kStopColor        , SetStopColorAttribute    }},
-    { "stop-opacity"       , { SkSVGAttribute::kStopOpacity      , SetNumberAttribute       }},
     { "style"              , { SkSVGAttribute::kUnknown          , SetStyleAttributes       }},
     { "text"               , { SkSVGAttribute::kText             , SetStringAttribute       }},
     { "transform"          , { SkSVGAttribute::kTransform        , SetTransformAttribute    }},
@@ -283,6 +259,7 @@ SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
     { "ellipse"       , []() -> sk_sp<SkSVGNode> { return SkSVGEllipse::Make();        }},
     { "feColorMatrix" , []() -> sk_sp<SkSVGNode> { return SkSVGFeColorMatrix::Make();  }},
     { "feComposite"   , []() -> sk_sp<SkSVGNode> { return SkSVGFeComposite::Make();    }},
+    { "feFlood"       , []() -> sk_sp<SkSVGNode> { return SkSVGFeFlood::Make();        }},
     { "feTurbulence"  , []() -> sk_sp<SkSVGNode> { return SkSVGFeTurbulence::Make();   }},
     { "filter"        , []() -> sk_sp<SkSVGNode> { return SkSVGFilter::Make();         }},
     { "g"             , []() -> sk_sp<SkSVGNode> { return SkSVGG::Make();              }},
@@ -297,6 +274,7 @@ SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
     { "stop"          , []() -> sk_sp<SkSVGNode> { return SkSVGStop::Make();           }},
     { "svg"           , []() -> sk_sp<SkSVGNode> { return SkSVGSVG::Make();            }},
     { "text"          , []() -> sk_sp<SkSVGNode> { return SkSVGText::Make();           }},
+    { "tspan"         , []() -> sk_sp<SkSVGNode> { return SkSVGTSpan::Make();          }},
     { "use"           , []() -> sk_sp<SkSVGNode> { return SkSVGUse::Make();            }},
 };
 
@@ -357,11 +335,12 @@ sk_sp<SkSVGNode> construct_svg_node(const SkDOM& dom, const ConstructionContext&
     const SkDOM::Type elemType = dom.getType(xmlNode);
 
     if (elemType == SkDOM::kText_Type) {
+        // Text literals require special handling.
         SkASSERT(dom.countChildren(xmlNode) == 0);
-        // TODO: add type conversion helper to SkSVGNode
-        if (ctx.fParent->tag() == SkSVGTag::kText) {
-            static_cast<SkSVGText*>(ctx.fParent)->setText(SkString(dom.getName(xmlNode)));
-        }
+        auto txt = SkSVGTextLiteral::Make();
+        txt->setText(SkString(dom.getName(xmlNode)));
+        ctx.fParent->appendChild(std::move(txt));
+
         return nullptr;
     }
 

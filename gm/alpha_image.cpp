@@ -41,7 +41,7 @@ static sk_sp<SkColorFilter> make_color_filter() {
 }
 
 DEF_SIMPLE_GM(alpha_image, canvas, 256, 256) {
-    auto image = SkImage::MakeFromBitmap(make_alpha_image(96, 96));
+    auto image = make_alpha_image(96, 96).asImage();
     SkPaint paint;
 
     paint.setColorFilter(make_color_filter());
@@ -72,7 +72,7 @@ DEF_SIMPLE_GM(alpha_image_alpha_tint, canvas, 152, 80) {
         }
     }
     bm.setImmutable();
-    auto image = SkImage::MakeFromBitmap(bm);
+    auto image = bm.asImage();
 
     SkPaint paint;
     paint.setColor4f({ 0, 1, 0, 0.5f });
@@ -81,6 +81,6 @@ DEF_SIMPLE_GM(alpha_image_alpha_tint, canvas, 152, 80) {
     canvas->drawImage(image.get(), 0, 0, &paint);
 
     canvas->translate(72, 0);
-    paint.setShader(image->makeShader());
+    paint.setShader(image->makeShader(SkSamplingOptions()));
     canvas->drawRect({ 0, 0, 64, 64 }, paint);
 }

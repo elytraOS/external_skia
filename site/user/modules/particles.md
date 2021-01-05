@@ -65,7 +65,7 @@ Samples
   <figure>
     <canvas id=raincloud width=400 height=400></canvas>
     <figcaption>
-      <a href="https://particles.skia.org/47f49494cb9bdfef2691369428c6d672"
+      <a href="https://particles.skia.org/df5346ce2ab11a0f24e44143bded84d1"
          target=_blank rel=noopener>Raincloud</a>
     </figcaption>
   </figure>
@@ -404,18 +404,9 @@ const raincloud = {
       "  p.vel.y = 50;",
       "}",
       "",
-      "bool once(bool cond, inout uint flags, uint flag) {",
-      "  bool result = false;",
-      "  if (cond && (flags & flag) == 0) {",
-      "    flags |= flag;",
-      "    result = true;",
-      "  }",
-      "  return result;",
-      "}",
-      "",
       "void update(inout Particle p) {",
       "  p.vel.y += 20 * dt;",
-      "  if (once(p.pos.y > 150, p.flags, 0x1)) {",
+      "  if (p.pos.y > 150 && p.scale > 0) {",
       "    p.scale = 0;",
       "    splash(false);",
       "  }",
@@ -439,13 +430,10 @@ const raincloud = {
             ""
          ],
          "Code": [
-            "float2 circle(inout uint seed) {",
-            "  float2 xy;",
-            "  do {",
-            "    xy.x = 2 * rand(seed) - 1;",
-            "    xy.y = 2 * rand(seed) - 1;",
-            "  } while (dot(xy, xy) > 1);",
-            "  return xy;",
+            "float2 circle(inout float seed) {",
+            "  float r = sqrt(rand(seed));",
+            "  float a = rand(seed) * 6.283185;",
+            "  return r * float2(sin(a), cos(a));",
             "}",
             "",
             "void spawn(inout Particle p) {",
