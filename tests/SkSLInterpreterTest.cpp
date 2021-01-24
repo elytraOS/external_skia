@@ -218,10 +218,6 @@ DEF_TEST(SkSLInterpreterDivide, r) {
 }
 
 DEF_TEST(SkSLInterpreterRemainder, r) {
-    test(r, "void main(inout half4 color) { color.r = color.r % color.g; }", 3.125, 2, 0, 0,
-         1.125, 2, 0, 0);
-    test(r, "void main(inout half4 color) { color %= half4(1, 2, 3, 4); }", 9.5, 9.5, 9.5, 9.5,
-         0.5, 1.5, 0.5, 1.5);
     test(r, "void main(inout half4 color) { color.r = int(color.r) % int(color.g); }", 8, 3, 0, 0,
          2, 3, 0, 0);
     test(r, "void main(inout half4 color) { color.rg = half2(int2(int(color.r), int(color.g)) % "
@@ -268,15 +264,6 @@ DEF_TEST(SkSLInterpreterBitwise, r) {
     test(r, "void main(inout half4 color) { color.r = half(~int(color.r) & 3); }",
          6, 0, 0, 0, 1, 0, 0, 0);
 
-    test(r, "void main(inout half4 color) { color.r = half(uint(color.r) | 3); }",
-         5, 0, 0, 0, 7, 0, 0, 0);
-    test(r, "void main(inout half4 color) { color.r = half(uint(color.r) & 3); }",
-         6, 0, 0, 0, 2, 0, 0, 0);
-    test(r, "void main(inout half4 color) { color.r = half(uint(color.r) ^ 3); }",
-         5, 0, 0, 0, 6, 0, 0, 0);
-    test(r, "void main(inout half4 color) { color.r = half(~uint(color.r) & 3); }",
-         6, 0, 0, 0, 1, 0, 0, 0);
-
     // Shift operators
     unsigned in = 0x80000011;
     unsigned out;
@@ -286,9 +273,6 @@ DEF_TEST(SkSLInterpreterBitwise, r) {
 
     out = 0xF0000002;
     test(r, "int main(int x) { return x >> 3; }", (float*)&in, (float*)&out);
-
-    out = 0x10000002;
-    test(r, "uint main(uint x) { return x >> 3; }", (float*)&in, (float*)&out);
 }
 
 DEF_TEST(SkSLInterpreterMatrix, r) {
@@ -296,18 +280,15 @@ DEF_TEST(SkSLInterpreterMatrix, r) {
     float expected[16];
 
     // Constructing matrix from scalar produces a diagonal matrix
-    in[0] = 1.0f;
-    expected[0] = 2.0f;
+    in[0] = 2.0f;
+    expected[0] = 4.0f;
     test(r, "float main(float x) { float4x4 m = float4x4(x); return m[1][1] + m[1][2] + m[2][2]; }",
          in, expected);
 
-    // With non-square matrix
-    test(r, "float main(float x) { float3x2 m = float3x2(x); return m[0][0] + m[1][1] + m[2][1]; }",
-         in, expected);
-
     // Constructing from a different-sized matrix fills the remaining space with the identity matrix
+    expected[0] = 3.0f;
     test(r, "float main(float x) {"
-         "float3x2 m = float3x2(x);"
+         "float2x2 m = float2x2(x);"
          "float4x4 m2 = float4x4(m);"
          "return m2[0][0] + m2[3][3]; }",
          in, expected);
@@ -338,8 +319,8 @@ DEF_TEST(SkSLInterpreterMatrix, r) {
     test(r, "float4x4 main(float4x4 m) { return 3.0 + m; }", in, expected);
 
     // M-M, M-S, S-M
-    for (int i = 0; i < 8; ++i) { expected[i] = 8.0f; }
-    test(r, "float4x2 main(float4x2 m1, float4x2 m2) { return m2 - m1; }", in, expected);
+    for (int i = 0; i < 4; ++i) { expected[i] = 4.0f; }
+    test(r, "float2x2 main(float2x2 m1, float2x2 m2) { return m2 - m1; }", in, expected);
     for (int i = 0; i < 16; ++i) { expected[i] = (float)(i - 3); }
     test(r, "float4x4 main(float4x4 m) { return m - 3.0; }", in, expected);
     for (int i = 0; i < 16; ++i) { expected[i] = (float)(3 - i); }
@@ -361,14 +342,14 @@ DEF_TEST(SkSLInterpreterMatrix, r) {
 #endif
 
     // M*V, V*M
-    for (int i = 0; i < 4; ++i) {
-        expected[i] = 12.0f*i + 13.0f*(i+4) + 14.0f*(i+8);
+    for (int i = 0; i < 3; ++i) {
+        expected[i] = 9.0f*i + 10.0f*(i+3) + 11.0f*(i+6);
     }
-    test(r, "float4 main(float3x4 m, float3 v) { return m * v; }", in, expected);
-    for (int i = 0; i < 4; ++i) {
-        expected[i] = 12.0f*(3*i) + 13.0f*(3*i+1) + 14.0f*(3*i+2);
+    test(r, "float3 main(float3x3 m, float3 v) { return m * v; }", in, expected);
+    for (int i = 0; i < 3; ++i) {
+        expected[i] = 9.0f*(3*i) + 10.0f*(3*i+1) + 11.0f*(3*i+2);
     }
-    test(r, "float4 main(float4x3 m, float3 v) { return v * m; }", in, expected);
+    test(r, "float3 main(float3x3 m, float3 v) { return v * m; }", in, expected);
 
     // M*M
     {
@@ -396,7 +377,6 @@ DEF_TEST(SkSLInterpreterTernary, r) {
 DEF_TEST(SkSLInterpreterCast, r) {
     union Val {
         float    f;
-        uint32_t u;
         int32_t  s;
     };
 
@@ -409,13 +389,6 @@ DEF_TEST(SkSLInterpreterCast, r) {
     expected[1].f = -5.0f;
     test(r, "float  main(int  x) { return float (x); }", (float*)input, (float*)expected);
     test(r, "float2 main(int2 x) { return float2(x); }", (float*)input, (float*)expected);
-
-    input[0].u = 3;
-    input[1].u = 5;
-    expected[0].f = 3.0f;
-    expected[1].f = 5.0f;
-    test(r, "float  main(uint  x) { return float (x); }", (float*)input, (float*)expected);
-    test(r, "float2 main(uint2 x) { return float2(x); }", (float*)input, (float*)expected);
 
     input[0].f = 3.0f;
     input[1].f = -5.0f;
@@ -482,41 +455,6 @@ DEF_TEST(SkSLInterpreterIfVector, r) {
          1, 2, 1, 2, 1, 2, 1, 2);
     test(r, "void main(inout half4 color) { if (color.rg != color.ba) color.a = 1; }",
          1, 2, 3, 2, 1, 2, 3, 1);
-}
-
-DEF_TEST(SkSLInterpreterWhile, r) {
-    test(r, "void main(inout half4 color) { while (color.r < 8) { color.r++; } }",
-         1, 2, 3, 4, 8, 2, 3, 4);
-    test(r, "void main(inout half4 color) { while (color.r < 1) color.r += 0.25; }", 0, 0, 0, 0, 1,
-         0, 0, 0);
-    test(r, "void main(inout half4 color) { while (color.r > 1) color.r -= 0.25; }", 0, 0, 0, 0, 0,
-         0, 0, 0);
-    test(r, "void main(inout half4 color) { while (true) { color.r += 0.5; "
-         "if (color.r > 5) break; } }", 0, 0, 0, 0, 5.5, 0, 0, 0);
-    test(r, "void main(inout half4 color) { while (color.r < 10) { color.r += 0.5; "
-            "if (color.r < 5) continue; break; } }", 0, 0, 0, 0, 5, 0, 0, 0);
-    test(r,
-         "void main(inout half4 color) {"
-         "    while (true) {"
-         "        if (color.r > 4) { break; }"
-         "        while (true) { color.a = 1; break; }"
-         "        break;"
-         "    }"
-         "}",
-         6, 5, 4, 3, 6, 5, 4, 3);
-}
-
-DEF_TEST(SkSLInterpreterDo, r) {
-    test(r, "void main(inout half4 color) { do color.r += 0.25; while (color.r < 1); }", 0, 0, 0, 0,
-         1, 0, 0, 0);
-    test(r, "void main(inout half4 color) { do color.r -= 0.25; while (color.r > 1); }", 0, 0, 0, 0,
-         -0.25, 0, 0, 0);
-    test(r, "void main(inout half4 color) { do { color.r += 0.5; if (color.r > 1) break; } while "
-            "(true); }", 0, 0, 0, 0, 1.5, 0, 0, 0);
-    test(r, "void main(inout half4 color) {do { color.r += 0.5; if (color.r < 5) "
-            "continue; if (color.r >= 5) break; } while (true); }", 0, 0, 0, 0, 5, 0, 0, 0);
-    test(r, "void main(inout half4 color) { do { color.r += 0.5; } while (false); }",
-         0, 0, 0, 0, 0.5, 0, 0, 0);
 }
 
 DEF_TEST(SkSLInterpreterFor, r) {
@@ -706,7 +644,11 @@ static void expect_failure(skiatest::Reporter* r, const char* src) {
     SkSL::Program::Settings settings;
     auto program = compiler.convertProgram(SkSL::Program::kGeneric_Kind,
                                            SkSL::String(src), settings);
-    REPORTER_ASSERT(r, program);
+    // Ideally, all failures would be detected by the IR generator, so this could be an assert.
+    // Some are still detected later (TODO: Fix this - skbug.com/11127).
+    if (!program) {
+        return;
+    }
 
     auto byteCode = compiler.toByteCode(*program);
     REPORTER_ASSERT(r, compiler.errorCount() > 0);
@@ -729,6 +671,12 @@ static void expect_run_failure(skiatest::Reporter* r, const char* src, float* in
     REPORTER_ASSERT(r, !result);
 }
 
+DEF_TEST(SkSLInterpreterRestrictLoops, r) {
+    // while and do-while loops are not allowed
+    expect_failure(r, "void main(inout float x) { while (x < 1) { x++; } }");
+    expect_failure(r, "void main(inout float x) { do { x++; } while (x < 1); }");
+}
+
 DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
     // Ensure that simple recursion is not allowed
     expect_failure(r, "float main() { return main() + 1; }");
@@ -737,7 +685,8 @@ DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
     expect_failure(r, "float foo(); float bar() { return foo(); } float foo() { return bar(); }");
 
     // returns are not allowed inside loops
-    expect_failure(r, "float main(float x) { while (x > 1) { return x; } return 0; }");
+    expect_failure(r, "float main(float x)"
+                      "{ for (int i = 0; i < 1; i++) { if (x > 2) { return x; } } return 0; }");
 }
 
 DEF_TEST(SkSLInterpreterEarlyReturn, r) {
@@ -777,11 +726,10 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
 }
 
 DEF_TEST(SkSLInterpreterArrayBounds, r) {
-    // Out of bounds array access at compile time
-    expect_failure(r, "float main(float x[4]) { return x[-1]; }");
-    expect_failure(r, "float2 main(float2 x[2]) { return x[2]; }");
+    // Out of bounds array access at compile time prevents a program from being generated at all
+    // (tested in ArrayIndexOutOfRange.sksl).
 
-    // Out of bounds array access at runtime is pinned, and we don't update any inout data
+    // Out of bounds array access at runtime is pinned, and we don't update any inout data.
     float in[3] = { -1.0f, 1.0f, 2.0f };
     expect_run_failure(r, "void main(inout float data[3]) { data[int(data[0])] = 0; }", in);
     REPORTER_ASSERT(r, in[0] == -1.0f && in[1] == 1.0f && in[2] == 2.0f);

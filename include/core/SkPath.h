@@ -1518,17 +1518,7 @@ public:
         bool            fForceClose;
         bool            fNeedClose;
         bool            fCloseLine;
-        enum SegmentState : uint8_t {
-            /** The current contour is empty. Starting processing or have just closed a contour. */
-            kEmptyContour_SegmentState,
-            /** Have seen a move, but nothing else. */
-            kAfterMove_SegmentState,
-            /** Have seen a primitive but not yet closed the path. Also the initial state. */
-            kAfterPrimitive_SegmentState
-        };
-        SegmentState    fSegmentState;
 
-        inline const SkPoint& cons_moveTo();
         Verb autoClose(SkPoint pts[2]);
     };
 
@@ -1696,6 +1686,10 @@ public:
 
     void dump() const { this->dump(nullptr, false); }
     void dumpHex() const { this->dump(nullptr, true); }
+
+    // Like dump(), but outputs for the SkPath::Make() factory
+    void dumpArrays(SkWStream* stream, bool dumpAsHex) const;
+    void dumpArrays() const { this->dumpArrays(nullptr, false); }
 
     /** Writes SkPath to buffer, returning the number of bytes written.
         Pass nullptr to obtain the storage size.

@@ -1954,7 +1954,7 @@ void SkXPSDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
     }
 }
 
-void SkXPSDevice::drawDevice(SkBaseDevice* dev,  const SkPaint&) {
+void SkXPSDevice::drawDevice(SkBaseDevice* dev, const SkSamplingOptions&, const SkPaint&) {
     SkXPSDevice* that = static_cast<SkXPSDevice*>(dev);
     SkASSERT(that->fTopTypefaces == this->fTopTypefaces);
 
@@ -2003,6 +2003,7 @@ void SkXPSDevice::drawOval( const SkRect& o, const SkPaint& p) {
 void SkXPSDevice::drawImageRect(const SkImage* image,
                                 const SkRect* src,
                                 const SkRect& dst,
+                                const SkSamplingOptions& sampling,
                                 const SkPaint& paint,
                                 SkCanvas::SrcRectConstraint constraint) {
     // TODO: support gpu images
@@ -2024,9 +2025,9 @@ void SkXPSDevice::drawImageRect(const SkImage* image,
         matrix.mapRect(&actualDst, srcBounds);
     }
 
-    auto bitmapShader = SkMakeBitmapShaderForPaint(paint, bitmap, SkTileMode::kClamp,
-                                                   SkTileMode::kClamp, &matrix,
-                                                   kNever_SkCopyPixelsMode);
+    auto bitmapShader = SkMakeBitmapShaderForPaint(paint, bitmap,
+                                                   SkTileMode::kClamp, SkTileMode::kClamp,
+                                                   sampling, &matrix, kNever_SkCopyPixelsMode);
     SkASSERT(bitmapShader);
     if (!bitmapShader) { return; }
     SkPaint paintWithShader(paint);

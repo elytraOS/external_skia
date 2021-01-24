@@ -58,7 +58,7 @@
 #include <memory>
 #include <utility>
 
-class GrRenderTargetContext;
+class GrSurfaceDrawContext;
 
 static const int kTileWidthHeight = 128;
 static const int kLabelWidth = 64;
@@ -765,9 +765,6 @@ protected:
             case Type::kFromGenerator:
                 name += "_imggen";
                 break;
-            case Type::kFromTexturesCopyToExternal:
-                name += "_fromtextureswithcopy";
-                break;
         }
 
         return name;
@@ -959,9 +956,6 @@ DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
 DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
                                     /* subset */ false,
                                     WackyYUVFormatsGM::Type::kFromPixmaps);)
-DEF_GM(return new WackyYUVFormatsGM(/* target cs */ false,
-                                    /* subset */ false,
-                                    WackyYUVFormatsGM::Type::kFromTexturesCopyToExternal);)
 
 class YUVMakeColorSpaceGM : public GpuGM {
 public:
@@ -1057,7 +1051,7 @@ protected:
         fImages[0][0] = fImages[0][1] = fImages[1][0] = fImages[1][1] = nullptr;
     }
 
-    DrawResult onDraw(GrRecordingContext* rContext, GrRenderTargetContext*,
+    DrawResult onDraw(GrRecordingContext* rContext, GrSurfaceDrawContext*,
                       SkCanvas* canvas, SkString* msg) override {
         SkASSERT(fImages[0][0] && fImages[0][1] && fImages[1][0] && fImages[1][1]);
 
@@ -1072,7 +1066,7 @@ protected:
             for (int opaque : { 0, 1 }) {
                 int y = kPad;
 
-                auto raster = SkImage::MakeFromBitmap(fOriginalBMs[opaque])
+                auto raster = fOriginalBMs[opaque].asImage()
                     ->makeColorSpace(fTargetColorSpace, nullptr);
                 canvas->drawImage(raster, x, y);
                 y += kTileWidthHeight + kPad;
@@ -1150,7 +1144,9 @@ static void split_into_yuv(const SkImage* img, SkYUVColorSpace cs, const SkPixma
 
 static void draw_diff(SkCanvas* canvas, SkScalar x, SkScalar y,
                       const SkImage* a, const SkImage* b) {
-    auto sh = SkShaders::Blend(SkBlendMode::kDifference, a->makeShader(), b->makeShader());
+    auto sh = SkShaders::Blend(SkBlendMode::kDifference,
+                               a->makeShader(SkSamplingOptions()),
+                               b->makeShader(SkSamplingOptions()));
     SkPaint paint;
     paint.setShader(sh);
     canvas->save();

@@ -136,10 +136,20 @@ SkColorSpace* SkImage::colorSpace() const { return fInfo.colorSpace(); }
 
 sk_sp<SkColorSpace> SkImage::refColorSpace() const { return fInfo.refColorSpace(); }
 
+#ifdef SK_SUPPORT_LEGACY_IMPLICIT_FILTERQUALITY
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkMatrix* localMatrix) const {
     const SkSamplingOptions* inherit_from_paint = nullptr;
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy, inherit_from_paint,
+                               localMatrix);
+}
+#endif
+
+sk_sp<SkShader> SkImage_makeShaderImplicitFilterQuality(const SkImage* image,
+                                                        SkTileMode tmx, SkTileMode tmy,
+                                                        const SkMatrix* localMatrix) {
+    const SkSamplingOptions* inherit_from_paint = nullptr;
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(image)), tmx, tmy, inherit_from_paint,
                                localMatrix);
 }
 
@@ -631,13 +641,15 @@ sk_sp<SkImage> SkMipmapBuilder::attachTo(const SkImage* src) {
     return src->withMipmaps(fMM);
 }
 
-SkSamplingOptions::SkSamplingOptions(SkFilterQuality fq) {
+SkSamplingOptions::SkSamplingOptions(SkFilterQuality fq, MediumBehavior behavior) {
     switch (fq) {
         case SkFilterQuality::kHigh_SkFilterQuality:
             *this = SkSamplingOptions(SkCubicResampler{1/3.0f, 1/3.0f});
             break;
         case SkFilterQuality::kMedium_SkFilterQuality:
-            *this = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNearest);
+            *this = SkSamplingOptions(SkFilterMode::kLinear,
+                                      behavior == kMedium_asMipmapNearest ? SkMipmapMode::kNearest
+                                                                          : SkMipmapMode::kLinear);
             break;
         case SkFilterQuality::kLow_SkFilterQuality:
             *this = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNone);

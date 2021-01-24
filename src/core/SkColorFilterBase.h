@@ -9,6 +9,7 @@
 #define SkColorFilterBase_DEFINED
 
 #include "include/core/SkColorFilter.h"
+#include "src/core/SkVM_fwd.h"
 
 class GrColorInfo;
 class GrFragmentProcessor;
@@ -19,13 +20,6 @@ class SkColorSpace;
 struct SkStageRec;
 using GrFPResult = std::tuple<bool, std::unique_ptr<GrFragmentProcessor>>;
 
-namespace skvm {
-    class Builder;
-    struct F32;
-    struct Uniforms;
-    struct Color;
-}  // namespace skvm
-
 class SkColorFilterBase : public SkColorFilter {
 public:
     SK_WARN_UNUSED_RESULT
@@ -34,6 +28,11 @@ public:
     SK_WARN_UNUSED_RESULT
     skvm::Color program(skvm::Builder*, skvm::Color,
                         SkColorSpace* dstCS, skvm::Uniforms*, SkArenaAlloc*) const;
+
+    SK_WARN_UNUSED_RESULT
+    skvm::HalfColor program(skvm::Builder*, skvm::HalfColor,
+                            SkColorSpace* dstCS, skvm::Uniforms*, SkArenaAlloc*) const;
+
 
     /** Returns the flags for this filter. Override in subclasses to return custom flags.
     */
@@ -84,8 +83,11 @@ protected:
 private:
     virtual bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const = 0;
 
-    virtual skvm::Color onProgram(skvm::Builder*, skvm::Color,
-                                  SkColorSpace* dstCS, skvm::Uniforms*, SkArenaAlloc*) const = 0;
+    // These defaults just call each other, so you must override at least one of them.
+    virtual skvm::Color     onProgram(skvm::Builder*, skvm::Color,
+                                      SkColorSpace* dstCS, skvm::Uniforms*, SkArenaAlloc*) const;
+    virtual skvm::HalfColor onProgram(skvm::Builder*, skvm::HalfColor,
+                                      SkColorSpace* dstCS, skvm::Uniforms*, SkArenaAlloc*) const;
 
     friend class SkColorFilter;
 

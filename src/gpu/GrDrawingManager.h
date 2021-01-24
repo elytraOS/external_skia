@@ -29,7 +29,7 @@ class GrOnFlushCallbackObject;
 class GrOpFlushState;
 class GrOpsTask;
 class GrRecordingContext;
-class GrRenderTargetContext;
+class GrSurfaceDrawContext;
 class GrRenderTargetProxy;
 class GrRenderTask;
 class GrSemaphore;
@@ -126,10 +126,7 @@ private:
 
     bool wasAbandoned() const;
 
-    // Closes the target's dependent render tasks (or, if not in sorting/opsTask-splitting-reduction
-    // mode, closes fActiveOpsTask) in preparation for us opening a new opsTask that will write to
-    // 'target'.
-    void closeRenderTasksForNewRenderTask(GrSurfaceProxy* target);
+    void closeActiveOpsTask();
 
     // return true if any GrRenderTasks were actually executed; false otherwise
     bool executeRenderTasks(int startIndex, int stopIndex, GrOpFlushState*,

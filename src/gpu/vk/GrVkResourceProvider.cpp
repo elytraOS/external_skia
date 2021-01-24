@@ -11,6 +11,7 @@
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkCommandPool.h"
 #include "src/gpu/vk/GrVkGpu.h"
@@ -28,6 +29,7 @@ GrVkResourceProvider::GrVkResourceProvider(GrVkGpu* gpu)
 GrVkResourceProvider::~GrVkResourceProvider() {
     SkASSERT(0 == fRenderPassArray.count());
     SkASSERT(0 == fExternalRenderPasses.count());
+    SkASSERT(0 == fMSAALoadPipelines.count());
     SkASSERT(VK_NULL_HANDLE == fPipelineCache);
     delete fPipelineStateCache;
 }
@@ -108,25 +110,29 @@ GrVkPipeline* GrVkResourceProvider::createPipeline(const GrProgramInfo& programI
 const GrVkRenderPass*
 GrVkResourceProvider::findCompatibleRenderPass(const GrVkRenderTarget& target,
                                                CompatibleRPHandle* compatibleHandle,
+                                               bool withResolve,
                                                bool withStencil,
-                                               SelfDependencyFlags selfDepFlags) {
+                                               SelfDependencyFlags selfDepFlags,
+                                               LoadFromResolve loadFromResolve) {
     // Get attachment information from render target. This includes which attachments the render
     // target has (color, stencil) and the attachments format and sample count.
     GrVkRenderPass::AttachmentFlags attachmentFlags;
     GrVkRenderPass::AttachmentsDescriptor attachmentsDesc;
-    target.getAttachmentsDescriptor(&attachmentsDesc, &attachmentFlags, withStencil);
+    target.getAttachmentsDescriptor(&attachmentsDesc, &attachmentFlags, withResolve, withStencil);
 
     return this->findCompatibleRenderPass(&attachmentsDesc, attachmentFlags, selfDepFlags,
-                                          compatibleHandle);
+                                          loadFromResolve, compatibleHandle);
 }
 
 const GrVkRenderPass*
 GrVkResourceProvider::findCompatibleRenderPass(GrVkRenderPass::AttachmentsDescriptor* desc,
                                                GrVkRenderPass::AttachmentFlags attachmentFlags,
                                                SelfDependencyFlags selfDepFlags,
+                                               LoadFromResolve loadFromResolve,
                                                CompatibleRPHandle* compatibleHandle) {
     for (int i = 0; i < fRenderPassArray.count(); ++i) {
-        if (fRenderPassArray[i].isCompatible(*desc, attachmentFlags, selfDepFlags)) {
+        if (fRenderPassArray[i].isCompatible(*desc, attachmentFlags, selfDepFlags,
+                                             loadFromResolve)) {
             const GrVkRenderPass* renderPass = fRenderPassArray[i].getCompatibleRenderPass();
             renderPass->ref();
             if (compatibleHandle) {
@@ -137,7 +143,7 @@ GrVkResourceProvider::findCompatibleRenderPass(GrVkRenderPass::AttachmentsDescri
     }
 
     GrVkRenderPass* renderPass = GrVkRenderPass::CreateSimple(fGpu, desc, attachmentFlags,
-                                                              selfDepFlags);
+                                                              selfDepFlags, loadFromResolve);
     if (!renderPass) {
         return nullptr;
     }
@@ -173,29 +179,35 @@ const GrVkRenderPass* GrVkResourceProvider::findCompatibleExternalRenderPass(
 const GrVkRenderPass* GrVkResourceProvider::findRenderPass(
         GrVkRenderTarget* target,
         const GrVkRenderPass::LoadStoreOps& colorOps,
+        const GrVkRenderPass::LoadStoreOps& resolveOps,
         const GrVkRenderPass::LoadStoreOps& stencilOps,
         CompatibleRPHandle* compatibleHandle,
+        bool withResolve,
         bool withStencil,
-        SelfDependencyFlags selfDepFlags) {
+        SelfDependencyFlags selfDepFlags,
+        LoadFromResolve loadFromResolve) {
     GrVkResourceProvider::CompatibleRPHandle tempRPHandle;
     GrVkResourceProvider::CompatibleRPHandle* pRPHandle = compatibleHandle ? compatibleHandle
                                                                            : &tempRPHandle;
-    *pRPHandle = target->compatibleRenderPassHandle(withStencil, selfDepFlags);
+    *pRPHandle = target->compatibleRenderPassHandle(withResolve, withStencil, selfDepFlags,
+                                                    loadFromResolve);
     if (!pRPHandle->isValid()) {
         return nullptr;
     }
 
-    return this->findRenderPass(*pRPHandle, colorOps, stencilOps);
+    return this->findRenderPass(*pRPHandle, colorOps, resolveOps, stencilOps);
 }
 
 const GrVkRenderPass*
 GrVkResourceProvider::findRenderPass(const CompatibleRPHandle& compatibleHandle,
                                      const GrVkRenderPass::LoadStoreOps& colorOps,
+                                     const GrVkRenderPass::LoadStoreOps& resolveOps,
                                      const GrVkRenderPass::LoadStoreOps& stencilOps) {
     SkASSERT(compatibleHandle.isValid() && compatibleHandle.toIndex() < fRenderPassArray.count());
     CompatibleRenderPassSet& compatibleSet = fRenderPassArray[compatibleHandle.toIndex()];
     const GrVkRenderPass* renderPass = compatibleSet.getRenderPass(fGpu,
                                                                    colorOps,
+                                                                   resolveOps,
                                                                    stencilOps);
     if (!renderPass) {
         return nullptr;
@@ -263,6 +275,65 @@ GrVkPipelineState* GrVkResourceProvider::findOrCreateCompatiblePipelineState(
     }
 
     return tmp;
+}
+
+const GrVkPipeline* GrVkResourceProvider::findOrCreateMSAALoadPipeline(
+        const GrVkRenderPass& renderPass,
+        const GrVkRenderTarget* dst,
+        VkPipelineShaderStageCreateInfo* shaderStageInfo,
+        VkPipelineLayout pipelineLayout) {
+    // Find or Create a compatible pipeline
+    const GrVkPipeline* pipeline = nullptr;
+    for (int i = 0; i < fMSAALoadPipelines.count() && !pipeline; ++i) {
+        if (fMSAALoadPipelines[i].fRenderPass->isCompatible(renderPass)) {
+            pipeline = fMSAALoadPipelines[i].fPipeline;
+        }
+    }
+    if (!pipeline) {
+        pipeline = GrVkPipeline::Create(
+                fGpu,
+                /*vertexAttribs=*/GrPrimitiveProcessor::AttributeSet(),
+                /*instanceAttribs=*/GrPrimitiveProcessor::AttributeSet(),
+                GrPrimitiveType::kTriangleStrip,
+                kTopLeft_GrSurfaceOrigin,
+                GrStencilSettings(),
+                dst->numSamples(),
+                /*isHWantialiasState=*/false,
+                /*isMixedSampled=*/false,
+                GrXferProcessor::BlendInfo(),
+                /*isWireframe=*/false,
+                /*useConservativeRaster=*/false,
+                /*subpass=*/0,
+                shaderStageInfo,
+                /*shaderStageCount=*/2,
+                renderPass.vkRenderPass(),
+                pipelineLayout,
+                /*ownsLayout=*/false,
+                this->pipelineCache());
+        if (!pipeline) {
+            return nullptr;
+        }
+        fMSAALoadPipelines.push_back({pipeline, &renderPass});
+    }
+    SkASSERT(pipeline);
+    pipeline->ref();
+    return pipeline;
+}
+
+void GrVkResourceProvider::getZeroSamplerDescriptorSetHandle(
+        GrVkDescriptorSetManager::Handle* handle) {
+    SkASSERT(handle);
+    for (int i = 0; i < fDescriptorSetManagers.count(); ++i) {
+        if (fDescriptorSetManagers[i]->isZeroSampler()) {
+            *handle = GrVkDescriptorSetManager::Handle(i);
+            return;
+        }
+    }
+
+    GrVkDescriptorSetManager* dsm =
+            GrVkDescriptorSetManager::CreateZeroSamplerManager(fGpu);
+    fDescriptorSetManagers.emplace_back(dsm);
+    *handle = GrVkDescriptorSetManager::Handle(fDescriptorSetManagers.count() - 1);
 }
 
 void GrVkResourceProvider::getSamplerDescriptorSetHandle(VkDescriptorType type,
@@ -409,6 +480,12 @@ void GrVkResourceProvider::destroyResources(bool deviceLost) {
         taskGroup->wait();
     }
 
+    // Release all msaa load pipelines
+    for (int i = 0; i < fMSAALoadPipelines.count(); ++i) {
+        fMSAALoadPipelines[i].fPipeline->unref();
+    }
+    fMSAALoadPipelines.reset();
+
     // loop over all render pass sets to make sure we destroy all the internal VkRenderPasses
     for (int i = 0; i < fRenderPassArray.count(); ++i) {
         fRenderPassArray[i].releaseResources();
@@ -528,26 +605,29 @@ GrVkResourceProvider::CompatibleRenderPassSet::CompatibleRenderPassSet(GrVkRende
 bool GrVkResourceProvider::CompatibleRenderPassSet::isCompatible(
         const GrVkRenderPass::AttachmentsDescriptor& attachmentsDescriptor,
         GrVkRenderPass::AttachmentFlags attachmentFlags,
-        SelfDependencyFlags selfDepFlags) const {
+        SelfDependencyFlags selfDepFlags,
+        LoadFromResolve loadFromResolve) const {
     // The first GrVkRenderpass should always exists since we create the basic load store
     // render pass on create
     SkASSERT(fRenderPasses[0]);
-    return fRenderPasses[0]->isCompatible(attachmentsDescriptor, attachmentFlags,selfDepFlags);
+    return fRenderPasses[0]->isCompatible(attachmentsDescriptor, attachmentFlags, selfDepFlags,
+                                          loadFromResolve);
 }
 
 GrVkRenderPass* GrVkResourceProvider::CompatibleRenderPassSet::getRenderPass(
         GrVkGpu* gpu,
         const GrVkRenderPass::LoadStoreOps& colorOps,
+        const GrVkRenderPass::LoadStoreOps& resolveOps,
         const GrVkRenderPass::LoadStoreOps& stencilOps) {
     for (int i = 0; i < fRenderPasses.count(); ++i) {
         int idx = (i + fLastReturnedIndex) % fRenderPasses.count();
-        if (fRenderPasses[idx]->equalLoadStoreOps(colorOps, stencilOps)) {
+        if (fRenderPasses[idx]->equalLoadStoreOps(colorOps, resolveOps, stencilOps)) {
             fLastReturnedIndex = idx;
             return fRenderPasses[idx];
         }
     }
     GrVkRenderPass* renderPass = GrVkRenderPass::Create(gpu, *this->getCompatibleRenderPass(),
-                                                        colorOps, stencilOps);
+                                                        colorOps, resolveOps, stencilOps);
     if (!renderPass) {
         return nullptr;
     }

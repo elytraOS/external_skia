@@ -18,8 +18,8 @@
 #include "src/gpu/GrOpsTask.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrSurface.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureRenderTargetProxy.h"
 
@@ -275,28 +275,35 @@ sk_sp<GrSurfaceProxy> GrSurfaceProxy::Copy(GrRecordingContext* context,
     SkASSERT(format.isValid());
 
     if (src->backendFormat().textureType() != GrTextureType::kExternal) {
-        auto dstContext =
-                GrSurfaceContext::Make(context, {width, height}, format, GrRenderable::kNo, 1,
-                                       mipMapped, src->isProtected(), origin, GrColorType::kUnknown,
-                                       kUnknown_SkAlphaType, nullptr, fit, budgeted);
+        GrImageInfo info(GrColorType::kUnknown, kUnknown_SkAlphaType, nullptr, {width, height});
+        auto dstContext = GrSurfaceContext::Make(context,
+                                                 info,
+                                                 format,
+                                                 fit,
+                                                 origin,
+                                                 GrRenderable::kNo,
+                                                 1,
+                                                 mipMapped,
+                                                 src->isProtected(),
+                                                 budgeted);
         if (dstContext && dstContext->copy(src, srcRect, dstPoint)) {
             return dstContext->asSurfaceProxyRef();
         }
     }
     if (src->asTextureProxy()) {
-        auto dstContext = GrRenderTargetContext::Make(context,
-                                                      nullptr,
-                                                      fit,
-                                                      {width, height},
-                                                      format,
-                                                      /* sample count*/ 1,
-                                                      mipMapped,
-                                                      src->isProtected(),
-                                                      GrSwizzle::RGBA(),
-                                                      GrSwizzle::RGBA(),
-                                                      origin,
-                                                      budgeted,
-                                                      /*surface props*/ nullptr);
+        auto dstContext = GrSurfaceFillContext::Make(context,
+                                                     kUnknown_SkAlphaType,
+                                                     nullptr,
+                                                     {width, height},
+                                                     fit,
+                                                     format,
+                                                     1,
+                                                     mipMapped,
+                                                     src->isProtected(),
+                                                     GrSwizzle::RGBA(),
+                                                     GrSwizzle::RGBA(),
+                                                     origin,
+                                                     budgeted);
         GrSurfaceProxyView view(sk_ref_sp(src), origin, GrSwizzle::RGBA());
         if (dstContext && dstContext->blitTexture(std::move(view), srcRect, dstPoint)) {
             return dstContext->asSurfaceProxyRef();
