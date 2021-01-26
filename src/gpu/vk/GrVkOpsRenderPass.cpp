@@ -180,7 +180,13 @@ bool GrVkOpsRenderPass::beginRenderPass(const VkClearValue& clearColor,
     bool firstSubpassUsesSecondaryCB =
             loadFromResolve != LoadFromResolve::kLoad && SkToBool(fCurrentSecondaryCommandBuffer);
 
-    auto nativeBounds = GrNativeRect::MakeRelativeTo(fOrigin, vkRT->height(), fBounds);
+    bool useFullBounds = fCurrentRenderPass->hasResolveAttachment() &&
+                         fGpu->vkCaps().mustLoadFullImageWithDiscardableMSAA();
+
+    auto nativeBounds = GrNativeRect::MakeRelativeTo(
+            fOrigin, vkRT->height(),
+            useFullBounds ? SkIRect::MakeWH(vkRT->width(), vkRT->height()) : fBounds);
+
     // The bounds we use for the render pass should be of the granularity supported
     // by the device.
     const VkExtent2D& granularity = fCurrentRenderPass->granularity();
@@ -432,6 +438,7 @@ void GrVkOpsRenderPass::reset() {
     fSelfDependencyFlags = GrVkRenderPass::SelfDependencyFlags::kNone;
 
     fLoadFromResolve = LoadFromResolve::kNo;
+    fOverridePipelinesForResolveLoad = false;
 
 #ifdef SK_DEBUG
     fIsActive = false;
@@ -552,6 +559,13 @@ void GrVkOpsRenderPass::addAdditionalRenderPass(bool mustUseSecondaryCommandBuff
     bool withStencil = fCurrentRenderPass->hasStencilAttachment();
     bool withResolve = fCurrentRenderPass->hasResolveAttachment();
 
+    // If we have a resolve attachment we must do a resolve load in the new render pass since we
+    // broke up the original one. GrProgramInfos were made without any knowledge that the render
+    // pass may be split up. Thus they may try to make VkPipelines that only use one subpass. We
+    // need to override that to make sure they are compatible with the extra load subpass.
+    fOverridePipelinesForResolveLoad |=
+            withResolve && fCurrentRenderPass->loadFromResolve() != LoadFromResolve::kLoad;
+
     GrVkRenderPass::LoadStoreOps vkColorOps(VK_ATTACHMENT_LOAD_OP_LOAD,
                                             VK_ATTACHMENT_STORE_OP_STORE);
     GrVkRenderPass::LoadStoreOps vkResolveOps(VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -654,7 +668,7 @@ bool GrVkOpsRenderPass::onBindPipeline(const GrProgramInfo& programInfo, const S
     VkRenderPass compatibleRenderPass = fCurrentRenderPass->vkRenderPass();
 
     fCurrentPipelineState = fGpu->resourceProvider().findOrCreateCompatiblePipelineState(
-            fRenderTarget, programInfo, compatibleRenderPass);
+            fRenderTarget, programInfo, compatibleRenderPass, fOverridePipelinesForResolveLoad);
     if (!fCurrentPipelineState) {
         return false;
     }
@@ -798,11 +812,22 @@ void GrVkOpsRenderPass::onDrawIndirect(const GrBuffer* drawIndirectBuffer, size_
         SkASSERT(fGpu->isDeviceLost());
         return;
     }
+    const GrVkCaps& caps = fGpu->vkCaps();
+    SkASSERT(caps.nativeDrawIndirectSupport());
     SkASSERT(fCurrentPipelineState);
-    this->currentCommandBuffer()->drawIndirect(
-            fGpu, static_cast<const GrVkMeshBuffer*>(drawIndirectBuffer), offset, drawCount,
-            sizeof(GrDrawIndirectCommand));
-    fGpu->stats()->incNumDraws();
+
+    const uint32_t maxDrawCount = caps.maxDrawIndirectDrawCount();
+    uint32_t remainingDraws = drawCount;
+    const size_t stride = sizeof(GrDrawIndirectCommand);
+    while (remainingDraws >= 1) {
+        uint32_t currDrawCount = std::min(remainingDraws, maxDrawCount);
+        this->currentCommandBuffer()->drawIndirect(
+                fGpu, static_cast<const GrVkMeshBuffer*>(drawIndirectBuffer), offset, currDrawCount,
+                stride);
+        remainingDraws -= currDrawCount;
+        offset += stride * currDrawCount;
+        fGpu->stats()->incNumDraws();
+    }
     fCurrentCBIsEmpty = false;
 }
 
@@ -813,11 +838,21 @@ void GrVkOpsRenderPass::onDrawIndexedIndirect(const GrBuffer* drawIndirectBuffer
         SkASSERT(fGpu->isDeviceLost());
         return;
     }
+    const GrVkCaps& caps = fGpu->vkCaps();
+    SkASSERT(caps.nativeDrawIndirectSupport());
     SkASSERT(fCurrentPipelineState);
-    this->currentCommandBuffer()->drawIndexedIndirect(
-            fGpu, static_cast<const GrVkMeshBuffer*>(drawIndirectBuffer), offset, drawCount,
-            sizeof(GrDrawIndexedIndirectCommand));
-    fGpu->stats()->incNumDraws();
+    const uint32_t maxDrawCount = caps.maxDrawIndirectDrawCount();
+    uint32_t remainingDraws = drawCount;
+    const size_t stride = sizeof(GrDrawIndexedIndirectCommand);
+    while (remainingDraws >= 1) {
+        uint32_t currDrawCount = std::min(remainingDraws, maxDrawCount);
+        this->currentCommandBuffer()->drawIndexedIndirect(
+                fGpu, static_cast<const GrVkMeshBuffer*>(drawIndirectBuffer), offset, currDrawCount,
+                stride);
+        remainingDraws -= currDrawCount;
+        offset += stride * currDrawCount;
+        fGpu->stats()->incNumDraws();
+    }
     fCurrentCBIsEmpty = false;
 }
 

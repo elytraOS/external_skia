@@ -45,11 +45,12 @@ public:
     // Set up any initial vk objects
     void init();
 
-    GrVkPipeline* createPipeline(const GrProgramInfo&,
-                                 VkPipelineShaderStageCreateInfo* shaderStageInfo,
-                                 int shaderStageCount,
-                                 VkRenderPass compatibleRenderPass,
-                                 VkPipelineLayout layout);
+    sk_sp<const GrVkPipeline> makePipeline(const GrProgramInfo&,
+                                           VkPipelineShaderStageCreateInfo* shaderStageInfo,
+                                           int shaderStageCount,
+                                           VkRenderPass compatibleRenderPass,
+                                           VkPipelineLayout layout,
+                                           uint32_t subpass);
 
     GR_DEFINE_RESOURCE_HANDLE_CLASS(CompatibleRPHandle);
 
@@ -129,7 +130,8 @@ public:
     GrVkPipelineState* findOrCreateCompatiblePipelineState(
             GrRenderTarget*,
             const GrProgramInfo&,
-            VkRenderPass compatibleRenderPass);
+            VkRenderPass compatibleRenderPass,
+            bool overrideSubpassForResolveLoad);
 
     GrVkPipelineState* findOrCreateCompatiblePipelineState(
             const GrProgramDesc&,
@@ -137,7 +139,7 @@ public:
             VkRenderPass compatibleRenderPass,
             GrGpu::Stats::ProgramCacheResult* stat);
 
-    const GrVkPipeline* findOrCreateMSAALoadPipeline(
+    sk_sp<const GrVkPipeline> findOrCreateMSAALoadPipeline(
             const GrVkRenderPass& renderPass,
             const GrVkRenderTarget* dst,
             VkPipelineShaderStageCreateInfo*,
@@ -224,13 +226,14 @@ private:
         void release();
         GrVkPipelineState* findOrCreatePipelineState(GrRenderTarget*,
                                                      const GrProgramInfo&,
-                                                     VkRenderPass compatibleRenderPass);
+                                                     VkRenderPass compatibleRenderPass,
+                                                     bool overrideSubpassForResolveLoad);
         GrVkPipelineState* findOrCreatePipelineState(const GrProgramDesc& desc,
                                                      const GrProgramInfo& programInfo,
                                                      VkRenderPass compatibleRenderPass,
                                                      GrGpu::Stats::ProgramCacheResult* stat) {
             return this->findOrCreatePipelineState(nullptr, desc, programInfo,
-                                                   compatibleRenderPass, stat);
+                                                   compatibleRenderPass, false, stat);
         }
 
     private:
@@ -240,6 +243,7 @@ private:
                                                      const GrProgramDesc&,
                                                      const GrProgramInfo&,
                                                      VkRenderPass compatibleRenderPass,
+                                                     bool overrideSubpassForResolveLoad,
                                                      GrGpu::Stats::ProgramCacheResult*);
 
         struct DescHash {
@@ -292,7 +296,7 @@ private:
     VkPipelineCache fPipelineCache;
 
     struct MSAALoadPipeline {
-        const GrVkPipeline* fPipeline;
+        sk_sp<const GrVkPipeline> fPipeline;
         const GrVkRenderPass* fRenderPass;
     };
 

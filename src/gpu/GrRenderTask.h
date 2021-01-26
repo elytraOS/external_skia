@@ -10,11 +10,13 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/private/SkTArray.h"
+#include "src/core/SkTInternalLList.h"
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureResolveManager.h"
 #include "src/gpu/ops/GrOp.h"
 
+class GrMockRenderTask;
 class GrOpFlushState;
 class GrOpsTask;
 class GrResourceAllocator;
@@ -62,6 +64,8 @@ public:
      */
     void addDependenciesFromOtherTask(GrRenderTask* otherTask);
 
+    SkSpan<GrRenderTask*> dependencies() { return SkSpan<GrRenderTask*>(fDependencies); }
+
     /*
      * Does this renderTask depend on 'dependedOn'?
      */
@@ -83,7 +87,10 @@ public:
     /*
      * Dump out the GrRenderTask dependency DAG
      */
-    virtual void dump(bool printDependencies) const;
+    virtual void dump(const SkString& label,
+                      SkString indent,
+                      bool printDependencies,
+                      bool close) const;
     virtual const char* name() const = 0;
 #endif
 
@@ -121,6 +128,9 @@ public:
     // In addition to just the GrSurface being allocated, has the stencil buffer been allocated (if
     // it is required)?
     bool isInstantiated() const;
+
+    // Used by GrRenderTaskCluster.
+    SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrRenderTask);
 
 protected:
     SkDEBUGCODE(bool deferredProxiesAreInstantiated() const;)
@@ -182,6 +192,7 @@ protected:
 private:
     // for TopoSortTraits, fTextureResolveTask, closeThoseWhoDependOnMe, addDependency
     friend class GrDrawingManager;
+    friend class GrMockRenderTask;
 
     // Derived classes can override to indicate usage of proxies _other than target proxies_.
     // GrRenderTask itself will handle checking the target proxies.
@@ -189,7 +200,7 @@ private:
 
     void addDependency(GrRenderTask* dependedOn);
     void addDependent(GrRenderTask* dependent);
-    SkDEBUGCODE(bool isDependedent(const GrRenderTask* dependent) const;)
+    SkDEBUGCODE(bool isDependent(const GrRenderTask* dependent) const;)
     SkDEBUGCODE(void validate() const;)
     void closeThoseWhoDependOnMe(const GrCaps&);
 
@@ -222,7 +233,6 @@ private:
             return renderTask->fDependencies[index];
         }
     };
-
 
     virtual void onPrePrepare(GrRecordingContext*) {} // Only the GrOpsTask currently overrides this
     virtual void onPrepare(GrOpFlushState*) {} // Only GrOpsTask and GrDDLTask override this virtual

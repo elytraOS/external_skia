@@ -124,6 +124,26 @@ export interface CanvasKit {
     RRectXY(rect: InputRect, rx: number, ry: number): RRect;
 
     /**
+     * Generate bounding box for shadows relative to path. Includes both the ambient and spot
+     * shadow bounds. This pairs with Canvas.drawShadow().
+     * See SkShadowUtils.h for more details.
+     * @param ctm - Current transformation matrix to device space.
+     * @param path - The occluder used to generate the shadows.
+     * @param zPlaneParams - Values for the plane function which returns the Z offset of the
+     *                       occluder from the canvas based on local x and y values (the current
+     *                       matrix is not applied).
+     * @param lightPos - The 3D position of the light relative to the canvas plane. This is
+     *                   independent of the canvas's current matrix.
+     * @param lightRadius - The radius of the disc light.
+     * @param flags - See SkShadowFlags.h; 0 means use default options.
+     * @param dstRect - if provided, the bounds will be copied into this rect instead of allocating
+     *                  a new one.
+     * @returns The bounding rectangle or null if it could not be computed.
+     */
+    getShadowLocalBounds(ctm: InputMatrix, path: Path, zPlaneParams: Vector3, lightPos: Vector3,
+                         lightRadius: number, flags: number, dstRect?: Rect): Rect | null;
+
+    /**
      * Malloc returns a TypedArray backed by the C++ memory of the
      * given length. It should only be used by advanced users who
      * can manage memory and initialize values properly. When used
@@ -453,6 +473,21 @@ export interface CanvasKit {
 
     readonly SaveLayerInitWithPrevious: SaveLayerFlag;
     readonly SaveLayerF16ColorType: SaveLayerFlag;
+
+    /**
+     * Use this shadow flag to indicate the occluding object is not opaque. Knowing that the
+     * occluder is opaque allows us to cull shadow geometry behind it and improve performance.
+     */
+    readonly ShadowTransparentOccluder: number;
+    /**
+     * Use this shadow flag to not use analytic shadows.
+     */
+    readonly ShadowGeometricOnly: number;
+    /**
+     * Use this shadow flag to indicate the light position represents a direction and light radius
+     * is blur radius at elevation 1.
+     */
+    readonly ShadowDirectionalLight: number;
 
     readonly gpu: boolean; // if GPU code was compiled in
 
@@ -3119,16 +3154,6 @@ export interface ShaderFactory {
      */
     MakeFractalNoise(baseFreqX: number, baseFreqY: number, octaves: number, seed: number,
                      tileW: number, tileH: number): Shader;
-
-    /**
-     * Returns a shader with Improved Perlin Noise.
-     * See SkPerlinNoiseShader.h for more details
-     * @param baseFreqX - base frequency in the X direction; range [0.0, 1.0]
-     * @param baseFreqY - base frequency in the Y direction; range [0.0, 1.0]
-     * @param octaves
-     * @param z - like seed, but minor variations to z will only slightly change the noise.
-     */
-    MakeImprovedNoise(baseFreqX: number, baseFreqY: number, octaves: number, z: number): Shader;
 
     /**
      * Returns a shader is a linear interpolation combines the given shaders with a BlendMode.

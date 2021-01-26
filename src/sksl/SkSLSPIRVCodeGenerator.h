@@ -12,6 +12,7 @@
 #include <tuple>
 #include <unordered_map>
 
+#include "src/core/SkOpts.h"
 #include "src/sksl/SkSLCodeGenerator.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLStringStream.h"
@@ -41,49 +42,50 @@
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/spirv.h"
 
-union ConstantValue {
-    ConstantValue(int64_t i)
-        : fInt(i) {
-        SkASSERT(sizeof(*this) == sizeof(int64_t));
-    }
+namespace SkSL {
 
-    ConstantValue(SKSL_FLOAT f) {
-        memset(this, 0, sizeof(*this));
-        fFloat = f;
+struct SPIRVNumberConstant {
+    bool operator==(const SPIRVNumberConstant& that) const {
+        return fValueBits == that.fValueBits &&
+               fKind      == that.fKind;
     }
-
-    bool operator==(const ConstantValue& other) const {
-        return fInt == other.fInt;
-    }
-
-    int64_t fInt;
-    SKSL_FLOAT fFloat;
+    int64_t fValueBits;  // contains either an SKSL_INT or zero-padded bits from an SKSL_FLOAT
+    SkSL::Type::NumberKind fKind;
 };
 
-enum class ConstantType {
-    kInt,
-    kUInt,
-    kShort,
-    kUShort,
-    kFloat,
-    kDouble,
-    kHalf,
+struct SPIRVVectorConstant {
+    bool operator==(const SPIRVVectorConstant& that) const {
+        return fTypeId     == that.fTypeId &&
+               fValueId[0] == that.fValueId[0] &&
+               fValueId[1] == that.fValueId[1] &&
+               fValueId[2] == that.fValueId[2] &&
+               fValueId[3] == that.fValueId[3];
+    }
+    SpvId fTypeId;
+    SpvId fValueId[4];
 };
+
+}  // namespace SkSL
 
 namespace std {
 
 template <>
-struct hash<std::pair<ConstantValue, ConstantType>> {
-    size_t operator()(const std::pair<ConstantValue, ConstantType>& key) const {
-        return key.first.fInt ^ (int) key.second;
+struct hash<SkSL::SPIRVNumberConstant> {
+    size_t operator()(const SkSL::SPIRVNumberConstant& key) const {
+        return key.fValueBits ^ (int)key.fKind;
+    }
+};
+
+template <>
+struct hash<SkSL::SPIRVVectorConstant> {
+    size_t operator()(const SkSL::SPIRVVectorConstant& key) const {
+        return SkOpts::hash(&key, sizeof(key));
     }
 };
 
 }  // namespace std
 
 namespace SkSL {
-
-#define kLast_Capability SpvCapabilityMultiViewport
 
 /**
  * Converts a Program into a SPIR-V binary.
@@ -225,9 +227,23 @@ private:
 
     SpvId writeFloatConstructor(const Constructor& c, OutputStream& out);
 
+    SpvId castScalarToFloat(SpvId inputId, const Type& inputType, const Type& outputType,
+                            OutputStream& out);
+
     SpvId writeIntConstructor(const Constructor& c, OutputStream& out);
 
+    SpvId castScalarToSignedInt(SpvId inputId, const Type& inputType, const Type& outputType,
+                                OutputStream& out);
+
     SpvId writeUIntConstructor(const Constructor& c, OutputStream& out);
+
+    SpvId castScalarToUnsignedInt(SpvId inputId, const Type& inputType, const Type& outputType,
+                                  OutputStream& out);
+
+    SpvId writeBooleanConstructor(const Constructor& c, OutputStream& out);
+
+    SpvId castScalarToBoolean(SpvId inputId, const Type& inputType, const Type& outputType,
+                              OutputStream& out);
 
     /**
      * Writes a matrix with the diagonal entries all equal to the provided expression, and all other
@@ -390,7 +406,8 @@ private:
 
     SpvId fBoolTrue;
     SpvId fBoolFalse;
-    std::unordered_map<std::pair<ConstantValue, ConstantType>, SpvId> fNumberConstants;
+    std::unordered_map<SPIRVNumberConstant, SpvId> fNumberConstants;
+    std::unordered_map<SPIRVVectorConstant, SpvId> fVectorConstants;
     bool fSetupFragPosition;
     // label of the current block, or 0 if we are not in a block
     SpvId fCurrentBlock;

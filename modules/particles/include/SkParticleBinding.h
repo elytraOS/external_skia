@@ -10,7 +10,7 @@
 
 #include "include/core/SkString.h"
 #include "modules/particles/include/SkReflected.h"
-#include "src/sksl/SkSLExternalValue.h"
+#include "src/sksl/SkSLExternalFunction.h"
 
 #include <memory>
 
@@ -25,19 +25,14 @@ namespace SkSL {
     class Compiler;
 }  // namespace SkSL
 
-class SkParticleExternalValue : public SkSL::ExternalValue {
+class SkParticleExternalValue : public SkSL::ExternalFunction {
 public:
     SkParticleExternalValue(const char* name, SkSL::Compiler& compiler, const SkSL::Type& type)
-        : SkSL::ExternalValue(name, type)
-        , fCompiler(compiler)
-        , fEffect(nullptr) {}
-
-    void setEffect(SkParticleEffect* effect) { fEffect = effect; }
+        : SkSL::ExternalFunction(name, type)
+        , fCompiler(compiler) {}
 
 protected:
     SkSL::Compiler&   fCompiler;
-
-    SkParticleEffect* fEffect;
 };
 
 class SkParticleBinding : public SkReflected {
@@ -59,11 +54,6 @@ public:
      * Each binding is a callable object, so the SkSL name behaves like a function. The behavior of
      * each kind of binding is described below.
      */
-
-    // void name(loop) -- Creates an effect instance. Effect will loop if 'loop' is true, otherwise
-    // it's a one-shot. The new effect inherits all properties from the calling effect or particle.
-    static sk_sp<SkParticleBinding> MakeEffect(const char* name,
-                                               sk_sp<SkParticleEffectParams> effect);
 
     // float4 name(xy) -- Fetches RGBA data from an image. 'xy' are normalized image coordinates.
     static sk_sp<SkParticleBinding> MakeImage(const char* name,

@@ -68,6 +68,7 @@ void MetalCodeGenerator::setupIntrinsics() {
     fIntrinsicMap[String("radians")]            = kRadians_IntrinsicKind;
     fIntrinsicMap[String("reflect")]            = kReflect_IntrinsicKind;
     fIntrinsicMap[String("refract")]            = kRefract_IntrinsicKind;
+    fIntrinsicMap[String("roundEven")]          = kRoundEven_IntrinsicKind;
     fIntrinsicMap[String("sample")]             = kTexture_IntrinsicKind;
 }
 
@@ -118,12 +119,12 @@ String MetalCodeGenerator::typeName(const Type& type) {
         case Type::TypeKind::kEnum:
             return "int";
         default:
-            if (type == *fContext.fHalf_Type) {
+            if (type == *fContext.fTypes.fHalf) {
                 // FIXME - Currently only supporting floats in MSL to avoid type coercion issues.
-                return fContext.fFloat_Type->name();
-            } else if (type == *fContext.fByte_Type) {
+                return fContext.fTypes.fFloat->name();
+            } else if (type == *fContext.fTypes.fByte) {
                 return "char";
-            } else if (type == *fContext.fUByte_Type) {
+            } else if (type == *fContext.fTypes.fUByte) {
                 return "uchar";
             } else {
                 return type.name();
@@ -311,7 +312,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
         this->writeLine(";");
     }
 
-    // [int _skResult = ] myFunction(inputs, outputs, globals, _var0, _var1, _var2, _var3);
+    // [int _skResult = ] myFunction(inputs, outputs, _skGlobals, _var0, _var1, _var2, _var3);
     bool hasResult = (call.type().name() != "void");
     if (hasResult) {
         this->writeBaseType(call.type());
@@ -561,14 +562,14 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
             this->write(SAMPLER_SUFFIX);
             this->write(", ");
             const Type& arg1Type = arguments[1]->type();
-            if (arg1Type == *fContext.fFloat3_Type) {
+            if (arg1Type == *fContext.fTypes.fFloat3) {
                 // have to store the vector in a temp variable to avoid double evaluating it
                 String tmpVar = this->getTempVariable(arg1Type);
                 this->write("(" + tmpVar + " = ");
                 this->writeExpression(*arguments[1], kSequence_Precedence);
                 this->write(", " + tmpVar + ".xy / " + tmpVar + ".z))");
             } else {
-                SkASSERT(arg1Type == *fContext.fFloat2_Type);
+                SkASSERT(arg1Type == *fContext.fTypes.fFloat2);
                 this->writeExpression(*arguments[1], kSequence_Precedence);
                 this->write(")");
             }
@@ -577,7 +578,7 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
         case kMod_IntrinsicKind: {
             // fmod(x, y) in metal calculates x - y * trunc(x / y) instead of x - y * floor(x / y)
             String tmpX = this->getTempVariable(arguments[0]->type());
-            String tmpY = this->getTempVariable(arguments[0]->type());
+            String tmpY = this->getTempVariable(arguments[1]->type());
             this->write("(" + tmpX + " = ");
             this->writeExpression(*arguments[0], kSequence_Precedence);
             this->write(", " + tmpY + " = ");
@@ -720,6 +721,11 @@ void MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
             } else {
                 this->writeSimpleIntrinsic(c);
             }
+            break;
+        }
+        case kRoundEven_IntrinsicKind: {
+            this->write("rint");
+            this->writeArgumentList(c.arguments());
             break;
         }
         case kBitCount_IntrinsicKind: {
@@ -1130,7 +1136,7 @@ void MetalCodeGenerator::writeFragCoord() {
 
 void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
     // When assembling out-param helper functions, we copy variables into local clones with matching
-    // names. We never want to prepend "_in." or "_globals->" when writing these variables since
+    // names. We never want to prepend "_in." or "_skGlobals." when writing these variables since
     // we're actually targeting the clones.
     if (fIgnoreVariableReferenceModifiers) {
         this->writeName(ref.variable()->name());
@@ -1166,7 +1172,7 @@ void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
                            var.type().typeKind() != Type::TypeKind::kSampler) {
                     this->write("_uniforms.");
                 } else {
-                    this->write("_globals->");
+                    this->write("_skGlobals.");
                 }
             }
             this->writeName(var.name());
@@ -1195,7 +1201,7 @@ void MetalCodeGenerator::writeFieldAccess(const FieldAccess& f) {
                 this->write("_out->sk_PointSize");
             } else {
                 if (FieldAccess::OwnerKind::kAnonymousInterfaceBlock == f.ownerKind()) {
-                    this->write("_globals->");
+                    this->write("_skGlobals.");
                     this->write(fInterfaceBlockNameMap[fInterfaceBlockMap[field]]);
                     this->write("->");
                 }
@@ -1364,11 +1370,11 @@ void MetalCodeGenerator::writeBoolLiteral(const BoolLiteral& b) {
 
 void MetalCodeGenerator::writeIntLiteral(const IntLiteral& i) {
     const Type& type = i.type();
-    if (type == *fContext.fUInt_Type) {
+    if (type == *fContext.fTypes.fUInt) {
         this->write(to_string(i.value() & 0xffffffff) + "u");
-    } else if (type == *fContext.fUShort_Type) {
+    } else if (type == *fContext.fTypes.fUShort) {
         this->write(to_string(i.value() & 0xffff) + "u");
-    } else if (type == *fContext.fUByte_Type) {
+    } else if (type == *fContext.fTypes.fUByte) {
         this->write(to_string(i.value() & 0xff) + "u");
     } else {
         this->write(to_string(i.value()));
@@ -1403,7 +1409,7 @@ void MetalCodeGenerator::writeFunctionRequirementArgs(const FunctionDeclaration&
     }
     if (requirements & kGlobals_Requirement) {
         this->write(separator);
-        this->write("_globals");
+        this->write("_skGlobals");
         separator = ", ";
     }
     if (requirements & kFragCoord_Requirement) {
@@ -1433,7 +1439,7 @@ void MetalCodeGenerator::writeFunctionRequirementParams(const FunctionDeclaratio
     }
     if (requirements & kGlobals_Requirement) {
         this->write(separator);
-        this->write("thread Globals* _globals");
+        this->write("thread Globals& _skGlobals");
         separator = ", ";
     }
     if (requirements & kFragCoord_Requirement) {
@@ -1444,7 +1450,7 @@ void MetalCodeGenerator::writeFunctionRequirementParams(const FunctionDeclaratio
 }
 
 bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) {
-    fRTHeightName = fProgram.fInputs.fRTHeight ? "_globals->_anonInterface0->u_skRTHeight" : "";
+    fRTHeightName = fProgram.fInputs.fRTHeight ? "_skGlobals._anonInterface0->u_skRTHeight" : "";
     const char* separator = "";
     if ("main" == f.name()) {
         switch (fProgram.fKind) {
@@ -2168,7 +2174,7 @@ void MetalCodeGenerator::writeGlobalInit() {
         }
         void addElement() {
             if (fFirst) {
-                fCodeGen->write("    Globals globalStruct{");
+                fCodeGen->write("    Globals _skGlobals{");
                 fFirst = false;
             } else {
                 fCodeGen->write(", ");
@@ -2177,8 +2183,6 @@ void MetalCodeGenerator::writeGlobalInit() {
         void finish() {
             if (!fFirst) {
                 fCodeGen->writeLine("};");
-                fCodeGen->writeLine("    thread Globals* _globals = &globalStruct;");
-                fCodeGen->writeLine("    (void)_globals;");
             }
         }
         MetalCodeGenerator* fCodeGen = nullptr;

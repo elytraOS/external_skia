@@ -503,7 +503,7 @@ static void setup_dynamic_state(VkPipelineDynamicStateCreateInfo* dynamicInfo,
     dynamicInfo->pDynamicStates = dynamicStates;
 }
 
-GrVkPipeline* GrVkPipeline::Create(GrVkGpu* gpu,
+sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
                                    const GrPrimitiveProcessor::AttributeSet& vertexAttribs,
                                    const GrPrimitiveProcessor::AttributeSet& instanceAttribs,
                                    GrPrimitiveType primitiveType,
@@ -623,47 +623,39 @@ GrVkPipeline* GrVkPipeline::Create(GrVkGpu* gpu,
     if (!ownsLayout) {
         layout = VK_NULL_HANDLE;
     }
-    return new GrVkPipeline(gpu, vkPipeline, layout);
+    return sk_sp<GrVkPipeline>(new GrVkPipeline(gpu, vkPipeline, layout));
 }
 
-GrVkPipeline* GrVkPipeline::Create(GrVkGpu* gpu,
-                                   const GrProgramInfo& programInfo,
-                                   VkPipelineShaderStageCreateInfo* shaderStageInfo,
-                                   int shaderStageCount,
-                                   VkRenderPass compatibleRenderPass,
-                                   VkPipelineLayout layout,
-                                   VkPipelineCache cache) {
+sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
+                                       const GrProgramInfo& programInfo,
+                                       VkPipelineShaderStageCreateInfo* shaderStageInfo,
+                                       int shaderStageCount,
+                                       VkRenderPass compatibleRenderPass,
+                                       VkPipelineLayout layout,
+                                       VkPipelineCache cache,
+                                       uint32_t subpass) {
     const GrPrimitiveProcessor& primProc = programInfo.primProc();
     const GrPipeline& pipeline = programInfo.pipeline();
 
-    // For the vast majority of cases we only have one subpass so we default piplines to subpass 0.
-    // However, if we need to load a resolve into msaa attachment for discardable msaa then the
-    // main subpass will be 1.
-    uint32_t subpass = 0;
-    if (programInfo.colorLoadOp() == GrLoadOp::kLoad && programInfo.targetSupportsVkResolveLoad() &&
-        gpu->vkCaps().preferDiscardableMSAAAttachment()) {
-        subpass = 1;
-    }
-
-    return Create(gpu,
-                  primProc.vertexAttributes(),
-                  primProc.instanceAttributes(),
-                  programInfo.primitiveType(),
-                  programInfo.origin(),
-                  programInfo.nonGLStencilSettings(),
-                  programInfo.numRasterSamples(),
-                  pipeline.isHWAntialiasState(),
-                  programInfo.isMixedSampled(),
-                  pipeline.getXferProcessor().getBlendInfo(),
-                  pipeline.isWireframe(),
-                  pipeline.usesConservativeRaster(),
-                  subpass,
-                  shaderStageInfo,
-                  shaderStageCount,
-                  compatibleRenderPass,
-                  layout,
-                  /*ownsLayout=*/true,
-                  cache);
+    return Make(gpu,
+                primProc.vertexAttributes(),
+                primProc.instanceAttributes(),
+                programInfo.primitiveType(),
+                programInfo.origin(),
+                programInfo.nonGLStencilSettings(),
+                programInfo.numRasterSamples(),
+                pipeline.isHWAntialiasState(),
+                programInfo.isMixedSampled(),
+                pipeline.getXferProcessor().getBlendInfo(),
+                pipeline.isWireframe(),
+                pipeline.usesConservativeRaster(),
+                subpass,
+                shaderStageInfo,
+                shaderStageCount,
+                compatibleRenderPass,
+                layout,
+                /*ownsLayout=*/true,
+                cache);
 }
 
 void GrVkPipeline::freeGPUData() const {

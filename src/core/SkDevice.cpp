@@ -185,8 +185,7 @@ void SkBaseDevice::drawImageLattice(const SkImage* image, const SkCanvas::Lattic
                    this->drawRect(dstR, paintCopy);
               }
         } else {
-            SkSamplingOptions sampling(filter, SkMipmapMode::kNone);
-            this->drawImageRect(image, &srcR, dstR, sampling, paint,
+            this->drawImageRect(image, &srcR, dstR, SkSamplingOptions(filter), paint,
                                 SkCanvas::kStrict_SrcRectConstraint);
         }
     }
@@ -257,13 +256,11 @@ void SkBaseDevice::drawEdgeAAQuad(const SkRect& r, const SkPoint clip[4], SkCanv
 
 void SkBaseDevice::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry images[], int count,
                                       const SkPoint dstClips[], const SkMatrix preViewMatrices[],
-                                      const SkPaint& paint,
+                                      const SkSamplingOptions& sampling, const SkPaint& paint,
                                       SkCanvas::SrcRectConstraint constraint) {
     SkASSERT(paint.getStyle() == SkPaint::kFill_Style);
     SkASSERT(!paint.getPathEffect());
 
-    // TODO: pass this in directly
-    const SkSamplingOptions sampling(paint.getFilterQuality());
     SkPaint entryPaint = paint;
     const SkM44 baseLocalToDevice = this->localToDevice44();
     int clipIndex = 0;

@@ -162,6 +162,9 @@ public:
         return fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments;
     }
 
+    // The max draw count that can be passed into indirect draw calls.
+    uint32_t  maxDrawIndirectDrawCount() const { return fMaxDrawIndirectDrawCount; }
+
     /**
      * Helpers used by canCopySurface. In all cases if the SampleCnt parameter is zero that means
      * the surface is not a render target, otherwise it is the number of samples in the render
@@ -208,7 +211,9 @@ public:
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 
-    GrProgramDesc makeDesc(GrRenderTarget*, const GrProgramInfo&) const override;
+    GrProgramDesc makeDesc(GrRenderTarget*,
+                           const GrProgramInfo&,
+                           ProgramDescOverrideFlags) const override;
 
     GrInternalSurfaceFlags getExtraSurfaceFlagsForDeferredRT() const override;
 
@@ -219,6 +224,10 @@ public:
     // like normal.
     // This flag is similar to enabling gl render to texture for msaa rendering.
     bool preferDiscardableMSAAAttachment() const { return fPreferDiscardableMSAAAttachment; }
+
+    bool mustLoadFullImageWithDiscardableMSAA() const {
+        return fMustLoadFullImageWithDiscardableMSAA;
+    }
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -361,6 +370,9 @@ private:
     bool fPreferCachedCpuMemory = true;
 
     bool fPreferDiscardableMSAAAttachment = false;
+    bool fMustLoadFullImageWithDiscardableMSAA = false;
+
+    uint32_t fMaxDrawIndirectDrawCount = 0;
 
     using INHERITED = GrCaps;
 };

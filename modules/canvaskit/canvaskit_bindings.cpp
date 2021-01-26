@@ -48,6 +48,7 @@
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/effects/SkTrimPathEffect.h"
+#include "include/private/SkShadowFlags.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
 #include "modules/skshaper/include/SkShaper.h"
@@ -779,6 +780,16 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
         return SkImage::MakeRasterData(info, pixelData, rowBytes);
     }), allow_raw_pointers());
+
+    function("_getShadowLocalBounds", optional_override([](
+            uintptr_t /* float* */ ctmPtr, const SkPath& path,
+            const SkPoint3& zPlaneParams, const SkPoint3& lightPos, SkScalar lightRadius,
+            uint32_t flags, uintptr_t /* SkRect* */ outPtr) -> bool {
+        OptionalMatrix ctm(ctmPtr);
+        SkRect* outputBounds = reinterpret_cast<SkRect*>(outPtr);
+        return SkShadowUtils::GetLocalBounds(ctm, path, zPlaneParams, lightPos, lightRadius,
+                              flags, outputBounds);
+    }));
 
 #ifdef SK_SERIALIZE_SKP
     function("_MakePicture", optional_override([](uintptr_t /* unint8_t* */ dPtr,
@@ -1554,7 +1565,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return SkPerlinNoiseShader::MakeFractalNoise(baseFreqX, baseFreqY,
                                                          numOctaves, seed, &tileSize);
         }))
-        .class_function("MakeImprovedNoise", &SkPerlinNoiseShader::MakeImprovedNoise)
          // Here and in other gradient functions, cPtr is a pointer to an array of data
          // representing colors. whether this is an array of SkColor or SkColor4f is indicated
          // by the colorType argument. Only RGBA_8888 and RGBA_F32 are accepted.
@@ -2008,4 +2018,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("SaveLayerInitWithPrevious", (int)SkCanvas::SaveLayerFlagsSet::kInitWithPrevious_SaveLayerFlag);
     constant("SaveLayerF16ColorType",     (int)SkCanvas::SaveLayerFlagsSet::kF16ColorType);
 
+    constant("ShadowTransparentOccluder", (int)SkShadowFlags::kTransparentOccluder_ShadowFlag);
+    constant("ShadowGeometricOnly", (int)SkShadowFlags::kGeometricOnly_ShadowFlag);
+    constant("ShadowDirectionalLight", (int)SkShadowFlags::kDirectionalLight_ShadowFlag);
 }

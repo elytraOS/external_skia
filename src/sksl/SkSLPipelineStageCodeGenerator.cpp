@@ -49,7 +49,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                 const VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
                 if (&decl.var() == arguments[0]->as<VariableReference>().variable()) {
                     found = true;
-                } else if (decl.var().type() == *fContext.fFragmentProcessor_Type) {
+                } else if (decl.var().type() == *fContext.fTypes.fFragmentProcessor) {
                     ++index;
                 }
             }
@@ -127,7 +127,7 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                         // Skip over fragmentProcessors (shaders).
                         // These are indexed separately from other globals.
                         if (var.modifiers().fFlags & flag &&
-                            var.type() != *fContext.fFragmentProcessor_Type) {
+                            var.type() != *fContext.fTypes.fFragmentProcessor) {
                             ++index;
                         }
                     }
@@ -216,7 +216,18 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
                     fErrors.error(v->fOffset, "unsupported parameter type");
                     return;
                 }
-                result.fParameters.emplace_back(v->name(), paramSLType);
+                GrShaderVar::TypeModifier typeModifier = GrShaderVar::TypeModifier::None;
+                switch (v->modifiers().fFlags & (Modifiers::kIn_Flag | Modifiers::kOut_Flag)) {
+                    case Modifiers::kOut_Flag:
+                        typeModifier = GrShaderVar::TypeModifier::Out;
+                        break;
+                    case Modifiers::kIn_Flag | Modifiers::kOut_Flag:
+                        typeModifier = GrShaderVar::TypeModifier::InOut;
+                        break;
+                    default:
+                        break;
+                }
+                result.fParameters.emplace_back(v->name(), paramSLType, typeModifier);
             }
             for (const std::unique_ptr<Statement>& stmt : f.body()->as<Block>().children()) {
                 this->writeStatement(*stmt);

@@ -36,7 +36,12 @@ constexpr static auto kAtlasAlgorithm = GrDynamicAtlas::RectanizerAlgorithm::kPo
 constexpr static int kMaxAtlasPathHeight = 128;
 
 bool GrTessellationPathRenderer::IsSupported(const GrCaps& caps) {
-    return caps.drawInstancedSupport() &&
+    return !caps.avoidStencilBuffers() &&
+           caps.drawInstancedSupport() &&
+           // We see perf regressions on platforms that don't have native support for indirect
+           // draws. Disable while we investigate.
+           // (crbug.com/1163441, skbug.com/11138, skbug.com/11139)
+           caps.nativeDrawIndirectSupport() &&
            caps.shaderCaps()->vertexIDSupport() &&
            !caps.disableTessellationPathRenderer();
 }

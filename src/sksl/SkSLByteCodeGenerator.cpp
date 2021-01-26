@@ -176,7 +176,7 @@ bool ByteCodeGenerator::generateCode() {
             case ProgramElement::Kind::kGlobalVar: {
                 const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                 const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
-                if (declVar.type() == *fContext.fFragmentProcessor_Type) {
+                if (declVar.type() == *fContext.fTypes.fFragmentProcessor) {
                     fOutput->fChildFPCount++;
                 }
                 if (declVar.modifiers().fLayout.fBuiltin >= 0 || is_in(declVar)) {
@@ -219,7 +219,7 @@ std::unique_ptr<ByteCodeFunction> ByteCodeGenerator::writeFunction(const Functio
     result->fStackCount     = fMaxStackCount;
 
     const Type& returnType = f.declaration().returnType();
-    if (returnType != *fContext.fVoid_Type) {
+    if (returnType != *fContext.fTypes.fVoid) {
         result->fReturnCount = SlotCount(returnType);
     }
     fLocals.clear();
@@ -380,7 +380,6 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
         case ByteCodeInstruction::kLoad:
         case ByteCodeInstruction::kLoadGlobal:
         case ByteCodeInstruction::kLoadUniform:
-        case ByteCodeInstruction::kReadExternal:
         case ByteCodeInstruction::kReserve:
             return count;
 
@@ -395,7 +394,6 @@ int ByteCodeGenerator::StackUsage(ByteCodeInstruction inst, int count_) {
         case ByteCodeInstruction::kReturn:
         case ByteCodeInstruction::kStore:
         case ByteCodeInstruction::kStoreGlobal:
-        case ByteCodeInstruction::kWriteExternal:
             return -count;
 
         // Consumes 'count' values, plus one for the 'address'
@@ -479,13 +477,13 @@ ByteCodeGenerator::Location ByteCodeGenerator::getLocation(const Variable& var) 
             return Location::MakeInvalid();
         }
         case Variable::Storage::kGlobal: {
-            if (var.type() == *fContext.fFragmentProcessor_Type) {
+            if (var.type() == *fContext.fTypes.fFragmentProcessor) {
                 int offset = 0;
                 for (const ProgramElement* e : fProgram.elements()) {
                     if (e->is<GlobalVarDeclaration>()) {
                         const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
                         const Variable& declVar = decl.declaration()->as<VarDeclaration>().var();
-                        if (declVar.type() != *fContext.fFragmentProcessor_Type) {
+                        if (declVar.type() != *fContext.fTypes.fFragmentProcessor) {
                             continue;
                         }
                         if (&declVar == &var) {
@@ -986,17 +984,8 @@ void ByteCodeGenerator::writeExternalFunctionCall(const ExternalFunctionCall& f)
     SkASSERT(argumentCount <= 255);
     this->write8(argumentCount);
     this->write8(SlotCount(f.type()));
-    int index = fOutput->fExternalValues.size();
-    fOutput->fExternalValues.push_back(&f.function());
-    SkASSERT(index <= 255);
-    this->write8(index);
-}
-
-void ByteCodeGenerator::writeExternalValue(const ExternalValueReference& e) {
-    int count = SlotCount(e.value().type());
-    this->write(ByteCodeInstruction::kReadExternal, count);
-    int index = fOutput->fExternalValues.size();
-    fOutput->fExternalValues.push_back(&e.value());
+    int index = fOutput->fExternalFunctions.size();
+    fOutput->fExternalFunctions.push_back(&f.function());
     SkASSERT(index <= 255);
     this->write8(index);
 }
@@ -1152,9 +1141,9 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
 
     if (intrin.is_special && intrin.special == SpecialIntrinsic::kSample) {
         // Sample is very special, the first argument is an FP, which can't be pushed to the stack.
-        if (nargs > 2 || args[0]->type() != *fContext.fFragmentProcessor_Type ||
-            (nargs == 2 && (args[1]->type() != *fContext.fFloat2_Type &&
-                            args[1]->type() != *fContext.fFloat3x3_Type))) {
+        if (nargs > 2 || args[0]->type() != *fContext.fTypes.fFragmentProcessor ||
+            (nargs == 2 && (args[1]->type() != *fContext.fTypes.fFloat2 &&
+                            args[1]->type() != *fContext.fTypes.fFloat3x3))) {
             fErrors.error(c.fOffset, "Unsupported form of sample");
             return;
         }
@@ -1162,7 +1151,7 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
         if (nargs == 2) {
             // Write our coords or matrix
             this->writeExpression(*args[1]);
-            this->write(args[1]->type() == *fContext.fFloat3x3_Type
+            this->write(args[1]->type() == *fContext.fTypes.fFloat3x3
                                 ? ByteCodeInstruction::kSampleMatrix
                                 : ByteCodeInstruction::kSampleExplicit);
         } else {
@@ -1320,7 +1309,7 @@ void ByteCodeGenerator::writeIntrinsicCall(const FunctionCall& c) {
                 SkASSERT(count == SlotCount(args[1]->type()));
                 int selectorCount = SlotCount(args[2]->type());
 
-                if (is_generic_type(&args[2]->type(), fContext.fGenBType_Type.get())) {
+                if (is_generic_type(&args[2]->type(), fContext.fTypes.fGenBType.get())) {
                     // mix(genType, genType, genBoolType)
                     SkASSERT(selectorCount == count);
                     this->write(ByteCodeInstruction::kMix, count);
@@ -1591,9 +1580,6 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
         case Expression::Kind::kExternalFunctionCall:
             this->writeExternalFunctionCall(e.as<ExternalFunctionCall>());
             break;
-        case Expression::Kind::kExternalValue:
-            this->writeExternalValue(e.as<ExternalValueReference>());
-            break;
         case Expression::Kind::kFieldAccess:
         case Expression::Kind::kIndex:
         case Expression::Kind::kVariableReference:
@@ -1634,33 +1620,6 @@ void ByteCodeGenerator::writeExpression(const Expression& e, bool discard) {
         discard = false;
     }
 }
-
-class ByteCodeExternalValueLValue : public ByteCodeGenerator::LValue {
-public:
-    ByteCodeExternalValueLValue(ByteCodeGenerator* generator, const ExternalValue& value, int index)
-        : INHERITED(*generator)
-        , fCount(ByteCodeGenerator::SlotCount(value.type()))
-        , fIndex(index) {}
-
-    void load() override {
-        fGenerator.write(ByteCodeInstruction::kReadExternal, fCount);
-        fGenerator.write8(fIndex);
-    }
-
-    void store(bool discard) override {
-        if (!discard) {
-            fGenerator.write(ByteCodeInstruction::kDup, fCount);
-        }
-        fGenerator.write(ByteCodeInstruction::kWriteExternal, fCount);
-        fGenerator.write8(fIndex);
-    }
-
-private:
-    using INHERITED = LValue;
-
-    int fCount;
-    int fIndex;
-};
 
 class ByteCodeSwizzleLValue : public ByteCodeGenerator::LValue {
 public:
@@ -1756,13 +1715,6 @@ private:
 
 std::unique_ptr<ByteCodeGenerator::LValue> ByteCodeGenerator::getLValue(const Expression& e) {
     switch (e.kind()) {
-        case Expression::Kind::kExternalValue: {
-            const ExternalValue& value = e.as<ExternalValueReference>().value();
-            int index = fOutput->fExternalValues.size();
-            fOutput->fExternalValues.push_back(&value);
-            SkASSERT(index <= 255);
-            return std::unique_ptr<LValue>(new ByteCodeExternalValueLValue(this, value, index));
-        }
         case Expression::Kind::kFieldAccess:
         case Expression::Kind::kIndex:
         case Expression::Kind::kVariableReference:

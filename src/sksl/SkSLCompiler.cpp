@@ -85,7 +85,7 @@ public:
 };
 
 Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
-        : fContext(std::make_shared<Context>())
+        : fContext(std::make_shared<Context>(/*errors=*/*this))
         , fCaps(caps)
         , fInliner(fContext.get())
         , fFlags(flags)
@@ -93,9 +93,9 @@ Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
     SkASSERT(fCaps);
     fRootSymbolTable = std::make_shared<SymbolTable>(this, /*builtin=*/true);
     fPrivateSymbolTable = std::make_shared<SymbolTable>(fRootSymbolTable, /*builtin=*/true);
-    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), fCaps, *this);
+    fIRGenerator = std::make_unique<IRGenerator>(fContext.get(), fCaps);
 
-#define TYPE(t) fContext->f##t##_Type.get()
+#define TYPE(t) fContext->fTypes.f ## t .get()
 
     const SkSL::Symbol* rootTypes[] = {
         TYPE(Void),
@@ -163,7 +163,7 @@ Compiler::Compiler(const ShaderCapsClass* caps, Flags flags)
             std::make_unique<Variable>(/*offset=*/-1,
                                        fIRGenerator->fModifiers->addToPool(Modifiers()),
                                        "sk_Caps",
-                                       fContext->fSkCaps_Type.get(),
+                                       fContext->fTypes.fSkCaps.get(),
                                        /*builtin=*/false,
                                        Variable::Storage::kGlobal));
 
@@ -225,31 +225,31 @@ const ParsedModule& Compiler::loadRuntimeEffectModule() {
                                                  this->loadPublicModule());
 
         // Add some aliases to the runtime effect module so that it's friendlier, and more like GLSL
-        fRuntimeEffectModule.fSymbols->addAlias("shader", fContext->fFragmentProcessor_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("shader", fContext->fTypes.fFragmentProcessor.get());
 
-        fRuntimeEffectModule.fSymbols->addAlias("vec2", fContext->fFloat2_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("vec3", fContext->fFloat3_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("vec4", fContext->fFloat4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec2", fContext->fTypes.fFloat2.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec3", fContext->fTypes.fFloat3.get());
+        fRuntimeEffectModule.fSymbols->addAlias("vec4", fContext->fTypes.fFloat4.get());
 
-        fRuntimeEffectModule.fSymbols->addAlias("bvec2", fContext->fBool2_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("bvec3", fContext->fBool3_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("bvec4", fContext->fBool4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec2", fContext->fTypes.fBool2.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec3", fContext->fTypes.fBool3.get());
+        fRuntimeEffectModule.fSymbols->addAlias("bvec4", fContext->fTypes.fBool4.get());
 
-        fRuntimeEffectModule.fSymbols->addAlias("mat2", fContext->fFloat2x2_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat3", fContext->fFloat3x3_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat4", fContext->fFloat4x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2", fContext->fTypes.fFloat2x2.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3", fContext->fTypes.fFloat3x3.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4", fContext->fTypes.fFloat4x4.get());
 
-        fRuntimeEffectModule.fSymbols->addAlias("mat2x2", fContext->fFloat2x2_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat2x3", fContext->fFloat2x3_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat2x4", fContext->fFloat2x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x2", fContext->fTypes.fFloat2x2.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x3", fContext->fTypes.fFloat2x3.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat2x4", fContext->fTypes.fFloat2x4.get());
 
-        fRuntimeEffectModule.fSymbols->addAlias("mat3x2", fContext->fFloat3x2_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat3x3", fContext->fFloat3x3_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat3x4", fContext->fFloat3x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x2", fContext->fTypes.fFloat3x2.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x3", fContext->fTypes.fFloat3x3.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat3x4", fContext->fTypes.fFloat3x4.get());
 
-        fRuntimeEffectModule.fSymbols->addAlias("mat4x2", fContext->fFloat4x2_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat4x3", fContext->fFloat4x3_Type.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat4x4", fContext->fFloat4x4_Type.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x2", fContext->fTypes.fFloat4x2.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x3", fContext->fTypes.fFloat4x3.get());
+        fRuntimeEffectModule.fSymbols->addAlias("mat4x4", fContext->fTypes.fFloat4x4.get());
     }
     return fRuntimeEffectModule;
 }
@@ -305,7 +305,7 @@ LoadedModule Compiler::loadModule(Program::Kind kind,
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule,
                                          /*isBuiltinCode=*/true, source->c_str(), source->length(),
-                                         /*externalValues=*/nullptr);
+                                         /*externalFunctions=*/nullptr);
     SkASSERT(ir.fSharedElements.empty());
     LoadedModule module = { kind, std::move(ir.fSymbolTable), std::move(ir.fElements) };
     fIRGenerator->fCanInline = true;
@@ -424,8 +424,6 @@ void Compiler::addDefinition(const Expression* lvalue, std::unique_ptr<Expressio
             this->addDefinition(lvalue->as<TernaryExpression>().ifFalse().get(),
                                 (std::unique_ptr<Expression>*) &fContext->fDefined_Expression,
                                 definitions);
-            break;
-        case Expression::Kind::kExternalValue:
             break;
         default:
             // not an lvalue, can't happen
@@ -587,8 +585,6 @@ static bool is_dead(const Expression& lvalue, ProgramUsage* usage) {
                    is_dead(*t.ifTrue(), usage) &&
                    is_dead(*t.ifFalse(), usage);
         }
-        case Expression::Kind::kExternalValue:
-            return false;
         default:
 #ifdef SK_DEBUG
             ABORT("invalid lvalue: %s\n", lvalue.description().c_str());
@@ -1137,15 +1133,13 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 for (int c : s.components()) {
                     final.push_back(base.components()[c]);
                 }
-                optimizationContext->fUpdated = true;
                 std::unique_ptr<Expression> replacement(new Swizzle(*fContext, base.base()->clone(),
                                                                     final));
+                // We're replacing an expression with a cloned version; we'll need a rescan.
                 // No fUsage change: `foo.gbr.gbr` and `foo.brg` have equivalent reference counts
-                if (!try_replace_expression(&b, iter, &replacement)) {
-                    optimizationContext->fNeedsRescan = true;
-                    return;
-                }
-                SkASSERT((*iter)->isExpression());
+                try_replace_expression(&b, iter, &replacement);
+                optimizationContext->fUpdated = true;
+                optimizationContext->fNeedsRescan = true;
                 break;
             }
             // Optimize swizzles of constructors.
@@ -1164,12 +1158,16 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                 if (base.arguments().size() == 1 && base.arguments().front()->type().isScalar()) {
                     // `half4(scalar).zyy` can be optimized to `half3(scalar)`. The swizzle
                     // components don't actually matter since all fields are the same.
-                    ExpressionArray newArgs;
-                    newArgs.push_back(base.arguments().front()->clone());
-                    replacement = std::make_unique<Constructor>(
-                            base.fOffset,
-                            &componentType.toCompound(*fContext, swizzleSize, /*rows=*/1),
-                            std::move(newArgs));
+                    const Expression& argument = *base.arguments().front();
+                    const Type& constructorType = componentType.toCompound(*fContext, swizzleSize,
+                                                                           /*rows=*/1);
+                    replacement = Constructor::SimplifyConversion(constructorType, argument);
+                    if (!replacement) {
+                        ExpressionArray newArgs;
+                        newArgs.push_back(argument.clone());
+                        replacement = std::make_unique<Constructor>(base.fOffset, &constructorType,
+                                                                    std::move(newArgs));
+                    }
 
                     // We're replacing an expression with a cloned version; we'll need a rescan.
                     // There's no fUsage change: `half4(foo).xy` and `half2(foo)` have equivalent
@@ -1738,7 +1736,7 @@ bool Compiler::scanCFG(FunctionDefinition& f, ProgramUsage* usage) {
     }
 
     // check for missing return
-    if (f.declaration().returnType() != *fContext->fVoid_Type) {
+    if (f.declaration().returnType() != *fContext->fTypes.fVoid) {
         if (cfg.fBlocks[cfg.fExit].fIsReachable) {
             this->error(f.fOffset, String("function '" + String(f.declaration().name()) +
                                           "' can exit without returning a value"));
@@ -1752,8 +1750,8 @@ std::unique_ptr<Program> Compiler::convertProgram(
         Program::Kind kind,
         String text,
         const Program::Settings& settings,
-        const std::vector<std::unique_ptr<ExternalValue>>* externalValues) {
-    SkASSERT(!externalValues || (kind == Program::kGeneric_Kind));
+        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
+    SkASSERT(!externalFunctions || (kind == Program::kGeneric_Kind));
 
     // Loading and optimizing our base module might reset the inliner, so do that first,
     // *then* configure the inliner with the settings for this program.
@@ -1773,7 +1771,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
     pool->attachToThread();
     IRGenerator::IRBundle ir =
             fIRGenerator->convertProgram(kind, &settings, baseModule, /*isBuiltinCode=*/false,
-                                         textPtr->c_str(), textPtr->size(), externalValues);
+                                         textPtr->c_str(), textPtr->size(), externalFunctions);
     auto program = std::make_unique<Program>(kind,
                                              std::move(textPtr),
                                              settings,
@@ -2147,10 +2145,13 @@ void Compiler::error(int offset, String msg) {
     fErrorText += "error: " + (pos.fLine >= 1 ? to_string(pos.fLine) + ": " : "") + msg + "\n";
 }
 
-String Compiler::errorText() {
-    this->writeErrorCount();
+String Compiler::errorText(bool showCount) {
+    if (showCount) {
+        this->writeErrorCount();
+    }
     fErrorCount = 0;
     String result = fErrorText;
+    fErrorText = "";
     return result;
 }
 

@@ -24,7 +24,7 @@ static void test_jit_and_interpreter(skvm::Program&& program, Fn&& test) {
 DEF_TEST(SkVM_eliminate_dead_code, r) {
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<int>();
+        skvm::Ptr arg = b.varying<int>();
         skvm::I32 l = b.load32(arg);
         skvm::I32 a = b.add(l, l);
         b.add(a, b.splat(7));
@@ -99,7 +99,7 @@ DEF_TEST(SkVM_LoopCounts, r) {
 
     // buf[i] += 1
     skvm::Builder b;
-    skvm::Arg arg = b.varying<int>();
+    skvm::Ptr arg = b.varying<int>();
     b.store32(arg,
               b.add(b.splat(1),
                     b.load32(arg)));
@@ -125,7 +125,7 @@ DEF_TEST(SkVM_LoopCounts, r) {
 DEF_TEST(SkVM_gather32, r) {
     skvm::Builder b;
     {
-        skvm::Arg uniforms = b.uniform(),
+        skvm::Ptr uniforms = b.uniform(),
                   buf      = b.varying<int>();
         skvm::I32 x = b.load32(buf);
         b.store32(buf, b.gather32(uniforms,0, b.bit_and(x, b.splat(7))));
@@ -173,7 +173,7 @@ DEF_TEST(SkVM_gather32, r) {
 DEF_TEST(SkVM_gathers, r) {
     skvm::Builder b;
     {
-        skvm::Arg uniforms = b.uniform(),
+        skvm::Ptr uniforms = b.uniform(),
                   buf32    = b.varying<int>(),
                   buf16    = b.varying<uint16_t>(),
                   buf8     = b.varying<uint8_t>();
@@ -231,7 +231,7 @@ DEF_TEST(SkVM_gathers, r) {
 DEF_TEST(SkVM_gathers2, r) {
     skvm::Builder b;
     {
-        skvm::Arg uniforms = b.uniform(),
+        skvm::Ptr uniforms = b.uniform(),
                   buf32    = b.varying<int>(),
                   buf16    = b.varying<uint16_t>(),
                   buf8     = b.varying<uint8_t>();
@@ -280,7 +280,7 @@ DEF_TEST(SkVM_gathers2, r) {
 DEF_TEST(SkVM_bitops, r) {
     skvm::Builder b;
     {
-        skvm::Arg ptr = b.varying<int>();
+        skvm::Ptr ptr = b.varying<int>();
 
         skvm::I32 x = b.load32(ptr);
 
@@ -306,7 +306,7 @@ DEF_TEST(SkVM_bitops, r) {
 DEF_TEST(SkVM_select_is_NaN, r) {
     skvm::Builder b;
     {
-        skvm::Arg src = b.varying<float>(),
+        skvm::Ptr src = b.varying<float>(),
                   dst = b.varying<float>();
 
         skvm::F32 x = b.loadF(src);
@@ -338,7 +338,7 @@ DEF_TEST(SkVM_select_is_NaN, r) {
 DEF_TEST(SkVM_f32, r) {
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<float>();
+        skvm::Ptr arg = b.varying<float>();
 
         skvm::F32 x = b.loadF(arg),
                   y = b.add(x,x),   // y = 2x
@@ -448,7 +448,7 @@ DEF_TEST(SkVM_mad, r) {
 
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<int>();
+        skvm::Ptr arg = b.varying<int>();
 
         skvm::F32 x = b.to_F32(b.load32(arg)),
                   y = b.mad(x,x,x),   // x is needed in the future, so r[x] != r[y].
@@ -474,7 +474,7 @@ DEF_TEST(SkVM_fms, r) {
     // Create a pattern that can be peepholed into an Op::fms_f32.
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<int>();
+        skvm::Ptr arg = b.varying<int>();
 
         skvm::F32 x = b.to_F32(b.load32(arg)),
                   v = b.sub(b.mul(x, b.splat(2.0f)),
@@ -496,7 +496,7 @@ DEF_TEST(SkVM_fnma, r) {
     // Create a pattern that can be peepholed into an Op::fnma_f32.
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<int>();
+        skvm::Ptr arg = b.varying<int>();
 
         skvm::F32 x = b.to_F32(b.load32(arg)),
                   v = b.sub(b.splat(1.0f),
@@ -517,7 +517,7 @@ DEF_TEST(SkVM_fnma, r) {
 DEF_TEST(SkVM_madder, r) {
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<float>();
+        skvm::Ptr arg = b.varying<float>();
 
         skvm::F32 x = b.loadF(arg),
                   y = b.mad(x,x,x),   // x is needed in the future, so r[x] != r[y].
@@ -539,7 +539,7 @@ DEF_TEST(SkVM_madder, r) {
 DEF_TEST(SkVM_floor, r) {
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<float>();
+        skvm::Ptr arg = b.varying<float>();
         b.storeF(arg, b.floor(b.loadF(arg)));
     }
 
@@ -556,8 +556,8 @@ DEF_TEST(SkVM_floor, r) {
 DEF_TEST(SkVM_round, r) {
     skvm::Builder b;
     {
-        skvm::Arg src = b.varying<float>();
-        skvm::Arg dst = b.varying<int>();
+        skvm::Ptr src = b.varying<float>();
+        skvm::Ptr dst = b.varying<int>();
         b.store32(dst, b.round(b.loadF(src)));
     }
 
@@ -578,9 +578,9 @@ DEF_TEST(SkVM_round, r) {
 DEF_TEST(SkVM_min, r) {
     skvm::Builder b;
     {
-        skvm::Arg src1 = b.varying<float>();
-        skvm::Arg src2 = b.varying<float>();
-        skvm::Arg dst = b.varying<float>();
+        skvm::Ptr src1 = b.varying<float>();
+        skvm::Ptr src2 = b.varying<float>();
+        skvm::Ptr dst = b.varying<float>();
 
         b.storeF(dst, b.min(b.loadF(src1), b.loadF(src2)));
     }
@@ -600,9 +600,9 @@ DEF_TEST(SkVM_min, r) {
 DEF_TEST(SkVM_max, r) {
     skvm::Builder b;
     {
-        skvm::Arg src1 = b.varying<float>();
-        skvm::Arg src2 = b.varying<float>();
-        skvm::Arg dst = b.varying<float>();
+        skvm::Ptr src1 = b.varying<float>();
+        skvm::Ptr src2 = b.varying<float>();
+        skvm::Ptr dst = b.varying<float>();
 
         b.storeF(dst, b.max(b.loadF(src1), b.loadF(src2)));
     }
@@ -624,7 +624,7 @@ DEF_TEST(SkVM_hoist, r) {
     // The JIT will try again without hoisting, and that'll just need 2 registers.
     skvm::Builder b;
     {
-        skvm::Arg arg = b.varying<int>();
+        skvm::Ptr arg = b.varying<int>();
         skvm::I32 x = b.load32(arg);
         for (int i = 0; i < 32; i++) {
             x = b.add(x, b.splat(i));
@@ -644,7 +644,7 @@ DEF_TEST(SkVM_hoist, r) {
 DEF_TEST(SkVM_select, r) {
     skvm::Builder b;
     {
-        skvm::Arg buf = b.varying<int>();
+        skvm::Ptr buf = b.varying<int>();
 
         skvm::I32 x = b.load32(buf);
 
@@ -662,11 +662,46 @@ DEF_TEST(SkVM_select, r) {
     });
 }
 
+DEF_TEST(SkVM_swap, r) {
+    skvm::Builder b;
+    {
+        // This program is the equivalent of
+        //     x = *X
+        //     y = *Y
+        //     *X = y
+        //     *Y = x
+        // One rescheduling of the program based only on data flow of Op arguments is
+        //     x = *X
+        //     *Y = x
+        //     y = *Y
+        //     *X = y
+        // but this reordering does not produce the same results and is invalid.
+        skvm::Ptr X = b.varying<int>(),
+                  Y = b.varying<int>();
+
+        skvm::I32 x = b.load32(X),
+                  y = b.load32(Y);
+
+        b.store32(X, y);
+        b.store32(Y, x);
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program) {
+        int b1[] = { 0,1,2,3 };
+        int b2[] = { 4,5,6,7 };
+        program.eval(SK_ARRAY_COUNT(b1), b1, b2);
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(b1); i++) {
+            REPORTER_ASSERT(r, b1[i] == 4 + i);
+            REPORTER_ASSERT(r, b2[i] == i);
+        }
+    });
+}
+
 DEF_TEST(SkVM_NewOps, r) {
     // Exercise a somewhat arbitrary set of new ops.
     skvm::Builder b;
     {
-        skvm::Arg buf      = b.varying<int16_t>(),
+        skvm::Ptr buf      = b.varying<int16_t>(),
                   uniforms = b.uniform();
 
         skvm::I32 x = b.load16(buf);
@@ -1765,6 +1800,18 @@ DEF_TEST(SkVM_Assembler, r) {
     });
 
     test_asm(r, [&](A& a) {
+        a.ld24s(A::v0, A::x8);  // echo 'ld2.4s {v0,v1}, [x8]' | llvm-mc --show-encoding
+        a.ld44s(A::v0, A::x8);
+        a.st24s(A::v0, A::x8);
+        a.st44s(A::v0, A::x8);  // echo 'st4.4s {v0,v1,v2,v3}, [x8]' | llvm-mc --show-encoding
+    },{
+        0x00,0x89,0x40,0x4c,
+        0x00,0x09,0x40,0x4c,
+        0x00,0x89,0x00,0x4c,
+        0x00,0x09,0x00,0x4c,
+    });
+
+    test_asm(r, [&](A& a) {
         a.xtns2h(A::v0, A::v0);
         a.xtnh2b(A::v0, A::v0);
         a.strs  (A::v0, A::x0);
@@ -1834,7 +1881,7 @@ DEF_TEST(SkVM_Assembler, r) {
 DEF_TEST(SkVM_approx_math, r) {
     auto eval = [](int N, float values[], auto fn) {
         skvm::Builder b;
-        skvm::Arg inout  = b.varying<float>();
+        skvm::Ptr inout  = b.varying<float>();
 
         b.storeF(inout, fn(&b, b.loadF(inout)));
 
@@ -1892,7 +1939,7 @@ DEF_TEST(SkVM_approx_math, r) {
 
     auto test = [r](float arg, float expected, float tolerance, auto prog) {
         skvm::Builder b;
-        skvm::Arg inout  = b.varying<float>();
+        skvm::Ptr inout  = b.varying<float>();
         b.storeF(inout, prog(b.loadF(inout)));
         float actual = arg;
         b.done().eval(1, &actual);
@@ -1908,9 +1955,9 @@ DEF_TEST(SkVM_approx_math, r) {
 
     auto test2 = [r](float arg0, float arg1, float expected, float tolerance, auto prog) {
         skvm::Builder b;
-        skvm::Arg in0  = b.varying<float>();
-        skvm::Arg in1  = b.varying<float>();
-        skvm::Arg out  = b.varying<float>();
+        skvm::Ptr in0  = b.varying<float>();
+        skvm::Ptr in1  = b.varying<float>();
+        skvm::Ptr out  = b.varying<float>();
         b.storeF(out, prog(b.loadF(in0), b.loadF(in1)));
         float actual;
         b.done().eval(1, &arg0, &arg1, &actual);
@@ -2017,7 +2064,7 @@ DEF_TEST(SkVM_min_max, r) {
     {
         skvm::Builder b;
         {
-            skvm::Arg src = b.varying<float>(),
+            skvm::Ptr src = b.varying<float>(),
                        mn = b.varying<float>(),
                        mx = b.varying<float>();
 
@@ -2046,7 +2093,7 @@ DEF_TEST(SkVM_min_max, r) {
     for (int i = 0; i < 8; i++) {
         skvm::Builder b;
         {
-            skvm::Arg src = b.varying<float>(),
+            skvm::Ptr src = b.varying<float>(),
                        mn = b.varying<float>(),
                        mx = b.varying<float>();
 
@@ -2071,7 +2118,7 @@ DEF_TEST(SkVM_min_max, r) {
     for (int i = 0; i < 8; i++) {
         skvm::Builder b;
         {
-            skvm::Arg src = b.varying<float>(),
+            skvm::Ptr src = b.varying<float>(),
                        mn = b.varying<float>(),
                        mx = b.varying<float>();
 
@@ -2100,7 +2147,7 @@ DEF_TEST(SkVM_halfs, r) {
                         -4.0f,-0.5f,-1.0f,-2.0f};
     {
         skvm::Builder b;
-        skvm::Arg src = b.varying<uint16_t>(),
+        skvm::Ptr src = b.varying<uint16_t>(),
                   dst = b.varying<float>();
         b.storeF(dst, b.from_fp16(b.load16(src)));
 
@@ -2114,7 +2161,7 @@ DEF_TEST(SkVM_halfs, r) {
     }
     {
         skvm::Builder b;
-        skvm::Arg src = b.varying<float>(),
+        skvm::Ptr src = b.varying<float>(),
                   dst = b.varying<uint16_t>();
         b.store16(dst, b.to_fp16(b.loadF(src)));
 
@@ -2142,7 +2189,7 @@ DEF_TEST(SkVM_64bit, r) {
     {
         skvm::Builder b;
         {
-            skvm::Arg wide = b.varying<uint64_t>(),
+            skvm::Ptr wide = b.varying<uint64_t>(),
                         lo = b.varying<int>(),
                         hi = b.varying<int>();
             b.store32(lo, b.load64(wide, 0));
@@ -2161,7 +2208,7 @@ DEF_TEST(SkVM_64bit, r) {
     {
         skvm::Builder b;
         {
-            skvm::Arg wide = b.varying<uint64_t>(),
+            skvm::Ptr wide = b.varying<uint64_t>(),
                         lo = b.varying<int>(),
                         hi = b.varying<int>();
             b.store64(wide, b.load32(lo), b.load32(hi));
@@ -2192,7 +2239,7 @@ DEF_TEST(SkVM_128bit, r) {
     {  // Convert RGBA F32 to RGBA 8888, testing 128-bit loads.
         skvm::Builder b;
         {
-            skvm::Arg dst = b.arg( 4),
+            skvm::Ptr dst = b.arg( 4),
                       src = b.arg(16);
 
             skvm::Color c = b.load(rgba_ffff, src);
@@ -2211,7 +2258,7 @@ DEF_TEST(SkVM_128bit, r) {
     {  // Convert RGBA 8888 to RGBA F32, testing 128-bit stores.
         skvm::Builder b;
         {
-            skvm::Arg dst = b.arg(16),
+            skvm::Ptr dst = b.arg(16),
                       src = b.arg( 4);
 
             skvm::Color c = b.load(rgba_8888, src);
@@ -2231,7 +2278,7 @@ DEF_TEST(SkVM_128bit, r) {
 DEF_TEST(SkVM_is_NaN_is_finite, r) {
     skvm::Builder b;
     {
-        skvm::Arg src = b.varying<float>(),
+        skvm::Ptr src = b.varying<float>(),
                   nan = b.varying<int>(),
                   fin = b.varying<int>();
         b.store32(nan, is_NaN   (b.loadF(src)));
@@ -2256,7 +2303,7 @@ DEF_TEST(SkVM_args, r) {
     // Test we can handle at least six arguments.
     skvm::Builder b;
     {
-        skvm::Arg dst = b.varying<float>(),
+        skvm::Ptr dst = b.varying<float>(),
                     A = b.varying<float>(),
                     B = b.varying<float>(),
                     C = b.varying<float>(),
@@ -2286,7 +2333,7 @@ DEF_TEST(SkVM_badpack, r) {
     // originally with a bad arm64 implementation of pack().
     skvm::Builder p;
     {
-        skvm::Arg uniforms = p.uniform(),
+        skvm::Ptr uniforms = p.uniform(),
                   dst      = p.varying<uint16_t>();
 
         skvm::I32 r = round(p.uniformF(uniforms, 8) * 15),
@@ -2338,4 +2385,92 @@ DEF_TEST(SkVM_features, r) {
         REPORTER_ASSERT(r, b.optimize().size() == 3
                         || b.optimize().size() == 4);
     }
+}
+
+DEF_TEST(SkVM_gather_can_hoist, r) {
+    // A gather instruction isn't necessarily varying... it's whatever its index is.
+    // First a typical gather scenario with varying index.
+    {
+        skvm::Builder b;
+        skvm::Ptr uniforms = b.uniform(),
+                  buf      = b.varying<int>();
+        skvm::I32 ix = b.load32(buf);
+        b.store32(buf, b.gather32(uniforms,0, ix));
+
+        skvm::Program p = b.done();
+
+        // ix is varying, so the gather is too.
+        //
+        // loop:
+        //     v0 = load32 buf
+        //     v1 = gather32 uniforms+0 v0
+        //     store32 buf v1
+        REPORTER_ASSERT(r, p.instructions().size() == 3);
+        REPORTER_ASSERT(r, p.loop() == 0);
+    }
+
+    // Now the same but with a uniform index instead.
+    {
+        skvm::Builder b;
+        skvm::Ptr uniforms = b.uniform(),
+                  buf      = b.varying<int>();
+        skvm::I32 ix = b.uniform32(uniforms,8);
+        b.store32(buf, b.gather32(uniforms,0, ix));
+
+        skvm::Program p = b.done();
+
+        // ix is uniform, so the gather is too.
+        //
+        // v0 = uniform32 uniforms+8
+        // v1 = gather32 uniforms+0 v0
+        // loop:
+        //     store32 buf v1
+        REPORTER_ASSERT(r, p.instructions().size() == 3);
+        REPORTER_ASSERT(r, p.loop() == 2);
+    }
+}
+
+DEF_TEST(SkVM_dont_dedup_loads, r) {
+    // We've been assuming that all Ops with the same arguments produce the same value
+    // and deduplicating them, which results in a simple common subexpression eliminator.
+    //
+    // But we can't soundly dedup two identical loads with a store between.
+    // If we dedup the loads in this test program it will always increment by 1, not K.
+    constexpr int K = 2;
+    skvm::Builder b;
+    {
+        skvm::Ptr buf = b.varying<int>();
+        for (int i = 0; i < K; i++) {
+            b.store32(buf, b.load32(buf) + 1);
+        }
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+        int buf[] = { 0,1,2,3,4 };
+        program.eval(SK_ARRAY_COUNT(buf), buf);
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(buf); i++) {
+            REPORTER_ASSERT(r, buf[i] == i+K);
+        }
+    });
+}
+
+DEF_TEST(SkVM_dont_dedup_stores, r) {
+    // Following a similar line of reasoning to SkVM_dont_dedup_loads,
+    // we cannot dedup stores either.  A different store between two identical stores
+    // will invalidate the first store, meaning we do need to reissue that store operation.
+    skvm::Builder b;
+    {
+        skvm::Ptr buf = b.varying<int>();
+        b.store32(buf, b.splat(4));
+        b.store32(buf, b.splat(5));
+        b.store32(buf, b.splat(4));   // If we dedup'd, we'd skip this store.
+    }
+
+    test_jit_and_interpreter(b.done(), [&](const skvm::Program& program){
+        int buf[42];
+        program.eval(SK_ARRAY_COUNT(buf), buf);
+        for (int x : buf) {
+            REPORTER_ASSERT(r, x == 4);
+        }
+    });
 }

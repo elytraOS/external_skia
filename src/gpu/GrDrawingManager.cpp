@@ -15,6 +15,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkDeferredDisplayListPriv.h"
+#include "src/core/SkTInternalLList.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrClientMappedBufferManager.h"
 #include "src/gpu/GrCopyRenderTask.h"
@@ -26,6 +27,7 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrRenderTask.h"
+#include "src/gpu/GrRenderTaskCluster.h"
 #include "src/gpu/GrResourceAllocator.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSoftwarePathRenderer.h"
@@ -104,7 +106,7 @@ bool GrDrawingManager::flush(
             bool used = std::any_of(fDAG.begin(), fDAG.end(), [&](auto& task) {
                 return task && task->isUsed(proxy);
             });
-            return !used && !this->isDDLTarget(proxy);
+            return !used;
         });
         if (allUnused) {
             if (info.fSubmittedProc) {
@@ -135,6 +137,11 @@ bool GrDrawingManager::flush(
     fActiveOpsTask = nullptr;
 
     this->sortTasks();
+
+    if (fReduceOpsTaskSplitting) {
+        this->reorderTasks();
+    }
+
     if (!fCpuBufferCache) {
         // We cache more buffers when the backend is using client side arrays. Otherwise, we
         // expect each pool will use a CPU buffer as a staging buffer before uploading to a GPU
@@ -243,7 +250,6 @@ bool GrDrawingManager::flush(
 #endif
     fLastRenderTasks.reset();
     fDAG.reset();
-    this->clearDDLTargets();
 
 #ifdef SK_DEBUG
     // In non-DDL mode this checks that all the flushed ops have been freed from the memory pool.
@@ -296,7 +302,9 @@ bool GrDrawingManager::executeRenderTasks(int startIndex, int stopIndex, GrOpFlu
                             startIndex, stopIndex, 0, fDAG.count());
     for (int i = startIndex; i < stopIndex; ++i) {
         if (fDAG[i]) {
-            fDAG[i]->dump(true);
+            SkString label;
+            label.printf("task %d/%d", i, fDAG.count());
+            fDAG[i]->dump(label, {}, true, true);
         }
     }
 #endif
@@ -413,6 +421,32 @@ void GrDrawingManager::sortTasks() {
         }
     }
 #endif
+}
+
+// Reorder the array to match the llist without reffing & unreffing sk_sp's.
+// Both args must contain the same objects.
+// This is basically a shim because clustering uses LList but the rest of drawmgr uses array.
+template <typename T>
+static void reorder_array_by_llist(const SkTInternalLList<T>& llist, SkTArray<sk_sp<T>>* array) {
+    int i = 0;
+    for (T* t : llist) {
+        // Release the pointer that used to live here so it doesn't get unreffed.
+        [[maybe_unused]] T* old = array->at(i).release();
+        array->at(i++).reset(t);
+    }
+    SkASSERT(i == array->count());
+}
+
+void GrDrawingManager::reorderTasks() {
+    SkASSERT(fReduceOpsTaskSplitting);
+    SkTInternalLList<GrRenderTask> llist;
+    bool clustered = GrClusterRenderTasks(fDAG, &llist);
+    if (!clustered) {
+        return;
+    }
+    // TODO: Handle case where proposed order would blow our memory budget.
+    // Such cases are currently pathological, so we could just return here and keep current order.
+    reorder_array_by_llist(llist, &fDAG);
 }
 
 void GrDrawingManager::closeAllTasks() {
@@ -582,7 +616,7 @@ void GrDrawingManager::moveRenderTasksToDDL(SkDeferredDisplayList* ddl) {
 }
 
 void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
-                                     GrRenderTargetProxy* newDest,
+                                     sk_sp<GrRenderTargetProxy> newDest,
                                      SkIPoint offset) {
     SkDEBUGCODE(this->validate());
 
@@ -605,11 +639,9 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
         newTextureProxy->markMipmapsDirty();
     }
 
-    this->addDDLTarget(newDest, ddl->priv().targetProxy());
-
     // Here we jam the proxy that backs the current replay SkSurface into the LazyProxyData.
     // The lazy proxy that references it (in the DDL opsTasks) will then steal its GrTexture.
-    ddl->fLazyProxyData->fReplayDest = newDest;
+    ddl->fLazyProxyData->fReplayDest = newDest.get();
 
     if (ddl->fPendingPaths.size()) {
         GrCoverageCountingPathRenderer* ccpr = this->getCoverageCountingPathRenderer();
@@ -619,7 +651,7 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
 
     // Add a task to handle drawing and lifetime management of the DDL.
     SkDEBUGCODE(auto ddlTask =) this->appendTask(sk_make_sp<GrDDLTask>(this,
-                                                                       sk_ref_sp(newDest),
+                                                                       std::move(newDest),
                                                                        std::move(ddl),
                                                                        offset));
     SkASSERT(ddlTask->isClosed());

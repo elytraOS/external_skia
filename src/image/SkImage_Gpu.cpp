@@ -39,6 +39,7 @@
 #include "src/gpu/GrTextureAdjuster.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureProxyPriv.h"
+#include "src/gpu/GrYUVATextureProxies.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/gl/GrGLTexture.h"
 
@@ -119,7 +120,7 @@ sk_sp<SkImage> SkImage_Gpu::onReinterpretColorSpace(sk_sp<SkColorSpace> newCS) c
 void SkImage_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
                                               const SkIRect& srcRect,
                                               RescaleGamma rescaleGamma,
-                                              SkFilterQuality rescaleQuality,
+                                              RescaleMode rescaleMode,
                                               ReadPixelsCallback callback,
                                               ReadPixelsContext context) {
     auto dContext = fContext->asDirectContext();
@@ -133,7 +134,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
         callback(context, nullptr);
         return;
     }
-    ctx->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleQuality,
+    ctx->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleMode,
                                    callback, context);
 }
 
@@ -142,7 +143,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpac
                                                     const SkIRect& srcRect,
                                                     const SkISize& dstSize,
                                                     RescaleGamma rescaleGamma,
-                                                    SkFilterQuality rescaleQuality,
+                                                    RescaleMode rescaleMode,
                                                     ReadPixelsCallback callback,
                                                     ReadPixelsContext context) {
     auto dContext = fContext->asDirectContext();
@@ -162,7 +163,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpac
                                          srcRect,
                                          dstSize,
                                          rescaleGamma,
-                                         rescaleQuality,
+                                         rescaleMode,
                                          callback,
                                          context);
 }
@@ -442,7 +443,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrDirectContext* dContext,
         int newWidth = std::min(static_cast<int>(originalPixmap.width() * scale), maxTextureSize);
         int newHeight = std::min(static_cast<int>(originalPixmap.height() * scale), maxTextureSize);
         SkImageInfo info = originalPixmap.info().makeWH(newWidth, newHeight);
-        SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kNone);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
         if (!resized.tryAlloc(info) || !originalPixmap.scalePixels(resized, sampling)) {
             return nullptr;
         }

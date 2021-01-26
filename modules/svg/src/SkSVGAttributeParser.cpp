@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include <vector>
-
 #include "include/private/SkTPin.h"
 #include "include/utils/SkParse.h"
 #include "modules/svg/include/SkSVGAttributeParser.h"
@@ -541,16 +539,18 @@ bool SkSVGAttributeParser::parse(SkSVGPaint* paint) {
 }
 
 // https://www.w3.org/TR/SVG11/masking.html#ClipPathProperty
+// https://www.w3.org/TR/SVG11/masking.html#MaskProperty
+// https://www.w3.org/TR/SVG11/filters.html#FilterProperty
 template <>
-bool SkSVGAttributeParser::parse(SkSVGClip* clip) {
+bool SkSVGAttributeParser::parse(SkSVGFuncIRI* firi) {
     SkSVGStringType iri;
     bool parsedValue = false;
 
     if (this->parseExpectedStringToken("none")) {
-        *clip = SkSVGClip(SkSVGClip::Type::kNone);
+        *firi = SkSVGFuncIRI();
         parsedValue = true;
     } else if (this->parseFuncIRI(&iri)) {
-        *clip = SkSVGClip(iri);
+        *firi = SkSVGFuncIRI(std::move(iri));
         parsedValue = true;
     }
 
@@ -689,26 +689,6 @@ bool SkSVGAttributeParser::parse(SkSVGFillRule* fillRule) {
             parsedValue = true;
             break;
         }
-    }
-
-    return parsedValue && this->parseEOSToken();
-}
-
-// https://www.w3.org/TR/SVG11/filters.html#FilterProperty
-template <>
-bool SkSVGAttributeParser::parse(SkSVGFilterType* filter) {
-    SkSVGStringType iri;
-    bool parsedValue = false;
-
-    if (this->parseExpectedStringToken("none")) {
-        *filter = SkSVGFilterType(SkSVGFilterType::Type::kNone);
-        parsedValue = true;
-    } else if (this->parseExpectedStringToken("inherit")) {
-        *filter = SkSVGFilterType(SkSVGFilterType::Type::kInherit);
-        parsedValue = true;
-    } else if (this->parseFuncIRI(&iri)) {
-        *filter = SkSVGFilterType(iri);
-        parsedValue = true;
     }
 
     return parsedValue && this->parseEOSToken();
@@ -920,20 +900,41 @@ bool SkSVGAttributeParser::parsePreserveAspectRatio(SkSVGPreserveAspectRatio* pa
 }
 
 // https://www.w3.org/TR/SVG11/types.html#DataTypeCoordinates
-template <>
-bool SkSVGAttributeParser::parse(std::vector<SkSVGLength>* lengths) {
-    SkASSERT(lengths->empty());
+template <typename T>
+bool SkSVGAttributeParser::parseList(std::vector<T>* vals) {
+    SkASSERT(vals->empty());
 
-    SkSVGLength length;
+    T v;
     for (;;) {
-        if (!this->parse(&length)) {
+        if (!this->parse(&v)) {
             break;
         }
 
-        lengths->push_back(length);
+        vals->push_back(v);
 
         this->parseCommaWspToken();
     }
 
-    return !lengths->empty() && this->parseEOSToken();
+    return !vals->empty() && this->parseEOSToken();
+}
+
+template <>
+bool SkSVGAttributeParser::parse(std::vector<SkSVGLength>* lengths) {
+    return this->parseList(lengths);
+}
+
+template <>
+bool SkSVGAttributeParser::parse(std::vector<SkSVGNumberType>* numbers) {
+    return this->parseList(numbers);
+}
+
+template <>
+bool SkSVGAttributeParser::parse(SkSVGColorspace* colorspace) {
+    static constexpr std::tuple<const char*, SkSVGColorspace> gColorspaceMap[] = {
+        { "auto"     , SkSVGColorspace::kAuto      },
+        { "sRGB"     , SkSVGColorspace::kSRGB      },
+        { "linearRGB", SkSVGColorspace::kLinearRGB },
+    };
+
+    return this->parseEnumMap(gColorspaceMap, colorspace) && this->parseEOSToken();
 }
