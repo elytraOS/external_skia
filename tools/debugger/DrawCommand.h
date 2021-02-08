@@ -274,6 +274,7 @@ public:
     DrawImageLatticeCommand(const SkImage*           image,
                             const SkCanvas::Lattice& lattice,
                             const SkRect&            dst,
+                            SkFilterMode,
                             const SkPaint*           paint);
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
@@ -284,6 +285,7 @@ private:
     sk_sp<const SkImage> fImage;
     SkCanvas::Lattice    fLattice;
     SkRect               fDst;
+    SkFilterMode         fFilter;
     SkTLazy<SkPaint>     fPaint;
 
     using INHERITED = DrawCommand;
@@ -321,8 +323,9 @@ public:
     DrawImageRectLayerCommand(DebugLayerManager*          layerManager,
                               const int                   nodeId,
                               const int                   frame,
-                              const SkRect*               src,
+                              const SkRect&               src,
                               const SkRect&               dst,
+                              const SkSamplingOptions&    sampling,
                               const SkPaint*              paint,
                               SkCanvas::SrcRectConstraint constraint);
     void execute(SkCanvas* canvas) const override;
@@ -333,8 +336,9 @@ private:
     DebugLayerManager*          fLayerManager;
     int                         fNodeId;
     int                         fFrame;
-    SkTLazy<SkRect>             fSrc;
+    SkRect                      fSrc;
     SkRect                      fDst;
+    SkSamplingOptions           fSampling;
     SkTLazy<SkPaint>            fPaint;
     SkCanvas::SrcRectConstraint fConstraint;
 
@@ -578,6 +582,7 @@ public:
                      const SkColor[],
                      int,
                      SkBlendMode,
+                     const SkSamplingOptions&,
                      const SkRect*,
                      const SkPaint*);
 
@@ -589,6 +594,7 @@ private:
     SkTDArray<SkRect>    fTex;
     SkTDArray<SkColor>   fColors;
     SkBlendMode          fBlendMode;
+    SkSamplingOptions    fSampling;
     SkTLazy<SkRect>      fCull;
     SkTLazy<SkPaint>     fPaint;
 

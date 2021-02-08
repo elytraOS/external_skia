@@ -190,23 +190,13 @@ public:
     void recycleDescriptorSet(const GrVkDescriptorSet* descSet,
                               const GrVkDescriptorSetManager::Handle&);
 
-    // Creates or finds free uniform buffer resources of size GrVkUniformBuffer::kStandardSize.
-    // Anything larger will need to be created and released by the client.
-    const GrManagedResource* findOrCreateStandardUniformBufferResource();
-
-    // Signals that the resource passed to it (which should be a uniform buffer resource)
-    // can be reused by the next uniform buffer resource request.
-    void recycleStandardUniformBufferResource(const GrManagedResource*);
-
     void storePipelineCacheData();
 
     // Destroy any cached resources. To be called before destroying the VkDevice.
     // The assumption is that all queues are idle and all command buffers are finished.
     // For resource tracing to work properly, this should be called after unrefing all other
     // resource usages.
-    // If deviceLost is true, then resources will not be checked to see if they've finished
-    // before deleting (see section 4.2.4 of the Vulkan spec).
-    void destroyResources(bool deviceLost);
+    void destroyResources();
 
     void backgroundReset(GrVkCommandPool* pool);
 
@@ -312,9 +302,6 @@ private:
 
     // Array of available command pools that are not in flight
     SkSTArray<4, GrVkCommandPool*, true> fAvailableCommandPools;
-
-    // Array of available uniform buffer resources
-    SkSTArray<16, const GrManagedResource*, true> fAvailableUniformBufferResources;
 
     // Stores GrVkSampler objects that we've already created so we can reuse them across multiple
     // GrVkPipelineStates

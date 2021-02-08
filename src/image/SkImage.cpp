@@ -33,6 +33,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrImageContextPriv.h"
+#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/image/SkImage_Gpu.h"
 #endif
 #include "include/gpu/GrBackendSurface.h"
@@ -307,6 +308,20 @@ void SkImage_Base::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
     // call client's callback.
     callback(context, nullptr);
 }
+
+#if SK_SUPPORT_GPU
+std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Base::asView(GrRecordingContext* context,
+                                                                 GrMipmapped mipmapped,
+                                                                 GrImageTexGenPolicy policy) const {
+    if (!context) {
+        return {};
+    }
+    if (!context->priv().caps()->mipmapSupport() || this->dimensions().area() <= 1) {
+        mipmapped = GrMipmapped::kNo;
+    }
+    return this->onAsView(context, mipmapped, policy);
+}
+#endif
 
 GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
                                                    GrSurfaceOrigin* origin) const {
@@ -611,9 +626,7 @@ SkPixmap SkMipmapBuilder::level(int index) const {
     return pm;
 }
 
-bool SkImage::hasMipmaps() const {
-    return as_IB(this)->onPeekMips() != nullptr;
-}
+bool SkImage::hasMipmaps() const { return as_IB(this)->onHasMipmaps(); }
 
 sk_sp<SkImage> SkImage::withMipmaps(sk_sp<SkMipmap> mips) const {
     if (mips == nullptr || mips->validForRootLevel(this->imageInfo())) {
@@ -632,6 +645,12 @@ sk_sp<SkImage> SkMipmapBuilder::attachTo(const SkImage* src) {
     return src->withMipmaps(fMM);
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSamplingPriv.h"
+#include "src/core/SkWriteBuffer.h"
+
 SkSamplingOptions::SkSamplingOptions(SkFilterQuality fq, MediumBehavior behavior) {
     switch (fq) {
         case SkFilterQuality::kHigh_SkFilterQuality:
@@ -648,5 +667,28 @@ SkSamplingOptions::SkSamplingOptions(SkFilterQuality fq, MediumBehavior behavior
         case SkFilterQuality::kNone_SkFilterQuality:
             *this = SkSamplingOptions(SkFilterMode::kNearest, SkMipmapMode::kNone);
             break;
+    }
+}
+
+SkSamplingOptions SkSamplingPriv::Read(SkReadBuffer& buffer) {
+    if (buffer.readBool()) {
+        SkScalar B = buffer.readScalar(),
+                 C = buffer.readScalar();
+        return SkSamplingOptions({B,C});
+    } else {
+        auto filter = buffer.read32LE<SkFilterMode>(SkFilterMode::kLinear);
+        auto mipmap = buffer.read32LE<SkMipmapMode>(SkMipmapMode::kLinear);
+        return SkSamplingOptions(filter, mipmap);
+    }
+}
+
+void SkSamplingPriv::Write(SkWriteBuffer& buffer, const SkSamplingOptions& sampling) {
+    buffer.writeBool(sampling.useCubic);
+    if (sampling.useCubic) {
+        buffer.writeScalar(sampling.cubic.B);
+        buffer.writeScalar(sampling.cubic.C);
+    } else {
+        buffer.writeUInt((unsigned)sampling.filter);
+        buffer.writeUInt((unsigned)sampling.mipmap);
     }
 }

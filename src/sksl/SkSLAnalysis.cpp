@@ -8,6 +8,7 @@
 #include "src/sksl/SkSLAnalysis.h"
 
 #include "include/private/SkSLSampleUsage.h"
+#include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -250,6 +251,7 @@ class TrivialErrorReporter : public ErrorReporter {
 public:
     void error(int offset, String) override { ++fErrorCount; }
     int errorCount() override { return fErrorCount; }
+    void setErrorCount(int c) override { fErrorCount = c; }
 
 private:
     int fErrorCount = 0;

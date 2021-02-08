@@ -28,13 +28,19 @@ enum class SkSVGTag {
     kFeBlend,
     kFeColorMatrix,
     kFeComposite,
+    kFeDisplacementMap,
+    kFeDistantLight,
     kFeFlood,
     kFeGaussianBlur,
     kFeMorphology,
     kFeOffset,
+    kFePointLight,
+    kFeSpecularLighting,
+    kFeSpotLight,
     kFeTurbulence,
     kFilter,
     kG,
+    kImage,
     kLine,
     kLinearGradient,
     kMask,
@@ -135,9 +141,12 @@ public:
     SVG_PRES_ATTR(StopOpacity              , SkSVGNumberType, false)
     SVG_PRES_ATTR(FloodColor               , SkSVGColor     , false)
     SVG_PRES_ATTR(FloodOpacity             , SkSVGNumberType, false)
+    SVG_PRES_ATTR(LightingColor            , SkSVGColor     , false)
 
 protected:
     SkSVGNode(SkSVGTag);
+
+    static SkMatrix ComputeViewboxMatrix(const SkRect&, const SkRect&, SkSVGPreserveAspectRatio);
 
     // Called before onRender(), to apply local attributes to the context.  Unlike onRender(),
     // onPrepareToRender() bubbles up the inheritance chain: overriders should always call

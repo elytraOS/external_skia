@@ -384,16 +384,6 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
 
     fMaxInputAttachmentDescriptors = properties.limits.maxDescriptorSetInputAttachments;
 
-    // On mobile GPUs we avoid using cached cpu memory. The memory is shared between the gpu and cpu
-    // and there probably isn't any win keeping a cached copy local on the CPU. We have seen
-    // examples on ARM where coherent non-cached memory writes are faster on the cpu than using
-    // cached non-coherent memory. Additionally we don't do a lot of read and writes to cpu memory
-    // in between GPU usues. Our uses are mostly write on CPU then read on GPU.
-    if (kQualcomm_VkVendor == properties.vendorID || kARM_VkVendor == properties.vendorID ||
-        kImagination_VkVendor == properties.vendorID) {
-        fPreferCachedCpuMemory = false;
-    }
-
     // On desktop GPUs we have found that this does not provide much benefit. The perf results show
     // a mix of regressions, some improvements, and lots of no changes. Thus it is no worth enabling
     // this (especially with the rendering artifacts) on desktop.
@@ -547,6 +537,20 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     if (kQualcomm_VkVendor == properties.vendorID || kARM_VkVendor == properties.vendorID) {
         fMustLoadFullImageWithDiscardableMSAA = true;
     }
+
+#ifdef SK_BUILD_FOR_UNIX
+    if (kIntel_VkVendor == properties.vendorID) {
+        // At least on our linux Debug Intel HD405 bot we are seeing issues doing read pixels with
+        // non-conherent memory. It seems like the device is not properly honoring the
+        // vkInvalidateMappedMemoryRanges calls correctly. Other linux intel devices seem to work
+        // okay. However, since I'm not sure how to target a specific intel devices or driver
+        // version I am going to stop all intel linux from using non-coherent memory. Currently we
+        // are not shipping anything on these platforms and the only real thing that will regress is
+        // read backs. If we find later we do care about this performance we can come back to figure
+        // out how to do a more narrow workaround.
+        fMustUseCoherentHostVisibleMemory = true;
+    }
+#endif
 
     ////////////////////////////////////////////////////////////////////////////
     // GrCaps workarounds
@@ -1864,6 +1868,14 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
 GrInternalSurfaceFlags GrVkCaps::getExtraSurfaceFlagsForDeferredRT() const {
     // We always create vulkan RT with the input attachment flag;
     return GrInternalSurfaceFlags::kVkRTSupportsInputAttachment;
+}
+
+VkShaderStageFlags GrVkCaps::getPushConstantStageFlags() const {
+    VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    if (this->shaderCaps()->geometryShaderSupport()) {
+        stageFlags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+    }
+    return stageFlags;
 }
 
 #if GR_TEST_UTILS

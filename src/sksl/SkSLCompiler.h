@@ -17,7 +17,6 @@
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLInliner.h"
-#include "src/sksl/SkSLLexer.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
@@ -49,11 +48,10 @@ namespace dsl {
     class DSLWriter;
 }
 
-class ByteCode;
 class ExternalFunction;
+class FunctionDeclaration;
 class IRGenerator;
 class IRIntrinsicMap;
-struct PipelineStageArgs;
 class ProgramUsage;
 
 struct LoadedModule {
@@ -88,31 +86,6 @@ public:
         kPermitInvalidStaticTests_Flag = 1,
     };
 
-    // An invalid (otherwise unused) character to mark where FormatArgs are inserted
-    static constexpr       char  kFormatArgPlaceholder    = '\001';
-    static constexpr const char* kFormatArgPlaceholderStr = "\001";
-
-    struct FormatArg {
-        enum class Kind {
-            kCoords,
-            kUniform,
-            kChildProcessor,
-            kChildProcessorWithMatrix,
-            kFunctionName
-        };
-
-        FormatArg(Kind kind)
-                : fKind(kind) {}
-
-        FormatArg(Kind kind, int index)
-                : fKind(kind)
-                , fIndex(index) {}
-
-        Kind fKind;
-        int fIndex;
-        String fCoords;
-    };
-
     struct OptimizationContext {
         // nodes we have already reported errors for and should not error on again
         std::unordered_set<const IRNode*> fSilences;
@@ -122,20 +95,9 @@ public:
         bool fNeedsRescan = false;
         // Metadata about function and variable usage within the program
         ProgramUsage* fUsage = nullptr;
+        // Nodes which we can't throw away until the end of optimization
+        StatementArray fOwnedStatements;
     };
-
-#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-    /**
-     * Represents the arguments to GrGLSLShaderBuilder::emitFunction.
-     */
-    struct GLSLFunction {
-        GrSLType fReturnType;
-        SkString fName;
-        std::vector<GrShaderVar> fParameters;
-        String fBody;
-        std::vector<Compiler::FormatArg> fFormatArgs;
-    };
-#endif
 
     Compiler(const ShaderCapsClass* caps, Flags flags = kNone_Flags);
 
@@ -174,12 +136,6 @@ public:
     bool toH(Program& program, String name, OutputStream& out);
 #endif
 
-    std::unique_ptr<ByteCode> toByteCode(Program& program);
-
-#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-    bool toPipelineStage(Program& program, PipelineStageArgs* outArgs);
-#endif
-
     void error(int offset, String msg) override;
 
     String errorText(bool showCount = true);
@@ -190,18 +146,11 @@ public:
         return fErrorCount;
     }
 
+    void setErrorCount(int c) override;
+
     Context& context() {
         return *fContext;
     }
-
-    static const char* OperatorName(Token::Kind op);
-
-    // Returns true if op is '=' or any compound assignment operator ('+=', '-=', etc.)
-    static bool IsAssignment(Token::Kind op);
-
-    // Given a compound assignment operator, returns the non-assignment version of the operator
-    // (e.g. '+=' becomes '+')
-    static Token::Kind RemoveAssignment(Token::Kind op);
 
     // When  SKSL_STANDALONE, fPath is used. (fData, fSize) will be (nullptr, 0)
     // When !SKSL_STANDALONE, fData and fSize are used. fPath will be nullptr.
@@ -235,7 +184,6 @@ private:
     const ParsedModule& loadFPModule();
     const ParsedModule& loadGeometryModule();
     const ParsedModule& loadPublicModule();
-    const ParsedModule& loadInterpreterModule();
     const ParsedModule& loadRuntimeEffectModule();
 
     void addDefinition(const Expression* lvalue, std::unique_ptr<Expression>* expr,
@@ -293,7 +241,6 @@ private:
     ParsedModule fFPModule;             // [GPU] + FP features
 
     ParsedModule fPublicModule;         // [Root] + Public features
-    ParsedModule fInterpreterModule;    // [Public] + Interpreter-only decls
     ParsedModule fRuntimeEffectModule;  // [Public] + Runtime effect decls
 
     // holds ModifiersPools belonging to the core includes for lifetime purposes
@@ -306,19 +253,12 @@ private:
     const String* fSource;
     int fErrorCount;
     String fErrorText;
+    std::vector<size_t> fErrorTextLength;
 
     friend class AutoSource;
     friend class ::SkSLCompileBench;
     friend class dsl::DSLWriter;
 };
-
-#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-struct PipelineStageArgs {
-    String fCode;
-    std::vector<Compiler::FormatArg>    fFormatArgs;
-    std::vector<Compiler::GLSLFunction> fFunctions;
-};
-#endif
 
 }  // namespace SkSL
 

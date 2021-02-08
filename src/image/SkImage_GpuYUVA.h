@@ -21,7 +21,7 @@ class GrTexture;
 // Initially any direct rendering will be done by passing the individual planes to a shader.
 // Once any method requests a flattened image (e.g., onReadPixels), the flattened RGB
 // proxy will be stored and used for any future rendering.
-class SkImage_GpuYUVA : public SkImage_GpuBase {
+class SkImage_GpuYUVA final : public SkImage_GpuBase {
 public:
     friend class GrYUVAImageTextureMaker;
 
@@ -30,13 +30,13 @@ public:
                     GrYUVATextureProxies proxies,
                     sk_sp<SkColorSpace>);
 
+    bool onHasMipmaps() const override;
+
     GrSemaphoresSubmitted onFlush(GrDirectContext*, const GrFlushInfo&) override;
 
     // This returns the single backing proxy if the YUV channels have already been flattened but
     // nullptr if they have not.
     GrTextureProxy* peekProxy() const override;
-
-    const GrSurfaceProxyView* view(GrRecordingContext* context) const override;
 
     bool onIsTextureBacked() const override {
         // We should have YUVA proxies or a RGBA proxy,but not both.
@@ -52,9 +52,6 @@ public:
     bool isYUVA() const override { return true; }
 
     bool setupMipmapsForPlanes(GrRecordingContext*) const;
-
-    // Returns a ref-ed texture proxy view with miplevels
-    GrSurfaceProxyView refMippedView(GrRecordingContext*) const;
 
 #if GR_TEST_UTILS
     bool testingOnly_IsFlattened() const {
@@ -77,7 +74,11 @@ public:
 private:
     SkImage_GpuYUVA(sk_sp<GrImageContext>, const SkImage_GpuYUVA* image, sk_sp<SkColorSpace>);
 
-    void flattenToRGB(GrRecordingContext*) const;
+    std::tuple<GrSurfaceProxyView, GrColorType> onAsView(GrRecordingContext*,
+                                                         GrMipmapped,
+                                                         GrImageTexGenPolicy) const override;
+
+    bool flattenToRGB(GrRecordingContext*, GrMipmapped) const;
 
     mutable GrYUVATextureProxies     fYUVAProxies;
 

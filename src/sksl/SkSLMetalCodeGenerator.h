@@ -8,12 +8,14 @@
 #ifndef SKSL_METALCODEGENERATOR
 #define SKSL_METALCODEGENERATOR
 
+#include <set>
 #include <stack>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "src/sksl/SkSLCodeGenerator.h"
+#include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
@@ -54,27 +56,6 @@ public:
     static constexpr const char* SAMPLER_SUFFIX = "Smplr";
     static constexpr const char* PACKED_PREFIX = "packed_";
 
-    enum Precedence {
-        kParentheses_Precedence    =  1,
-        kPostfix_Precedence        =  2,
-        kPrefix_Precedence         =  3,
-        kMultiplicative_Precedence =  4,
-        kAdditive_Precedence       =  5,
-        kShift_Precedence          =  6,
-        kRelational_Precedence     =  7,
-        kEquality_Precedence       =  8,
-        kBitwiseAnd_Precedence     =  9,
-        kBitwiseXor_Precedence     = 10,
-        kBitwiseOr_Precedence      = 11,
-        kLogicalAnd_Precedence     = 12,
-        kLogicalXor_Precedence     = 13,
-        kLogicalOr_Precedence      = 14,
-        kTernary_Precedence        = 15,
-        kAssignment_Precedence     = 16,
-        kSequence_Precedence       = 17,
-        kTopLevel_Precedence       = kSequence_Precedence
-    };
-
     MetalCodeGenerator(const Context* context, const Program* program, ErrorReporter* errors,
                       OutputStream* out)
     : INHERITED(program, errors, out)
@@ -87,6 +68,8 @@ public:
     bool generateCode() override;
 
 protected:
+    using Precedence = Operators::Precedence;
+
     typedef int Requirements;
     static constexpr Requirements kNo_Requirements       = 0;
     static constexpr Requirements kInputs_Requirement    = 1 << 0;
@@ -170,13 +153,9 @@ protected:
 
     String typeName(const Type& type);
 
-    bool writeStructDefinition(const Type& type);
+    void writeStructDefinition(const StructDefinition& s);
 
-    void disallowArrayTypes(const Type& type, int offset);
-
-    void writeBaseType(const Type& type);
-
-    void writeArrayDimensions(const Type& type);
+    void writeType(const Type& type);
 
     void writeExtension(const Extension& ext);
 
@@ -247,8 +226,6 @@ protected:
 
     void writeSwizzle(const Swizzle& swizzle);
 
-    static Precedence GetBinaryPrecedence(Token::Kind op);
-
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
 
     void writeTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
@@ -293,6 +270,10 @@ protected:
 
     Requirements requirements(const Statement* s);
 
+    int getUniformBinding(const Modifiers& m);
+
+    int getUniformSet(const Modifiers& m);
+
     std::unordered_map<String, IntrinsicKind> fIntrinsicMap;
     std::unordered_set<String> fReservedWords;
     std::unordered_map<const Type::Field*, const InterfaceBlock*> fInterfaceBlockMap;
@@ -307,10 +288,6 @@ protected:
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;
-    // Keeps track of which struct types we have written. Given that we are unlikely to ever write
-    // more than one or two structs per shader, a simple linear search will be faster than anything
-    // fancier.
-    std::vector<const Type*> fWrittenStructs;
     std::set<String> fWrittenIntrinsics;
     // true if we have run into usages of dFdx / dFdy
     bool fFoundDerivatives = false;

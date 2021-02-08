@@ -28,6 +28,7 @@
 #include "src/gpu/SkGpuDevice.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/vk/GrVkAMDMemoryAllocator.h"
+#include "src/gpu/vk/GrVkBuffer2.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkCommandPool.h"
 #include "src/gpu/vk/GrVkImage.h"
@@ -251,25 +252,7 @@ void GrVkGpu::destroyResources() {
     }
 
     // wait for all commands to finish
-    VkResult res = VK_CALL(QueueWaitIdle(fQueue));
-
-    // On windows, sometimes calls to QueueWaitIdle return before actually signalling the fences
-    // on the command buffers even though they have completed. This causes an assert to fire when
-    // destroying the command buffers. Currently this ony seems to happen on windows, so we add a
-    // sleep to make sure the fence signals.
-#ifdef SK_DEBUG
-    if (this->vkCaps().mustSleepOnTearDown()) {
-#if defined(SK_BUILD_FOR_WIN)
-        Sleep(10); // In milliseconds
-#else
-        sleep(1);  // In seconds
-#endif
-    }
-#endif
-
-#ifdef SK_DEBUG
-    SkASSERT(VK_SUCCESS == res || VK_ERROR_DEVICE_LOST == res);
-#endif
+    this->finishOutstandingGpuWork();
 
     if (fMainCmdPool) {
         fMainCmdPool->unref();
@@ -291,7 +274,7 @@ void GrVkGpu::destroyResources() {
     fMSAALoadManager.destroyResources(this);
 
     // must call this just before we destroy the command pool and VkDevice
-    fResourceProvider.destroyResources(VK_ERROR_DEVICE_LOST == res);
+    fResourceProvider.destroyResources();
 }
 
 GrVkGpu::~GrVkGpu() {
@@ -415,23 +398,25 @@ sk_sp<GrGpuBuffer> GrVkGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
         case GrGpuBufferType::kVertex:
         case GrGpuBufferType::kIndex:
         case GrGpuBufferType::kDrawIndirect:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStatic_GrAccessPattern == accessPattern);
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern ||
+                     accessPattern == kStatic_GrAccessPattern);
             buff = GrVkMeshBuffer::Make(this, type, size,
-                                        kDynamic_GrAccessPattern == accessPattern);
+                                        accessPattern == kDynamic_GrAccessPattern);
             break;
         case GrGpuBufferType::kXferCpuToGpu:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyRead_Type);
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern ||
+                     accessPattern == kStream_GrAccessPattern);
+            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyRead_Type, accessPattern);
             break;
         case GrGpuBufferType::kXferGpuToCpu:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyWrite_Type);
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern ||
+                     accessPattern == kStream_GrAccessPattern);
+            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyWrite_Type, accessPattern);
             break;
-        default:
-            SK_ABORT("Unknown buffer type.");
+        case GrGpuBufferType::kUniform:
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern);
+            buff = GrVkBuffer2::MakeUniform(this, size);
+            break;
     }
     if (data && buff) {
         buff->updateData(data, size);
@@ -491,7 +476,7 @@ bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
 
 bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                                  GrColorType surfaceColorType, GrColorType bufferColorType,
-                                 GrGpuBuffer* transferBuffer, size_t bufferOffset,
+                                 sk_sp<GrGpuBuffer> transferBuffer, size_t bufferOffset,
                                  size_t rowBytes) {
     if (!this->currentCommandBuffer()) {
         return false;
@@ -517,7 +502,7 @@ bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
     // Can't transfer compressed data
     SkASSERT(!GrVkFormatIsCompressed(vkTex->imageFormat()));
 
-    GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer);
+    GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer.get());
     if (!vkBuffer) {
         return false;
     }
@@ -559,7 +544,7 @@ bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
 
 bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
                                    GrColorType surfaceColorType, GrColorType bufferColorType,
-                                   GrGpuBuffer* transferBuffer, size_t offset) {
+                                   sk_sp<GrGpuBuffer> transferBuffer, size_t offset) {
     if (!this->currentCommandBuffer()) {
         return false;
     }
@@ -572,7 +557,7 @@ bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int wi
         return false;
     }
 
-    GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer);
+    GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer.get());
 
     GrVkImage* srcImage;
     if (GrVkRenderTarget* rt = static_cast<GrVkRenderTarget*>(surface->asRenderTarget())) {
@@ -1197,6 +1182,18 @@ void GrVkGpu::copyBuffer(GrVkBuffer* srcBuffer, GrVkBuffer* dstBuffer, VkDeviceS
     this->currentCommandBuffer()->copyBuffer(this, srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
+void GrVkGpu::copyBuffer(GrVkBuffer* srcBuffer, sk_sp<GrVkBuffer2> dstBuffer,
+                         VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size) {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+    VkBufferCopy copyRegion;
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = dstOffset;
+    copyRegion.size = size;
+    this->currentCommandBuffer()->copyBuffer(this, srcBuffer, std::move(dstBuffer), 1, &copyRegion);
+}
+
 bool GrVkGpu::updateBuffer(GrVkBuffer* buffer, const void* src,
                            VkDeviceSize offset, VkDeviceSize size) {
     if (!this->currentCommandBuffer()) {
@@ -1204,6 +1201,17 @@ bool GrVkGpu::updateBuffer(GrVkBuffer* buffer, const void* src,
     }
     // Update the buffer
     this->currentCommandBuffer()->updateBuffer(this, buffer, offset, size, src);
+
+    return true;
+}
+
+bool GrVkGpu::updateBuffer(sk_sp<GrVkBuffer2> buffer, const void* src,
+                           VkDeviceSize offset, VkDeviceSize size) {
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
+    // Update the buffer
+    this->currentCommandBuffer()->updateBuffer(this, std::move(buffer), offset, size, src);
 
     return true;
 }
@@ -1753,8 +1761,6 @@ GrBackendTexture GrVkGpu::onCreateBackendTexture(SkISize dimensions,
                                                  GrRenderable renderable,
                                                  GrMipmapped mipMapped,
                                                  GrProtected isProtected) {
-    this->handleDirtyContext();
-
     const GrVkCaps& caps = this->vkCaps();
 
     if (fProtectedContext != isProtected) {
@@ -2029,8 +2035,6 @@ GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(SkISize dime
                                                                     GrColorType ct,
                                                                     int sampleCnt,
                                                                     GrProtected isProtected) {
-    this->handleDirtyContext();
-
     if (dimensions.width()  > this->caps()->maxRenderTargetSize() ||
         dimensions.height() > this->caps()->maxRenderTargetSize()) {
         return {};
@@ -2076,6 +2080,25 @@ void GrVkGpu::addBufferMemoryBarrier(const GrManagedResource* resource,
     SkASSERT(resource);
     this->currentCommandBuffer()->pipelineBarrier(this,
                                                   resource,
+                                                  srcStageMask,
+                                                  dstStageMask,
+                                                  byRegion,
+                                                  GrVkCommandBuffer::kBufferMemory_BarrierType,
+                                                  barrier);
+}
+void GrVkGpu::addBufferMemoryBarrier(VkPipelineStageFlags srcStageMask,
+                                     VkPipelineStageFlags dstStageMask,
+                                     bool byRegion,
+                                     VkBufferMemoryBarrier* barrier) const {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+    // We don't pass in a resource here to the command buffer. The command buffer only is using it
+    // to hold a ref, but every place where we add a buffer memory barrier we are doing some other
+    // command with the buffer on the command buffer. Thus those other commands will already cause
+    // the command buffer to be holding a ref to the buffer.
+    this->currentCommandBuffer()->pipelineBarrier(this,
+                                                  /*resource=*/nullptr,
                                                   srcStageMask,
                                                   dstStageMask,
                                                   byRegion,
@@ -2152,6 +2175,24 @@ bool GrVkGpu::onSubmitToGpu(bool syncCpu) {
     } else {
         return this->submitCommandBuffer(kSkip_SyncQueue);
     }
+}
+
+void GrVkGpu::finishOutstandingGpuWork() {
+    VK_CALL(QueueWaitIdle(fQueue));
+
+    // On Windows and Imagination, sometimes calls to QueueWaitIdle return before actually
+    // signalling the fences on the command buffers even though they have completed. This causes an
+    // assert to fire when destroying the command buffers. Therefore we add asleep to make sure the
+    // fence signals.
+    #ifdef SK_DEBUG
+        if (this->vkCaps().mustSleepOnTearDown()) {
+    #if defined(SK_BUILD_FOR_WIN)
+            Sleep(10);  // In milliseconds
+    #else
+            sleep(1);  // In seconds
+    #endif
+        }
+    #endif
 }
 
 void GrVkGpu::onReportSubmitHistograms() {

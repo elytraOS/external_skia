@@ -7,6 +7,7 @@
 
 #include "src/sksl/SkSLCFGGenerator.h"
 
+#include "src/sksl/SkSLOperators.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
@@ -17,6 +18,7 @@
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
+#include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
@@ -34,12 +36,18 @@ void BasicBlock::Node::setExpression(std::unique_ptr<Expression> expr, ProgramUs
     *fExpression = std::move(expr);
 }
 
-void BasicBlock::Node::setStatement(std::unique_ptr<Statement> stmt, ProgramUsage* usage) {
+std::unique_ptr<Statement> BasicBlock::Node::setStatement(std::unique_ptr<Statement> stmt,
+                                                          ProgramUsage* usage) {
     SkASSERT(!this->isExpression());
     // See comment in header - we assume that stmt was already counted in usage (it was a subset
     // of fStatement). There is no way to verify that, unfortunately.
     usage->remove(fStatement->get());
+    std::unique_ptr<Statement> result;
+    if (stmt->is<Nop>()) {
+        result = std::move(*fStatement);
+    }
     *fStatement = std::move(stmt);
+    return result;
 }
 
 BlockId CFG::newBlock() {
@@ -179,9 +187,7 @@ bool BasicBlock::tryRemoveLValueBefore(std::vector<BasicBlock::Node>::iterator* 
             return this->tryRemoveLValueBefore(iter, ternary.ifFalse().get());
         }
         default:
-#ifdef SK_DEBUG
-            ABORT("invalid lvalue: %s\n", lvalue->description().c_str());
-#endif
+            SkDEBUGFAILF("invalid lvalue: %s\n", lvalue->description().c_str());
             return false;
     }
 }
@@ -280,9 +286,7 @@ bool BasicBlock::tryRemoveExpression(std::vector<BasicBlock::Node>::iterator* it
             *iter = fNodes.erase(*iter);
             return true;
         default:
-#ifdef SK_DEBUG
-            ABORT("unhandled expression: %s\n", expr->description().c_str());
-#endif
+            SkDEBUGFAILF("unhandled expression: %s\n", expr->description().c_str());
             return false;
     }
 }
@@ -371,7 +375,7 @@ void CFGGenerator::addExpression(CFG& cfg, std::unique_ptr<Expression>* e, bool 
                 }
                 default:
                     this->addExpression(cfg, &b.left(),
-                                        !Compiler::IsAssignment(b.getOperator()));
+                                        !Operators::IsAssignment(b.getOperator()));
                     this->addExpression(cfg, &b.right(), constantPropagate);
                     cfg.currentBlock().fNodes.push_back(
                             BasicBlock::MakeExpression(e, constantPropagate));
@@ -648,9 +652,7 @@ void CFGGenerator::addStatement(CFG& cfg, std::unique_ptr<Statement>* s) {
         case Statement::Kind::kNop:
             break;
         default:
-#ifdef SK_DEBUG
-            ABORT("unsupported statement: %s\n", (*s)->description().c_str());
-#endif
+            SkDEBUGFAILF("unsupported statement: %s\n", (*s)->description().c_str());
             break;
     }
 }

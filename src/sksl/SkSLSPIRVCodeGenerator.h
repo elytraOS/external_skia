@@ -30,6 +30,7 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
+#include "src/sksl/ir/SkSLModifiers.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
@@ -97,8 +98,14 @@ public:
         virtual ~LValue() {}
 
         // returns a pointer to the lvalue, if possible. If the lvalue cannot be directly referenced
-        // by a pointer (e.g. vector swizzles), returns 0.
-        virtual SpvId getPointer() = 0;
+        // by a pointer (e.g. vector swizzles), returns -1.
+        virtual SpvId getPointer() { return -1; }
+
+        // Applies a swizzle to the components of the LValue, if possible. This is used to create
+        // LValues that are swizzes-of-swizzles. Non-swizzle LValues can just return false.
+        virtual bool applySwizzle(const ComponentArray& components, const Type& newType) {
+            return false;
+        }
 
         virtual SpvId load(OutputStream& out) = 0;
 
@@ -194,11 +201,13 @@ private:
 
     SpvId writeFunction(const FunctionDefinition& f, OutputStream& out);
 
-    void writeGlobalVar(Program::Kind kind, const VarDeclaration& v, OutputStream& out);
+    void writeGlobalVar(Program::Kind kind, const VarDeclaration& v);
 
     void writeVarDeclaration(const VarDeclaration& var, OutputStream& out);
 
     SpvId writeVariableReference(const VariableReference& ref, OutputStream& out);
+
+    int findUniformFieldIndex(const Variable& var) const;
 
     std::unique_ptr<LValue> getLValue(const Expression& value, OutputStream& out);
 
@@ -382,6 +391,25 @@ private:
 
     void writeGeometryShaderExecutionMode(SpvId entryPoint, OutputStream& out);
 
+    MemoryLayout memoryLayoutForVariable(const Variable&) const;
+
+    struct EntrypointAdapter {
+        std::unique_ptr<FunctionDefinition> entrypointDef;
+        std::unique_ptr<FunctionDeclaration> entrypointDecl;
+        Layout fLayout;
+        Modifiers fModifiers;
+    };
+
+    EntrypointAdapter writeEntrypointAdapter(const FunctionDeclaration& main);
+
+    struct UniformBuffer {
+        std::unique_ptr<InterfaceBlock> fInterfaceBlock;
+        std::unique_ptr<Variable> fInnerVariable;
+        std::unique_ptr<Type> fStruct;
+    };
+
+    void writeUniformBuffer(std::shared_ptr<SymbolTable> topLevelSymbolTable);
+
     const Context& fContext;
     const MemoryLayout fDefaultLayout;
 
@@ -419,6 +447,12 @@ private:
     // holds variables synthesized during output, for lifetime purposes
     SymbolTable fSynthetics;
     int fSkInCount = 1;
+    // Holds a list of uniforms that were declared as globals at the top-level instead of in an
+    // interface block.
+    UniformBuffer fUniformBuffer;
+    std::vector<const VarDeclaration*> fTopLevelUniforms;
+    std::unordered_map<const Variable*, int> fTopLevelUniformMap; //<var, UniformBuffer field index>
+    SpvId fUniformBufferId = -1;
 
     friend class PointerLValue;
     friend class SwizzleLValue;

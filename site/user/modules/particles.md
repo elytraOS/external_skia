@@ -1,5 +1,4 @@
-Particles
-=========
+# Particles
 
 Skia’s particle module provides a way to quickly generate large numbers of
 drawing primitives with dynamic, animated behavior. Particles can be used to
@@ -7,9 +6,7 @@ create effects like fireworks, spark trails, ambient “weather”, and much mor
 Nearly all properties and behavior are controlled by scripts written in Skia’s
 custom language, SkSL.
 
-
-Samples
--------
+## Samples
 
 <style>
   #demo canvas {
@@ -37,35 +34,35 @@ Samples
   <figure>
     <canvas id=cube width=400 height=400></canvas>
     <figcaption>
-      <a href="https://particles.skia.org/b65b5fa234bac91afacf25f4004b3b7e"
+      <a href="https://particles.skia.org/?nameOrHash=@cube"
          target=_blank rel=noopener>Cuboid</a>
     </figcaption>
   </figure>
   <figure>
     <canvas id=confetti width=400 height=400></canvas>
     <figcaption>
-      <a href="https://particles.skia.org/73bf9f720bb7ed03d94cdc18e366b1da"
+      <a href="https://particles.skia.org/?nameOrHash=@confetti"
          target=_blank rel=noopener>Confetti</a>
     </figcaption>
   </figure>
   <figure>
     <canvas id=curves width=400 height=400></canvas>
     <figcaption>
-      <a href="https://particles.skia.org/632d713dacfa01d8905ffee98bc46acc"
+      <a href="https://particles.skia.org/?nameOrHash=@spiral"
          target=_blank rel=noopener>Curves</a>
     </figcaption>
   </figure>
   <figure>
     <canvas id=fireworks width=400 height=400></canvas>
     <figcaption>
-      <a href="https://particles.skia.org/d069873000ab1091296d4c0e561cc622"
+      <a href="https://particles.skia.org/?nameOrHash=@fireworks"
          target=_blank rel=noopener>Fireworks</a>
     </figcaption>
   </figure>
   <figure>
     <canvas id=text width=400 height=400></canvas>
     <figcaption>
-      <a href="https://particles.skia.org/9c18c154a286e7c5d64192c9d6661ce0"
+      <a href="https://particles.skia.org/?nameOrHash=@text"
          target=_blank rel=noopener>Text</a>
     </figcaption>
   </figure>
@@ -79,7 +76,7 @@ Samples
   var locate_file = '';
   if (window.WebAssembly && typeof window.WebAssembly.compile === 'function') {
     console.log('WebAssembly is supported!');
-    locate_file = 'https://particles.skia.org/static/';
+    locate_file = 'https://particles.skia.org/dist/';
   } else {
     console.log('WebAssembly is not supported (yet) on this browser.');
     document.getElementById('demo').innerHTML = "<div>WASM not supported by your browser. Try a recent version of Chrome, Firefox, Edge, or Safari.</div>";
@@ -132,18 +129,16 @@ const confetti ={
       "Type": "SkCircleDrawable",
       "Radius": 8
    },
-   "EffectCode": [
-      "void effectSpawn(inout Effect effect) {",
-      "  effect.lifetime = 2;",
-      "}",
-      "",
-      "void effectUpdate(inout Effect effect) {",
-      "  if (effect.age < 0.25 || effect.age > 0.75) { effect.rate = 0; }",
-      "  else { effect.rate = 200; }",
-      "}",
-      ""
-   ],
    "Code": [
+     "void effectSpawn(inout Effect effect) {",
+     "  effect.lifetime = 2;",
+     "}",
+     "",
+     "void effectUpdate(inout Effect effect) {",
+     "  if (effect.age < 0.25 || effect.age > 0.75) { effect.rate = 0; }",
+     "  else { effect.rate = 200; }",
+     "}",
+     "",
       "void spawn(inout Particle p) {",
       "  int idx = int(rand(p.seed) * 4);",
       "  p.color.rgb = (idx == 0) ? float3(0.87, 0.24, 0.11)",
@@ -173,14 +168,12 @@ const cube = {
     "Type": "SkCircleDrawable",
     "Radius": 4
   },
-  "EffectCode": [
+  "Code": [
     "void effectSpawn(inout Effect effect) {",
     "  effect.lifetime = 2;",
     "  effect.rate = 200;",
     "}",
-    ""
-  ],
-  "Code": [
+    "",
     "void spawn(inout Particle p) {",
     "  p.lifetime = 10;",
     "}",
@@ -268,14 +261,12 @@ const curves = {
       "Type": "SkCircleDrawable",
       "Radius": 2
    },
-   "EffectCode": [
-      "void effectSpawn(inout Effect effect) {",
-      "  effect.rate = 200;",
-      "  effect.color = float4(1, 0, 0, 1);",
-      "}",
-      ""
-   ],
    "Code": [
+     "void effectSpawn(inout Effect effect) {",
+     "  effect.rate = 200;",
+     "  effect.color = float4(1, 0, 0, 1);",
+     "}",
+     "",
       "void spawn(inout Particle p) {",
       "  p.lifetime = 3 + rand(p.seed);",
       "  p.vel.y = -50;",
@@ -299,34 +290,32 @@ const fireworks = {
       "Type": "SkCircleDrawable",
       "Radius": 3
    },
-   "EffectCode": [
-      "void effectSpawn(inout Effect effect) {",
-      "  // Phase one: Launch",
-      "  effect.lifetime = 4;",
-      "  effect.rate = 120;",
-      "  float a = radians(mix(-20, 20, rand(effect.seed)) - 90);",
-      "  float s = mix(200, 220, rand(effect.seed));",
-      "  effect.vel.x = cos(a) * s;",
-      "  effect.vel.y = sin(a) * s;",
-      "  effect.color.rgb = float3(rand(effect.seed), rand(effect.seed), rand(effect.seed));",
-      "  effect.pos.x = 0;",
-      "  effect.pos.y = 0;",
-      "  effect.scale = 0.25;  // Also used as particle behavior flag",
-      "}",
-      "",
-      "void effectUpdate(inout Effect effect) {",
-      "  if (effect.age > 0.5 && effect.rate > 0) {",
-      "    // Phase two: Explode",
-      "    effect.rate = 0;",
-      "    effect.burst = 50;",
-      "    effect.scale = 1;",
-      "  } else {",
-      "    effect.vel.y += dt * 90;",
-      "  }",
-      "}",
-      ""
-   ],
    "Code": [
+     "void effectSpawn(inout Effect effect) {",
+     "  // Phase one: Launch",
+     "  effect.lifetime = 4;",
+     "  effect.rate = 120;",
+     "  float a = radians(mix(-20, 20, rand(effect.seed)) - 90);",
+     "  float s = mix(200, 220, rand(effect.seed));",
+     "  effect.vel.x = cos(a) * s;",
+     "  effect.vel.y = sin(a) * s;",
+     "  effect.color.rgb = float3(rand(effect.seed), rand(effect.seed), rand(effect.seed));",
+     "  effect.pos.x = 0;",
+     "  effect.pos.y = 0;",
+     "  effect.scale = 0.25;  // Also used as particle behavior flag",
+     "}",
+     "",
+     "void effectUpdate(inout Effect effect) {",
+     "  if (effect.age > 0.5 && effect.rate > 0) {",
+     "    // Phase two: Explode",
+     "    effect.rate = 0;",
+     "    effect.burst = 50;",
+     "    effect.scale = 1;",
+     "  } else {",
+     "    effect.vel.y += dt * 90;",
+     "  }",
+     "}",
+     "",
       "void spawn(inout Particle p) {",
       "  bool explode = p.scale == 1;",
       "",
@@ -354,13 +343,11 @@ const text = {
       "Type": "SkCircleDrawable",
       "Radius": 1
    },
-   "EffectCode": [
-      "void effectSpawn(inout Effect effect) {",
-      "  effect.rate = 1000;",
-      "}",
-      ""
-   ],
    "Code": [
+     "void effectSpawn(inout Effect effect) {",
+     "  effect.rate = 1000;",
+     "}",
+     "",
       "void spawn(inout Particle p) {",
       "  p.lifetime = mix(1, 3, rand(p.seed));",
       "  float a = radians(mix(250, 290, rand(p.seed)));",
@@ -435,7 +422,6 @@ const trail = {
       "Type": "SkCircleDrawable",
       "Radius": 4
    },
-   "EffectCode": "",
    "Code": [
       "void spawn(inout Particle p) {",
       "  p.lifetime = 2 + rand(p.seed);",

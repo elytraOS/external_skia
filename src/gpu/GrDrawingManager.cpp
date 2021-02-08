@@ -42,6 +42,7 @@
 #include "src/gpu/GrTracing.h"
 #include "src/gpu/GrTransferFromRenderTask.h"
 #include "src/gpu/GrWaitRenderTask.h"
+#include "src/gpu/GrWritePixelsRenderTask.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
 #include "src/gpu/text/GrSDFTOptions.h"
 #include "src/image/SkSurface_Gpu.h"
@@ -414,7 +415,7 @@ void GrDrawingManager::sortTasks() {
             GrOpsTask* curOpsTask = fDAG[i]->asOpsTask();
 
             if (prevOpsTask && curOpsTask) {
-                SkASSERT(prevOpsTask->target(0).proxy() != curOpsTask->target(0).proxy());
+                SkASSERT(prevOpsTask->target(0) != curOpsTask->target(0));
             }
 
             prevOpsTask = curOpsTask;
@@ -447,6 +448,22 @@ void GrDrawingManager::reorderTasks() {
     // TODO: Handle case where proposed order would blow our memory budget.
     // Such cases are currently pathological, so we could just return here and keep current order.
     reorder_array_by_llist(llist, &fDAG);
+
+    int newCount = 0;
+    for (int i = 0; i < fDAG.count(); i++) {
+        sk_sp<GrRenderTask>& task = fDAG[i];
+        if (auto opsTask = task->asOpsTask()) {
+            size_t remaining = fDAG.size() - i - 1;
+            SkSpan<sk_sp<GrRenderTask>> nextTasks{fDAG.end() - remaining, remaining};
+            int removeCount = opsTask->mergeFrom(nextTasks);
+            for (const auto& removed : nextTasks.first(removeCount)) {
+                removed->disown(this);
+            }
+            i += removeCount;
+        }
+        fDAG[newCount++] = std::move(task);
+    }
+    fDAG.resize_back(newCount);
 }
 
 void GrDrawingManager::closeAllTasks() {
@@ -631,8 +648,11 @@ void GrDrawingManager::createDDLTask(sk_sp<const SkDeferredDisplayList> ddl,
 
     // Propagate the DDL proxy's state information to the replay target.
     if (ddl->priv().targetProxy()->isMSAADirty()) {
-        newDest->markMSAADirty(ddl->priv().targetProxy()->msaaDirtyRect(),
-                               ddl->characterization().origin());
+        auto nativeRect = GrNativeRect::MakeIRectRelativeTo(
+                ddl->characterization().origin(),
+                ddl->priv().targetProxy()->backingStoreDimensions().height(),
+                ddl->priv().targetProxy()->msaaDirtyRect());
+        newDest->markMSAADirty(nativeRect);
     }
     GrTextureProxy* newTextureProxy = newDest->asTextureProxy();
     if (newTextureProxy && GrMipmapped::kYes == newTextureProxy->mipmapped()) {
@@ -704,7 +724,7 @@ sk_sp<GrOpsTask> GrDrawingManager::newOpsTask(GrSurfaceProxyView surfaceView,
     sk_sp<GrOpsTask> opsTask(new GrOpsTask(this, fContext->priv().arenas(),
                                            std::move(surfaceView),
                                            fContext->priv().auditTrail()));
-    SkASSERT(this->getLastRenderTask(opsTask->target(0).proxy()) == opsTask.get());
+    SkASSERT(this->getLastRenderTask(opsTask->target(0)) == opsTask.get());
 
     if (flushTimeOpsTask) {
         fOnFlushRenderTasks.push_back(opsTask);
@@ -744,7 +764,7 @@ void GrDrawingManager::newWaitRenderTask(sk_sp<GrSurfaceProxy> proxy,
                                                                     std::move(semaphores),
                                                                     numSemaphores);
 
-    if (fActiveOpsTask && (fActiveOpsTask->target(0).proxy() == proxy.get())) {
+    if (fActiveOpsTask && (fActiveOpsTask->target(0) == proxy.get())) {
         SkASSERT(this->getLastRenderTask(proxy.get()) == fActiveOpsTask);
         this->insertTaskBeforeLast(waitTask);
         // In this case we keep the current renderTask open but just insert the new waitTask
@@ -807,28 +827,83 @@ void GrDrawingManager::newTransferFromRenderTask(sk_sp<GrSurfaceProxy> srcProxy,
     SkDEBUGCODE(this->validate());
 }
 
-bool GrDrawingManager::newCopyRenderTask(GrSurfaceProxyView srcView,
-                                         const SkIRect& srcRect,
-                                         GrSurfaceProxyView dstView,
-                                         const SkIPoint& dstPoint) {
+bool GrDrawingManager::newCopyRenderTask(sk_sp<GrSurfaceProxy> src,
+                                         SkIRect srcRect,
+                                         sk_sp<GrSurfaceProxy> dst,
+                                         SkIPoint dstPoint,
+                                         GrSurfaceOrigin origin) {
+    SkDEBUGCODE(this->validate());
+    SkASSERT(fContext);
+
+    // It'd be nicer to check this in GrCopyRenderTask::Make. This gets complicated because of
+    // "active ops task" tracking. dst will be the target of our copy task but it might also be the
+    // target of the active ops task. We currently require the active ops task to be closed before
+    // making a new task that targets the same proxy. However, if we first close the active ops
+    // task, then fail to make a copy task, the next active ops task may target the same proxy. This
+    // will trip an assert related to unnecessary ops task splitting.
+    if (src->framebufferOnly()) {
+        return false;
+    }
+
+    this->closeActiveOpsTask();
+
+    GrRenderTask* task = this->appendTask(GrCopyRenderTask::Make(this,
+                                                                 src,
+                                                                 srcRect,
+                                                                 std::move(dst),
+                                                                 dstPoint,
+                                                                 origin));
+    if (!task) {
+        return false;
+    }
+
+    const GrCaps& caps = *fContext->priv().caps();
+    // We always say GrMipmapped::kNo here since we are always just copying from the base layer to
+    // another base layer. We don't need to make sure the whole mip map chain is valid.
+    task->addDependency(this, src.get(), GrMipmapped::kNo, GrTextureResolveManager(this), caps);
+    task->makeClosed(caps);
+
+    // We have closed the previous active oplist but since a new oplist isn't being added there
+    // shouldn't be an active one.
+    SkASSERT(!fActiveOpsTask);
+    SkDEBUGCODE(this->validate());
+    return true;
+}
+
+bool GrDrawingManager::newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
+                                          SkIRect rect,
+                                          GrColorType srcColorType,
+                                          GrColorType dstColorType,
+                                          const GrMipLevel levels[],
+                                          int levelCount,
+                                          sk_sp<SkData> owner) {
     SkDEBUGCODE(this->validate());
     SkASSERT(fContext);
 
     this->closeActiveOpsTask();
     const GrCaps& caps = *fContext->priv().caps();
 
-    GrSurfaceProxy* srcProxy = srcView.proxy();
+    // On platforms that prefer flushes over VRAM use (i.e., ANGLE) we're better off forcing a
+    // complete flush here.
+    if (!caps.preferVRAMUseOverFlushes()) {
+        this->flushSurfaces(SkSpan<GrSurfaceProxy*>{},
+                            SkSurface::BackendSurfaceAccess::kNoAccess,
+                            GrFlushInfo{},
+                            nullptr);
+    }
 
-    GrRenderTask* task =
-            this->appendTask(GrCopyRenderTask::Make(this, std::move(srcView), srcRect,
-                                                    std::move(dstView), dstPoint, &caps));
+    GrRenderTask* task = this->appendTask(GrWritePixelsTask::Make(this,
+                                                                  std::move(dst),
+                                                                  rect,
+                                                                  srcColorType,
+                                                                  dstColorType,
+                                                                  levels,
+                                                                  levelCount,
+                                                                  std::move(owner)));
     if (!task) {
         return false;
     }
 
-    // We always say GrMipmapped::kNo here since we are always just copying from the base layer to
-    // another base layer. We don't need to make sure the whole mip map chain is valid.
-    task->addDependency(this, srcProxy, GrMipmapped::kNo, GrTextureResolveManager(this), caps);
     task->makeClosed(caps);
 
     // We have closed the previous active oplist but since a new oplist isn't being added there

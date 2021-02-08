@@ -45,7 +45,6 @@
 
 struct GrContextOptions;
 
-
 #define VeryLongCanvasWidth 1000000
 #define TestCanvasWidth 1000
 #define TestCanvasHeight 600
@@ -1239,11 +1238,7 @@ DEF_TEST(SkParagraph_HeightOverrideParagraph, reporter) {
     paragraph->layout(550);
 
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
-#ifdef SK_PARAGRAPH_LIBTXT_SPACES_RESOLUTION
     REPORTER_ASSERT(reporter, impl->runs().size() == 5);
-#else
-    REPORTER_ASSERT(reporter, impl->runs().size() == 4);
-#endif
     REPORTER_ASSERT(reporter, impl->styles().size() == 1);  // paragraph style does not count
     REPORTER_ASSERT(reporter, impl->styles()[0].fStyle.equals(text_style));
 
@@ -3990,13 +3985,8 @@ DEF_TEST(SkParagraph_FontFallbackParagraph, reporter) {
     paragraph->layout(TestCanvasWidth);
     paragraph->paint(canvas.get(), 10.0, 15.0);
 
-#ifdef SK_PARAGRAPH_LIBTXT_SPACES_RESOLUTION
     size_t spaceRun = 1;
     REPORTER_ASSERT(reporter, paragraph->unresolvedGlyphs() == 2); // From the text1 ("字典" - excluding the last space)
-#else
-    size_t spaceRun = 0;
-    REPORTER_ASSERT(reporter, paragraph->unresolvedGlyphs() == 3); // From the text1 ("字典 " - including the last space)
-#endif
 
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
 
@@ -4009,9 +3999,7 @@ DEF_TEST(SkParagraph_FontFallbackParagraph, reporter) {
     // [Apple + Han] 5, 6
     auto robotoAdvance = impl->runs()[0].advance().fX +
                          impl->runs()[1].advance().fX;
-#ifdef SK_PARAGRAPH_LIBTXT_SPACES_RESOLUTION
     robotoAdvance += impl->runs()[2].advance().fX;
-#endif
 
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(robotoAdvance, 64.199f, EPSILON50));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(impl->runs()[2 + spaceRun].advance().fX, 139.125f, EPSILON100));
@@ -5503,11 +5491,7 @@ DEF_TEST(SkParagraph_FontResolutionInRTL, reporter) {
     paragraph->paint(canvas.get(), 0, 0);
 
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
-#ifdef SK_PARAGRAPH_LIBTXT_SPACES_RESOLUTION
     REPORTER_ASSERT(reporter, impl->runs().size() == (10 + 11));
-#else
-    REPORTER_ASSERT(reporter, impl->runs().size() == 1);
-#endif
 }
 
 DEF_TEST(SkParagraph_FontResolutionInLTR, reporter) {
@@ -5534,20 +5518,12 @@ DEF_TEST(SkParagraph_FontResolutionInLTR, reporter) {
     paragraph->paint(canvas.get(), 0, 0);
 
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
-#ifdef SK_PARAGRAPH_LIBTXT_SPACES_RESOLUTION
     REPORTER_ASSERT(reporter, impl->runs().size() == 5);
     REPORTER_ASSERT(reporter, impl->runs()[0].textRange().width() == 4); // "abc "
     REPORTER_ASSERT(reporter, impl->runs()[1].textRange().width() == 2); // "{unresolved}"
     REPORTER_ASSERT(reporter, impl->runs()[2].textRange().width() == 1); // " "
     REPORTER_ASSERT(reporter, impl->runs()[3].textRange().width() == 2); // "{unresolved}"
     REPORTER_ASSERT(reporter, impl->runs()[4].textRange().width() == 4); // " def"
-#else
-    REPORTER_ASSERT(reporter, impl->runs().size() == 3);
-    REPORTER_ASSERT(reporter, impl->runs()[0].textRange().width() == 4); // "abc "
-    REPORTER_ASSERT(reporter, impl->runs()[1].textRange().width() == 5); // "{unresolved} {unresolved}"
-    REPORTER_ASSERT(reporter, impl->runs()[2].textRange().width() == 4); // " def"
-
-#endif
 }
 
 DEF_TEST(SkParagraph_Intrinsic, reporter) {
@@ -5817,4 +5793,36 @@ DEF_TEST(SkParagraph_PlaceholderWidth, reporter) {
     // placeholder: 300 "78901": 250
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(len1, 300.0f));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(len2, 250.0f));
+}
+
+DEF_TEST(SkParagraph_GlyphPositionsInEmptyLines, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_GlyphPositionsInEmptyLines");
+    ParagraphStyle paragraph_style;
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto") });
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText("A\n\n");
+    builder.pop();
+    auto paragraph = builder.Build();
+    paragraph->layout(300);
+    paragraph->paint(canvas.get(), 0, 0);
+
+    auto res1 = paragraph->
+        getGlyphPositionAtCoordinate(paragraph->getMinIntrinsicWidth(),1);
+    REPORTER_ASSERT(reporter, res1.position == 1 && res1.affinity == Affinity::kUpstream);
+
+    auto res2 = paragraph->
+        getGlyphPositionAtCoordinate(0,paragraph->getHeight() * 0.5);
+    REPORTER_ASSERT(reporter, res2.position == 2 && res2.affinity == Affinity::kDownstream);
+
+    auto res3 = paragraph->
+        getGlyphPositionAtCoordinate(0,paragraph->getHeight() - 1);
+    REPORTER_ASSERT(reporter, res3.position == 3 && res3.affinity == Affinity::kDownstream);
 }

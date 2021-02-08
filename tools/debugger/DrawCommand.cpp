@@ -1259,15 +1259,17 @@ void DrawImageCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManag
 DrawImageLatticeCommand::DrawImageLatticeCommand(const SkImage*           image,
                                                  const SkCanvas::Lattice& lattice,
                                                  const SkRect&            dst,
+                                                 SkFilterMode             filter,
                                                  const SkPaint*           paint)
         : INHERITED(kDrawImageLattice_OpType)
         , fImage(SkRef(image))
         , fLattice(lattice)
         , fDst(dst)
+        , fFilter(filter)
         , fPaint(paint) {}
 
 void DrawImageLatticeCommand::execute(SkCanvas* canvas) const {
-    canvas->drawImageLattice(fImage.get(), fLattice, fDst, fPaint.getMaybeNull());
+    canvas->drawImageLattice(fImage.get(), fLattice, fDst, fFilter, fPaint.getMaybeNull());
 }
 
 bool DrawImageLatticeCommand::render(SkCanvas* canvas) const {
@@ -1354,8 +1356,9 @@ void DrawImageRectCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataM
 DrawImageRectLayerCommand::DrawImageRectLayerCommand(DebugLayerManager*    layerManager,
                                                      const int                   nodeId,
                                                      const int                   frame,
-                                                     const SkRect*               src,
+                                                     const SkRect&               src,
                                                      const SkRect&               dst,
+                                                     const SkSamplingOptions&    sampling,
                                                      const SkPaint*              paint,
                                                      SkCanvas::SrcRectConstraint constraint)
         : INHERITED(kDrawImageRectLayer_OpType)
@@ -1364,13 +1367,13 @@ DrawImageRectLayerCommand::DrawImageRectLayerCommand(DebugLayerManager*    layer
         , fFrame(frame)
         , fSrc(src)
         , fDst(dst)
+        , fSampling(sampling)
         , fPaint(paint)
         , fConstraint(constraint) {}
 
 void DrawImageRectLayerCommand::execute(SkCanvas* canvas) const {
     sk_sp<SkImage> snapshot = fLayerManager->getLayerAsImage(fNodeId, fFrame);
-    canvas->legacy_drawImageRect(
-            snapshot.get(), fSrc.getMaybeNull(), fDst, fPaint.getMaybeNull(), fConstraint);
+    canvas->drawImageRect(snapshot.get(), fSrc, fDst, SkSamplingOptions(), fPaint.getMaybeNull(), fConstraint);
 }
 
 bool DrawImageRectLayerCommand::render(SkCanvas* canvas) const {
@@ -1392,10 +1395,9 @@ void DrawImageRectLayerCommand::toJSON(SkJSONWriter& writer, UrlDataManager& url
     // Append the node id, and the layer inspector of the debugger will know what to do with it.
     writer.appendS64(DEBUGCANVAS_ATTRIBUTE_LAYERNODEID, fNodeId);
 
-    if (fSrc.isValid()) {
-        writer.appendName(DEBUGCANVAS_ATTRIBUTE_SRC);
-        MakeJsonRect(writer, *fSrc);
-    }
+    writer.appendName(DEBUGCANVAS_ATTRIBUTE_SRC);
+    MakeJsonRect(writer, fSrc);
+
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_DST);
     MakeJsonRect(writer, fDst);
     if (fPaint.isValid()) {
@@ -1982,6 +1984,7 @@ DrawAtlasCommand::DrawAtlasCommand(const SkImage*  image,
                                    const SkColor   colors[],
                                    int             count,
                                    SkBlendMode     bmode,
+                                   const SkSamplingOptions& sampling,
                                    const SkRect*   cull,
                                    const SkPaint*  paint)
         : INHERITED(kDrawAtlas_OpType)
@@ -1990,6 +1993,7 @@ DrawAtlasCommand::DrawAtlasCommand(const SkImage*  image,
         , fTex(tex, count)
         , fColors(colors, colors ? count : 0)
         , fBlendMode(bmode)
+        , fSampling(sampling)
         , fCull(cull)
         , fPaint(paint) {}
 
@@ -2000,6 +2004,7 @@ void DrawAtlasCommand::execute(SkCanvas* canvas) const {
                       fColors.isEmpty() ? nullptr : fColors.begin(),
                       fXform.count(),
                       fBlendMode,
+                      fSampling,
                       fCull.getMaybeNull(),
                       fPaint.getMaybeNull());
 }

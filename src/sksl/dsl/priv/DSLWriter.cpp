@@ -11,6 +11,7 @@
 #include "src/gpu/mock/GrMockCaps.h"
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/dsl/DSLCore.h"
 
@@ -57,11 +58,25 @@ const char* DSLWriter::Name(const char* name) {
     return name;
 }
 
+#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+void DSLWriter::StartFragmentProcessor(GrGLSLFragmentProcessor* processor,
+                                       GrGLSLFragmentProcessor::EmitArgs* emitArgs) {
+    Instance().fStack.push({processor, emitArgs});
+    IRGenerator().pushSymbolTable();
+}
+
+void DSLWriter::EndFragmentProcessor() {
+    DSLWriter& instance = Instance();
+    SkASSERT(!instance.fStack.empty());
+    instance.fStack.pop();
+    IRGenerator().popSymbolTable();
+}
+#endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+
 std::unique_ptr<SkSL::Expression> DSLWriter::Check(std::unique_ptr<SkSL::Expression> expr) {
-    if (expr == nullptr) {
-        if (DSLWriter::Compiler().errorCount()) {
-            DSLWriter::ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str());
-        }
+    if (DSLWriter::Compiler().errorCount()) {
+        DSLWriter::ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str());
+        DSLWriter::Compiler().setErrorCount(0);
     }
     return expr;
 }
@@ -110,6 +125,10 @@ void DSLWriter::ReportError(const char* msg) {
     } else {
         SK_ABORT("%sNo SkSL DSL error handler configured, treating this as a fatal error\n", msg);
     }
+}
+
+const SkSL::Variable& DSLWriter::Var(const DSLVar& var) {
+    return *var.var();
 }
 
 #if !SK_SUPPORT_GPU || defined(SKSL_STANDALONE)

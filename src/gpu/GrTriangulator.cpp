@@ -204,7 +204,7 @@ void GrTriangulator::MonotonePoly::addEdge(Edge* edge) {
     }
 }
 
-void* GrTriangulator::emitMonotonePoly(const MonotonePoly* monotonePoly, void* data) {
+void* GrTriangulator::emitMonotonePoly(const MonotonePoly* monotonePoly, void* data) const {
     SkASSERT(monotonePoly->fWinding != 0);
     Edge* e = monotonePoly->fFirstEdge;
     VertexList vertices;
@@ -258,16 +258,16 @@ void* GrTriangulator::emitTriangle(Vertex* prev, Vertex* curr, Vertex* next, int
         // triangulated as a simple fan (a la red book).
         std::swap(prev, next);
     }
-    if (fBreadcrumbTriangles && abs(winding) > 1 &&
+    if (fCollectBreadcrumbTriangles && abs(winding) > 1 &&
         fPath.getFillType() == SkPathFillType::kWinding) {
         // The first winding count will come from the actual triangle we emit. The remaining counts
         // come from the breadcrumb triangle.
-        fBreadcrumbTriangles->push(prev->fPoint, curr->fPoint, next->fPoint, abs(winding) - 1);
+        fBreadcrumbList.append(fAlloc, prev->fPoint, curr->fPoint, next->fPoint, abs(winding) - 1);
     }
     return emit_triangle(prev, curr, next, fEmitCoverage, data);
 }
 
-Poly* GrTriangulator::Poly::addEdge(Edge* e, Side side, SkArenaAlloc& alloc) {
+Poly* GrTriangulator::Poly::addEdge(Edge* e, Side side, SkArenaAlloc* alloc) {
     TESS_LOG("addEdge (%g -> %g) to poly %d, %s side\n",
              e->fTop->fID, e->fBottom->fID, fID, side == kLeft_Side ? "left" : "right");
     Poly* partner = fPartner;
@@ -285,7 +285,7 @@ Poly* GrTriangulator::Poly::addEdge(Edge* e, Side side, SkArenaAlloc& alloc) {
         fPartner = partner->fPartner = nullptr;
     }
     if (!fTail) {
-        fHead = fTail = alloc.make<MonotonePoly>(e, side, fWinding);
+        fHead = fTail = alloc->make<MonotonePoly>(e, side, fWinding);
         fCount += 2;
     } else if (e->fBottom == fTail->fLastEdge->fBottom) {
         return poly;
@@ -293,14 +293,14 @@ Poly* GrTriangulator::Poly::addEdge(Edge* e, Side side, SkArenaAlloc& alloc) {
         fTail->addEdge(e);
         fCount++;
     } else {
-        e = alloc.make<Edge>(fTail->fLastEdge->fBottom, e->fBottom, 1, EdgeType::kInner);
+        e = alloc->make<Edge>(fTail->fLastEdge->fBottom, e->fBottom, 1, EdgeType::kInner);
         fTail->addEdge(e);
         fCount++;
         if (partner) {
             partner->addEdge(e, side, alloc);
             poly = partner;
         } else {
-            MonotonePoly* m = alloc.make<MonotonePoly>(e, side, fWinding);
+            MonotonePoly* m = alloc->make<MonotonePoly>(e, side, fWinding);
             m->fPrev = fTail;
             fTail->fNext = m;
             fTail = m;
@@ -308,7 +308,7 @@ Poly* GrTriangulator::Poly::addEdge(Edge* e, Side side, SkArenaAlloc& alloc) {
     }
     return poly;
 }
-void* GrTriangulator::emitPoly(const Poly* poly, void *data) {
+void* GrTriangulator::emitPoly(const Poly* poly, void *data) const {
     if (poly->fCount < 3) {
         return data;
     }
@@ -323,15 +323,15 @@ static bool coincident(const SkPoint& a, const SkPoint& b) {
     return a == b;
 }
 
-Poly* GrTriangulator::makePoly(Poly** head, Vertex* v, int winding) {
-    Poly* poly = fAlloc.make<Poly>(v, winding);
+Poly* GrTriangulator::makePoly(Poly** head, Vertex* v, int winding) const {
+    Poly* poly = fAlloc->make<Poly>(v, winding);
     poly->fNext = *head;
     *head = poly;
     return poly;
 }
 
-void GrTriangulator::appendPointToContour(const SkPoint& p, VertexList* contour) {
-    Vertex* v = fAlloc.make<Vertex>(p, 255);
+void GrTriangulator::appendPointToContour(const SkPoint& p, VertexList* contour) const {
+    Vertex* v = fAlloc->make<Vertex>(p, 255);
 #if TRIANGULATOR_LOGGING
     static float gID = 0.0f;
     v->fID = gID++;
@@ -351,7 +351,7 @@ static SkScalar quad_error_at(const SkPoint pts[3], SkScalar t, SkScalar u) {
 }
 
 void GrTriangulator::appendQuadraticToContour(const SkPoint pts[3], SkScalar toleranceSqd,
-                                              VertexList* contour) {
+                                              VertexList* contour) const {
     SkQuadCoeff quad(pts);
     Sk2s aa = quad.fA * quad.fA;
     SkScalar denom = 2.0f * (aa[0] + aa[1]);
@@ -375,7 +375,7 @@ void GrTriangulator::appendQuadraticToContour(const SkPoint pts[3], SkScalar tol
 
 void GrTriangulator::generateCubicPoints(const SkPoint& p0, const SkPoint& p1, const SkPoint& p2,
                                          const SkPoint& p3, SkScalar tolSqd, VertexList* contour,
-                                         int pointsLeft) {
+                                         int pointsLeft) const {
     SkScalar d1 = SkPointPriv::DistanceToLineSegmentBetweenSqd(p1, p0, p3);
     SkScalar d2 = SkPointPriv::DistanceToLineSegmentBetweenSqd(p2, p0, p3);
     if (pointsLeft < 2 || (d1 < tolSqd && d2 < tolSqd) ||
@@ -401,10 +401,10 @@ void GrTriangulator::generateCubicPoints(const SkPoint& p0, const SkPoint& p1, c
 // Stage 1: convert the input path to a set of linear contours (linked list of Vertices).
 
 void GrTriangulator::pathToContours(float tolerance, const SkRect& clipBounds,
-                                    VertexList* contours) {
+                                    VertexList* contours, bool* isLinear) const {
     SkScalar toleranceSqd = tolerance * tolerance;
     SkPoint pts[4];
-    fIsLinear = true;
+    *isLinear = true;
     VertexList* contour = contours;
     SkPath::Iter iter(fPath, false);
     if (fPath.isInverseFillType()) {
@@ -420,7 +420,7 @@ void GrTriangulator::pathToContours(float tolerance, const SkRect& clipBounds,
     while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kConic_Verb: {
-                fIsLinear = false;
+                *isLinear = false;
                 if (toleranceSqd == 0) {
                     this->appendPointToContour(pts[2], contour);
                     break;
@@ -444,7 +444,7 @@ void GrTriangulator::pathToContours(float tolerance, const SkRect& clipBounds,
                 break;
             }
             case SkPath::kQuad_Verb: {
-                fIsLinear = false;
+                *isLinear = false;
                 if (toleranceSqd == 0) {
                     this->appendPointToContour(pts[2], contour);
                     break;
@@ -453,7 +453,7 @@ void GrTriangulator::pathToContours(float tolerance, const SkRect& clipBounds,
                 break;
             }
             case SkPath::kCubic_Verb: {
-                fIsLinear = false;
+                *isLinear = false;
                 if (toleranceSqd == 0) {
                     this->appendPointToContour(pts[3], contour);
                     break;
@@ -486,7 +486,7 @@ static inline bool apply_fill_type(SkPathFillType fillType, int winding) {
     }
 }
 
-bool GrTriangulator::applyFillType(int winding) {
+bool GrTriangulator::applyFillType(int winding) const {
     return apply_fill_type(fPath.getFillType(), winding);
 }
 
@@ -494,12 +494,13 @@ static inline bool apply_fill_type(SkPathFillType fillType, Poly* poly) {
     return poly && apply_fill_type(fillType, poly->fWinding);
 }
 
-Edge* GrTriangulator::makeEdge(Vertex* prev, Vertex* next, EdgeType type, const Comparator& c) {
+Edge* GrTriangulator::makeEdge(Vertex* prev, Vertex* next, EdgeType type,
+                               const Comparator& c) const {
     SkASSERT(prev->fPoint != next->fPoint);
     int winding = c.sweep_lt(prev->fPoint, next->fPoint) ? 1 : -1;
     Vertex* top = winding < 0 ? next : prev;
     Vertex* bottom = winding < 0 ? prev : next;
-    return fAlloc.make<Edge>(top, bottom, winding, type);
+    return fAlloc->make<Edge>(top, bottom, winding, type);
 }
 
 void EdgeList::insert(Edge* edge, Edge* prev) {
@@ -649,11 +650,11 @@ static void rewind_if_necessary(Edge* edge, EdgeList* activeEdges, Vertex** curr
 }
 
 void GrTriangulator::setTop(Edge* edge, Vertex* v, EdgeList* activeEdges, Vertex** current,
-                            const Comparator& c) {
+                            const Comparator& c) const {
     remove_edge_below(edge);
-    if (fBreadcrumbTriangles) {
-        fBreadcrumbTriangles->push(edge->fTop->fPoint, edge->fBottom->fPoint, v->fPoint,
-                                   edge->fWinding);
+    if (fCollectBreadcrumbTriangles) {
+        fBreadcrumbList.append(fAlloc, edge->fTop->fPoint, edge->fBottom->fPoint, v->fPoint,
+                               edge->fWinding);
     }
     edge->fTop = v;
     edge->recompute();
@@ -663,11 +664,11 @@ void GrTriangulator::setTop(Edge* edge, Vertex* v, EdgeList* activeEdges, Vertex
 }
 
 void GrTriangulator::setBottom(Edge* edge, Vertex* v, EdgeList* activeEdges, Vertex** current,
-                               const Comparator& c) {
+                               const Comparator& c) const {
     remove_edge_above(edge);
-    if (fBreadcrumbTriangles) {
-        fBreadcrumbTriangles->push(edge->fTop->fPoint, edge->fBottom->fPoint, v->fPoint,
-                                   edge->fWinding);
+    if (fCollectBreadcrumbTriangles) {
+        fBreadcrumbList.append(fAlloc, edge->fTop->fPoint, edge->fBottom->fPoint, v->fPoint,
+                               edge->fWinding);
     }
     edge->fBottom = v;
     edge->recompute();
@@ -677,7 +678,7 @@ void GrTriangulator::setBottom(Edge* edge, Vertex* v, EdgeList* activeEdges, Ver
 }
 
 void GrTriangulator::mergeEdgesAbove(Edge* edge, Edge* other, EdgeList* activeEdges,
-                                     Vertex** current, const Comparator& c) {
+                                     Vertex** current, const Comparator& c) const {
     if (coincident(edge->fTop->fPoint, other->fTop->fPoint)) {
         TESS_LOG("merging coincident above edges (%g, %g) -> (%g, %g)\n",
                  edge->fTop->fPoint.fX, edge->fTop->fPoint.fY,
@@ -698,7 +699,7 @@ void GrTriangulator::mergeEdgesAbove(Edge* edge, Edge* other, EdgeList* activeEd
 }
 
 void GrTriangulator::mergeEdgesBelow(Edge* edge, Edge* other, EdgeList* activeEdges,
-                                     Vertex** current, const Comparator& c) {
+                                     Vertex** current, const Comparator& c) const {
     if (coincident(edge->fBottom->fPoint, other->fBottom->fPoint)) {
         TESS_LOG("merging coincident below edges (%g, %g) -> (%g, %g)\n",
                  edge->fTop->fPoint.fX, edge->fTop->fPoint.fY,
@@ -735,7 +736,7 @@ static bool bottom_collinear(Edge* left, Edge* right) {
 }
 
 void GrTriangulator::mergeCollinearEdges(Edge* edge, EdgeList* activeEdges, Vertex** current,
-                                         const Comparator& c) {
+                                         const Comparator& c) const {
     for (;;) {
         if (top_collinear(edge->fPrevEdgeAbove, edge)) {
             this->mergeEdgesAbove(edge->fPrevEdgeAbove, edge, activeEdges, current, c);
@@ -756,7 +757,7 @@ void GrTriangulator::mergeCollinearEdges(Edge* edge, EdgeList* activeEdges, Vert
 }
 
 bool GrTriangulator::splitEdge(Edge* edge, Vertex* v, EdgeList* activeEdges, Vertex** current,
-                               const Comparator& c) {
+                               const Comparator& c) const {
     if (!edge->fTop || !edge->fBottom || v == edge->fTop || v == edge->fBottom) {
         return false;
     }
@@ -778,7 +779,7 @@ bool GrTriangulator::splitEdge(Edge* edge, Vertex* v, EdgeList* activeEdges, Ver
         bottom = edge->fBottom;
         this->setBottom(edge, v, activeEdges, current, c);
     }
-    Edge* newEdge = fAlloc.make<Edge>(top, bottom, winding, edge->fType);
+    Edge* newEdge = fAlloc->make<Edge>(top, bottom, winding, edge->fType);
     newEdge->insertBelow(top, c);
     newEdge->insertAbove(bottom, c);
     this->mergeCollinearEdges(newEdge, activeEdges, current, c);
@@ -786,7 +787,7 @@ bool GrTriangulator::splitEdge(Edge* edge, Vertex* v, EdgeList* activeEdges, Ver
 }
 
 bool GrTriangulator::intersectEdgePair(Edge* left, Edge* right, EdgeList* activeEdges,
-                                       Vertex** current, const Comparator& c) {
+                                       Vertex** current, const Comparator& c) const {
     if (!left->fTop || !left->fBottom || !right->fTop || !right->fBottom) {
         return false;
     }
@@ -819,7 +820,7 @@ bool GrTriangulator::intersectEdgePair(Edge* left, Edge* right, EdgeList* active
 }
 
 Edge* GrTriangulator::makeConnectingEdge(Vertex* prev, Vertex* next, EdgeType type,
-                                         const Comparator& c, int windingScale) {
+                                         const Comparator& c, int windingScale) const {
     if (!prev || !next || prev->fPoint == next->fPoint) {
         return nullptr;
     }
@@ -832,7 +833,7 @@ Edge* GrTriangulator::makeConnectingEdge(Vertex* prev, Vertex* next, EdgeType ty
 }
 
 void GrTriangulator::mergeVertices(Vertex* src, Vertex* dst, VertexList* mesh,
-                                   const Comparator& c) {
+                                   const Comparator& c) const {
     TESS_LOG("found coincident verts at %g, %g; merging %g into %g\n",
              src->fPoint.fX, src->fPoint.fY, src->fID, dst->fID);
     dst->fAlpha = std::max(src->fAlpha, dst->fAlpha);
@@ -850,7 +851,7 @@ void GrTriangulator::mergeVertices(Vertex* src, Vertex* dst, VertexList* mesh,
 }
 
 Vertex* GrTriangulator::makeSortedVertex(const SkPoint& p, uint8_t alpha, VertexList* mesh,
-                                         Vertex* reference, const Comparator& c) {
+                                         Vertex* reference, const Comparator& c) const {
     Vertex* prevV = reference;
     while (prevV && c.sweep_lt(p, prevV->fPoint)) {
         prevV = prevV->fPrev;
@@ -866,7 +867,7 @@ Vertex* GrTriangulator::makeSortedVertex(const SkPoint& p, uint8_t alpha, Vertex
     } else if (nextV && coincident(nextV->fPoint, p)) {
         v = nextV;
     } else {
-        v = fAlloc.make<Vertex>(p, alpha);
+        v = fAlloc->make<Vertex>(p, alpha);
 #if TRIANGULATOR_LOGGING
         if (!prevV) {
             v->fID = mesh->fHead->fID - 1.0f;
@@ -900,7 +901,7 @@ static SkPoint clamp(SkPoint p, SkPoint min, SkPoint max, const Comparator& c) {
     }
 }
 
-void GrTriangulator::computeBisector(Edge* edge1, Edge* edge2, Vertex* v) {
+void GrTriangulator::computeBisector(Edge* edge1, Edge* edge2, Vertex* v) const {
     SkASSERT(fEmitCoverage);  // Edge-AA only!
     Line line1 = edge1->fLine;
     Line line2 = edge2->fLine;
@@ -915,13 +916,14 @@ void GrTriangulator::computeBisector(Edge* edge1, Edge* edge2, Vertex* v) {
     SkPoint p;
     if (line1.intersect(line2, &p)) {
         uint8_t alpha = edge1->fType == EdgeType::kOuter ? 255 : 0;
-        v->fPartner = fAlloc.make<Vertex>(p, alpha);
+        v->fPartner = fAlloc->make<Vertex>(p, alpha);
         TESS_LOG("computed bisector (%g,%g) alpha %d for vertex %g\n", p.fX, p.fY, alpha, v->fID);
     }
 }
 
 bool GrTriangulator::checkForIntersection(Edge* left, Edge* right, EdgeList* activeEdges,
-                                          Vertex** current, VertexList* mesh, const Comparator& c) {
+                                          Vertex** current, VertexList* mesh,
+                                          const Comparator& c) const {
     if (!left || !right) {
         return false;
     }
@@ -967,7 +969,7 @@ bool GrTriangulator::checkForIntersection(Edge* left, Edge* right, EdgeList* act
     return this->intersectEdgePair(left, right, activeEdges, current, c);
 }
 
-void GrTriangulator::sanitizeContours(VertexList* contours, int contourCnt) {
+void GrTriangulator::sanitizeContours(VertexList* contours, int contourCnt) const {
     for (VertexList* contour = contours; contourCnt > 0; --contourCnt, ++contour) {
         SkASSERT(contour->fHead);
         Vertex* prev = contour->fTail;
@@ -986,7 +988,7 @@ void GrTriangulator::sanitizeContours(VertexList* contours, int contourCnt) {
             } else if (!v->fPoint.isFinite()) {
                 TESS_LOG("vertex %g,%g non-finite; removing\n", v->fPoint.fX, v->fPoint.fY);
                 contour->remove(v);
-            } else if (fCullCollinearVertices &&
+            } else if (!fPreserveCollinearVertices &&
                        Line(prev->fPoint, nextWrap->fPoint).dist(v->fPoint) == 0.0) {
                 TESS_LOG("vertex %g,%g collinear; removing\n", v->fPoint.fX, v->fPoint.fY);
                 contour->remove(v);
@@ -998,7 +1000,7 @@ void GrTriangulator::sanitizeContours(VertexList* contours, int contourCnt) {
     }
 }
 
-bool GrTriangulator::mergeCoincidentVertices(VertexList* mesh, const Comparator& c) {
+bool GrTriangulator::mergeCoincidentVertices(VertexList* mesh, const Comparator& c) const {
     if (!mesh->fHead) {
         return false;
     }
@@ -1020,7 +1022,7 @@ bool GrTriangulator::mergeCoincidentVertices(VertexList* mesh, const Comparator&
 // Stage 2: convert the contours to a mesh of edges connecting the vertices.
 
 void GrTriangulator::buildEdges(VertexList* contours, int contourCnt, VertexList* mesh,
-                                const Comparator& c) {
+                                const Comparator& c) const {
     for (VertexList* contour = contours; contourCnt > 0; --contourCnt, ++contour) {
         Vertex* prev = contour->fTail;
         for (Vertex* v = contour->fHead; v;) {
@@ -1098,7 +1100,7 @@ static void merge_sort(VertexList* vertices) {
 }
 
 #if TRIANGULATOR_LOGGING
-void VertexList::dump() {
+void VertexList::dump() const {
     for (Vertex* v = fHead; v; v = v->fNext) {
         TESS_LOG("vertex %g (%g, %g) alpha %d", v->fID, v->fPoint.fX, v->fPoint.fY, v->fAlpha);
         if (Vertex* p = v->fPartner) {
@@ -1154,7 +1156,8 @@ static void validate_edge_list(EdgeList* edges, const Comparator& c) {
 
 // Stage 4: Simplify the mesh by inserting new vertices at intersecting edges.
 
-GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh, const Comparator& c) {
+GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
+                                                        const Comparator& c) const {
     TESS_LOG("simplifying complex polygons\n");
     EdgeList activeEdges;
     auto result = SimplifyResult::kAlreadySimple;
@@ -1178,9 +1181,6 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh, const 
                             leftEnclosingEdge, edge, &activeEdges, &v, mesh, c) ||
                         this->checkForIntersection(
                             edge, rightEnclosingEdge, &activeEdges, &v, mesh, c)) {
-                        if (fDisallowSelfIntersection) {
-                            return SimplifyResult::kAbort;
-                        }
                         result = SimplifyResult::kFoundSelfIntersection;
                         restartChecks = true;
                         break;
@@ -1189,9 +1189,6 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh, const 
             } else {
                 if (this->checkForIntersection(leftEnclosingEdge, rightEnclosingEdge, &activeEdges,
                                                &v, mesh, c)) {
-                    if (fDisallowSelfIntersection) {
-                        return SimplifyResult::kAbort;
-                    }
                     result = SimplifyResult::kFoundSelfIntersection;
                     restartChecks = true;
                 }
@@ -1216,12 +1213,8 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh, const 
 
 // Stage 5: Tessellate the simplified mesh into monotone polygons.
 
-Poly* GrTriangulator::tessellate(const VertexList& vertices, const Comparator&) {
+Poly* GrTriangulator::tessellate(const VertexList& vertices, const Comparator&) const {
     TESS_LOG("\ntessellating simple polygons\n");
-    int maxWindMagnitude = std::numeric_limits<int>::max();
-    if (fDisallowSelfIntersection && !SkPathFillType_IsEvenOdd(fPath.getFillType())) {
-        maxWindMagnitude = 1;
-    }
     EdgeList activeEdges;
     Poly* polys = nullptr;
     for (Vertex* v = vertices.fHead; v != nullptr; v = v->fNext) {
@@ -1299,7 +1292,7 @@ Poly* GrTriangulator::tessellate(const VertexList& vertices, const Comparator&) 
                             rightEnclosingEdge->fLeftPoly = rightPoly;
                         }
                     }
-                    Edge* join = fAlloc.make<Edge>(leftPoly->lastVertex(), v, 1,
+                    Edge* join = fAlloc->make<Edge>(leftPoly->lastVertex(), v, 1,
                                                    EdgeType::kInner);
                     leftPoly = leftPoly->addEdge(join, kRight_Side, fAlloc);
                     rightPoly = rightPoly->addEdge(join, kLeft_Side, fAlloc);
@@ -1314,9 +1307,6 @@ Poly* GrTriangulator::tessellate(const VertexList& vertices, const Comparator&) 
                 int winding = leftEdge->fLeftPoly ? leftEdge->fLeftPoly->fWinding : 0;
                 winding += leftEdge->fWinding;
                 if (winding != 0) {
-                    if (abs(winding) > maxWindMagnitude) {
-                        return nullptr;  // We can't have weighted wind in kSimpleInnerPolygons mode
-                    }
                     Poly* poly = this->makePoly(&polys, v, winding);
                     leftEdge->fRightPoly = rightEdge->fLeftPoly = poly;
                 }
@@ -1340,7 +1330,7 @@ Poly* GrTriangulator::tessellate(const VertexList& vertices, const Comparator&) 
 // This is a driver function that calls stages 2-5 in turn.
 
 void GrTriangulator::contoursToMesh(VertexList* contours, int contourCnt, VertexList* mesh,
-                                    const Comparator& c) {
+                                    const Comparator& c) const {
 #if TRIANGULATOR_LOGGING
     for (int i = 0; i < contourCnt; ++i) {
         Vertex* v = contours[i].fHead;
@@ -1374,7 +1364,7 @@ void GrTriangulator::SortMesh(VertexList* vertices, const Comparator& c) {
 #endif
 }
 
-Poly* GrTriangulator::contoursToPolys(VertexList* contours, int contourCnt) {
+Poly* GrTriangulator::contoursToPolys(VertexList* contours, int contourCnt) const {
     const SkRect& pathBounds = fPath.getBounds();
     Comparator c(pathBounds.width() > pathBounds.height() ? Comparator::Direction::kHorizontal
                                                           : Comparator::Direction::kVertical);
@@ -1382,33 +1372,21 @@ Poly* GrTriangulator::contoursToPolys(VertexList* contours, int contourCnt) {
     this->contoursToMesh(contours, contourCnt, &mesh, c);
     SortMesh(&mesh, c);
     this->mergeCoincidentVertices(&mesh, c);
-    if (SimplifyResult::kAbort == this->simplify(&mesh, c)) {
-        return nullptr;
-    }
+    this->simplify(&mesh, c);
     TESS_LOG("\nsimplified mesh:\n");
     DUMP_MESH(mesh);
     return this->tessellate(mesh, c);
 }
 
 // Stage 6: Triangulate the monotone polygons into a vertex buffer.
-void* GrTriangulator::polysToTrianglesImpl(Poly* polys, void* data,
-                                           SkPathFillType overrideFillType) {
+void* GrTriangulator::polysToTriangles(Poly* polys, void* data,
+                                       SkPathFillType overrideFillType) const {
     for (Poly* poly = polys; poly; poly = poly->fNext) {
         if (apply_fill_type(overrideFillType, poly)) {
             data = this->emitPoly(poly, data);
         }
     }
     return data;
-}
-
-Poly* GrTriangulator::pathToPolys(float tolerance, const SkRect& clipBounds, int contourCnt) {
-    if (SkPathFillType_IsInverse(fPath.getFillType())) {
-        contourCnt++;
-    }
-    std::unique_ptr<VertexList[]> contours(new VertexList[contourCnt]);
-
-    this->pathToContours(tolerance, clipBounds, contours.get());
-    return this->contoursToPolys(contours.get(), contourCnt);
 }
 
 static int get_contour_count(const SkPath& path, SkScalar tolerance) {
@@ -1445,7 +1423,23 @@ static int get_contour_count(const SkPath& path, SkScalar tolerance) {
     return contourCnt;
 }
 
-int64_t GrTriangulator::countPointsImpl(Poly* polys, SkPathFillType overrideFillType) const {
+Poly* GrTriangulator::pathToPolys(float tolerance, const SkRect& clipBounds, bool* isLinear) const {
+    int contourCnt = get_contour_count(fPath, tolerance);
+    if (contourCnt <= 0) {
+        *isLinear = true;
+        return nullptr;
+    }
+
+    if (SkPathFillType_IsInverse(fPath.getFillType())) {
+        contourCnt++;
+    }
+    std::unique_ptr<VertexList[]> contours(new VertexList[contourCnt]);
+
+    this->pathToContours(tolerance, clipBounds, contours.get(), isLinear);
+    return this->contoursToPolys(contours.get(), contourCnt);
+}
+
+int64_t GrTriangulator::CountPoints(Poly* polys, SkPathFillType overrideFillType) {
     int64_t count = 0;
     for (Poly* poly = polys; poly; poly = poly->fNext) {
         if (apply_fill_type(overrideFillType, poly) && poly->fCount >= 3) {
@@ -1457,15 +1451,8 @@ int64_t GrTriangulator::countPointsImpl(Poly* polys, SkPathFillType overrideFill
 
 // Stage 6: Triangulate the monotone polygons into a vertex buffer.
 
-int GrTriangulator::pathToTriangles(float tolerance, const SkRect& clipBounds,
-                                    GrEagerVertexAllocator* vertexAllocator) {
-    int contourCnt = get_contour_count(fPath, tolerance);
-    if (contourCnt <= 0) {
-        fIsLinear = true;
-        return 0;
-    }
-    Poly* polys = this->pathToPolys(tolerance, clipBounds, contourCnt);
-    int64_t count64 = this->countPoints(polys);
+int GrTriangulator::polysToTriangles(Poly* polys, GrEagerVertexAllocator* vertexAllocator) const {
+    int64_t count64 = CountPoints(polys, fPath.getFillType());
     if (0 == count64 || count64 > SK_MaxS32) {
         return 0;
     }
@@ -1482,7 +1469,7 @@ int GrTriangulator::pathToTriangles(float tolerance, const SkRect& clipBounds,
     }
 
     TESS_LOG("emitting %d verts\n", count);
-    void* end = this->polysToTriangles(polys, verts);
+    void* end = this->polysToTriangles(polys, verts, fPath.getFillType());
 
     int actualCount = static_cast<int>((static_cast<uint8_t*>(end) - static_cast<uint8_t*>(verts))
                                        / vertexStride);
@@ -1493,14 +1480,11 @@ int GrTriangulator::pathToTriangles(float tolerance, const SkRect& clipBounds,
 
 int GrTriangulator::PathToVertices(const SkPath& path, SkScalar tolerance, const SkRect& clipBounds,
                                    WindingVertex** verts) {
-    int contourCnt = get_contour_count(path, tolerance);
-    if (contourCnt <= 0) {
-        *verts = nullptr;
-        return 0;
-    }
-    GrTriangulator triangulator(path);
-    Poly* polys = triangulator.pathToPolys(tolerance, clipBounds, contourCnt);
-    int64_t count64 = triangulator.countPoints(polys);
+    SkArenaAlloc alloc(kArenaDefaultChunkSize);
+    GrTriangulator triangulator(path, &alloc);
+    bool isLinear;
+    Poly* polys = triangulator.pathToPolys(tolerance, clipBounds, &isLinear);
+    int64_t count64 = CountPoints(polys, path.getFillType());
     if (0 == count64 || count64 > SK_MaxS32) {
         *verts = nullptr;
         return 0;

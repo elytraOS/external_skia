@@ -82,6 +82,8 @@ private:
     template <typename F>
     bool advanceWhile(F func);
 
+    bool matchStringToken(const char* token, const char** newPos = nullptr) const;
+
     bool parseWSToken();
     bool parseEOSToken();
     bool parseSepToken();
@@ -95,7 +97,7 @@ private:
     bool parseHexColorToken(SkColor*);
     bool parseColorComponentToken(int32_t*);
     bool parseRGBColorToken(SkColor*);
-    bool parseFuncIRI(SkSVGStringType*);
+    bool parseFuncIRI(SkSVGFuncIRI*);
 
     // Transform helpers
     bool parseMatrixToken(SkMatrix*);

@@ -22,7 +22,7 @@ namespace skiagm {
 // This GM exercises HighQuality anisotropic filtering.
 class AnisotropicGM : public GM {
 public:
-    AnisotropicGM() : fSampling({1.0f/3, 1.0f/3}) {
+    AnisotropicGM() : fSampling(SkCubicResampler::Mitchell()) {
         this->setBGColor(0xFFCCCCCC);
     }
 
@@ -65,8 +65,7 @@ protected:
     void draw(SkCanvas* canvas, int x, int y, int xSize, int ySize) {
         SkRect r = SkRect::MakeXYWH(SkIntToScalar(x), SkIntToScalar(y),
                                     SkIntToScalar(xSize), SkIntToScalar(ySize));
-        canvas->drawImageRect(fImage.get(), r, fSampling, nullptr,
-                              SkCanvas::kStrict_SrcRectConstraint);
+        canvas->drawImageRect(fImage, r, fSampling);
     }
 
     void onDraw(SkCanvas* canvas) override {

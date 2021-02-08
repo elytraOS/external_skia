@@ -22,7 +22,9 @@ class SkSVGFilterContext {
 public:
     SkSVGFilterContext(const SkRect& filterEffectsRegion,
                        const SkSVGObjectBoundingBoxUnits& primitiveUnits)
-            : fFilterEffectsRegion(filterEffectsRegion), fPrimitiveUnits(primitiveUnits) {}
+            : fFilterEffectsRegion(filterEffectsRegion)
+            , fPrimitiveUnits(primitiveUnits)
+            , fPreviousResult({nullptr, filterEffectsRegion, SkSVGColorspace::kSRGB}) {}
 
     const SkRect& filterEffectsRegion() const { return fFilterEffectsRegion; }
 
@@ -31,6 +33,15 @@ public:
     const SkSVGObjectBoundingBoxUnits& primitiveUnits() const { return fPrimitiveUnits; }
 
     void registerResult(const SkSVGStringType&, const sk_sp<SkImageFilter>&, const SkRect&, SkSVGColorspace);
+
+    void setPreviousResult(const sk_sp<SkImageFilter>&, const SkRect&, SkSVGColorspace);
+
+    bool previousResultIsSourceGraphic() const;
+
+    SkSVGColorspace resolveInputColorspace(const SkSVGRenderContext&,
+                                           const SkSVGFeInputType&) const;
+
+    sk_sp<SkImageFilter> resolveInput(const SkSVGRenderContext&, const SkSVGFeInputType&) const;
 
     sk_sp<SkImageFilter> resolveInput(const SkSVGRenderContext&, const SkSVGFeInputType&, SkSVGColorspace) const;
 
@@ -43,11 +54,16 @@ private:
 
     const Result* findResultById(const SkSVGStringType&) const;
 
+    std::tuple<sk_sp<SkImageFilter>, SkSVGColorspace> getInput(const SkSVGRenderContext&,
+                                                               const SkSVGFeInputType&) const;
+
     SkRect fFilterEffectsRegion;
 
     SkSVGObjectBoundingBoxUnits fPrimitiveUnits;
 
     SkTHashMap<SkSVGStringType, Result> fResults;
+
+    Result fPreviousResult;
 };
 
 #endif  // SkSVGFilterContext_DEFINED
