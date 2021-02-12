@@ -35,4 +35,7 @@
 
   #define SK_DISABLE_DAA  // skbug.com/6886
 
+  // TODO(b/180114901): remove when fix in fastmmi
+  #define SK_SUPPORT_LEGACY_DRAWBITMAP
+
 #endif // SkUserConfigManual_DEFINED
