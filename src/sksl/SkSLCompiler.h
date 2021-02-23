@@ -55,7 +55,7 @@ class IRIntrinsicMap;
 class ProgramUsage;
 
 struct LoadedModule {
-    Program::Kind                                fKind;
+    ProgramKind                                  fKind;
     std::shared_ptr<SymbolTable>                 fSymbols;
     std::vector<std::unique_ptr<ProgramElement>> fElements;
 };
@@ -78,14 +78,6 @@ public:
     static constexpr const char* RTADJUST_NAME  = "sk_RTAdjust";
     static constexpr const char* PERVERTEX_NAME = "sk_PerVertex";
 
-    enum Flags {
-        kNone_Flags = 0,
-        // permits static if/switch statements to be used with non-constant tests. This is used when
-        // producing H and CPP code; the static tests don't have to have constant values *yet*, but
-        // the generated code will contain a static test which then does have to be a constant.
-        kPermitInvalidStaticTests_Flag = 1,
-    };
-
     struct OptimizationContext {
         // nodes we have already reported errors for and should not error on again
         std::unordered_set<const IRNode*> fSilences;
@@ -99,7 +91,7 @@ public:
         StatementArray fOwnedStatements;
     };
 
-    Compiler(const ShaderCapsClass* caps, Flags flags = kNone_Flags);
+    Compiler(const ShaderCapsClass* caps);
 
     ~Compiler() override;
 
@@ -111,7 +103,7 @@ public:
      * Program, but ownership is *not* transferred. It is up to the caller to keep them alive.
      */
     std::unique_ptr<Program> convertProgram(
-            Program::Kind kind,
+            ProgramKind kind,
             String text,
             const Program::Settings& settings,
             const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions = nullptr);
@@ -168,14 +160,14 @@ public:
         return ModuleData{/*fPath=*/nullptr, data, size};
     }
 
-    LoadedModule loadModule(Program::Kind kind, ModuleData data, std::shared_ptr<SymbolTable> base);
-    ParsedModule parseModule(Program::Kind kind, ModuleData data, const ParsedModule& base);
+    LoadedModule loadModule(ProgramKind kind, ModuleData data, std::shared_ptr<SymbolTable> base);
+    ParsedModule parseModule(ProgramKind kind, ModuleData data, const ParsedModule& base);
 
     IRGenerator& irGenerator() {
         return *fIRGenerator;
     }
 
-    const ParsedModule& moduleForProgramKind(Program::Kind kind);
+    const ParsedModule& moduleForProgramKind(ProgramKind kind);
 
 private:
     const ParsedModule& loadGPUModule();
@@ -186,12 +178,11 @@ private:
     const ParsedModule& loadPublicModule();
     const ParsedModule& loadRuntimeEffectModule();
 
-    void addDefinition(const Expression* lvalue, std::unique_ptr<Expression>* expr,
-                       DefinitionMap* definitions);
-    void addDefinitions(const BasicBlock::Node& node, DefinitionMap* definitions);
-
     void scanCFG(CFG* cfg, BlockId block, SkBitSet* processedSet);
     void computeDataFlow(CFG* cfg);
+
+    /** Verifies that @if and @switch statements were actually optimized away. */
+    void verifyStaticTests(const Program& program);
 
     /**
      * Simplifies the expression pointed to by iter (in both the IR and CFG structures), if
@@ -248,7 +239,6 @@ private:
 
     Inliner fInliner;
     std::unique_ptr<IRGenerator> fIRGenerator;
-    int fFlags;
 
     const String* fSource;
     int fErrorCount;

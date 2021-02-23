@@ -68,7 +68,7 @@ public:
     bool generateCode() override;
 
 protected:
-    using Precedence = Operators::Precedence;
+    using Precedence = Operator::Precedence;
 
     typedef int Requirements;
     static constexpr Requirements kNo_Requirements       = 0;
@@ -109,7 +109,7 @@ protected:
         kTexture_IntrinsicKind,
     };
 
-    static const char* OperatorName(Token::Kind op);
+    static const char* OperatorName(Operator op);
 
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
@@ -210,7 +210,12 @@ protected:
     void assembleMatrixFromExpressions(const ExpressionArray& args, int rows, int columns);
 
     void writeMatrixCompMult();
+
     void writeMatrixTimesEqualHelper(const Type& left, const Type& right, const Type& result);
+
+    void writeMatrixEqualityHelper(const Type& left, const Type& right);
+
+    void writeMatrixInequalityHelper(const Type& left, const Type& right);
 
     void writeArgumentList(const ExpressionArray& arguments);
 
@@ -284,7 +289,6 @@ protected:
     const Context& fContext;
     String fFunctionHeader;
     StringStream fExtraFunctions;
-    Program::Kind fProgramKind;
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;

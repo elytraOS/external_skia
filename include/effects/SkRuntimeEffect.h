@@ -9,19 +9,16 @@
 #define SkRuntimeEffect_DEFINED
 
 #include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkString.h"
-#include "include/private/GrTypesPriv.h"
 #include "include/private/SkSLSampleUsage.h"
 
-#include <string>
 #include <vector>
 
-#if SK_SUPPORT_GPU
-#include "include/gpu/GrContextOptions.h"
-#endif
-
+class GrRecordingContext;
 class SkColorFilter;
+class SkImage;
 class SkShader;
 
 namespace SkSL {
@@ -58,7 +55,6 @@ public:
         SkString  name;
         size_t    offset;
         Type      type;
-        GrSLType  gpuType;
         int       count;
         uint32_t  flags;
         uint32_t  marker;
@@ -87,12 +83,9 @@ public:
 
     static Result Make(SkString sksl, const Options& options);
 
-    // Older/deprecated version of the Make() API:
-    using EffectResult = std::tuple<sk_sp<SkRuntimeEffect>, SkString>;
-    static EffectResult Make(SkString sksl) {
-        Result result = Make(sksl, Options{});
-        return EffectResult{std::move(result.effect), std::move(result.errorText)};
-    }
+    // We can't use a default argument for `options` due to a bug in Clang.
+    // https://bugs.llvm.org/show_bug.cgi?id=36684
+    static Result Make(SkString sksl) { return Make(std::move(sksl), Options{}); }
 
     sk_sp<SkShader> makeShader(sk_sp<SkData> uniforms,
                                sk_sp<SkShader> children[],

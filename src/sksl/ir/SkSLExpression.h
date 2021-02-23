@@ -9,6 +9,7 @@
 #define SKSL_EXPRESSION
 
 #include "include/private/SkTHash.h"
+#include "src/sksl/SkSLDefinitionMap.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLType.h"
 
@@ -20,8 +21,6 @@ class Expression;
 class IRGenerator;
 class Variable;
 
-using DefinitionMap = SkTHashMap<const Variable*, std::unique_ptr<Expression>*>;
-
 /**
  * Abstract supertype of all expressions.
  */
@@ -30,6 +29,7 @@ public:
     enum class Kind {
         kBinary = (int) Statement::Kind::kLast + 1,
         kBoolLiteral,
+        kCodeString,
         kConstructor,
         kDefined,
         kExternalFunctionCall,

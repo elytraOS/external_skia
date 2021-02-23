@@ -22,14 +22,13 @@
     #include "include/effects/SkCornerPathEffect.h"
     #include "include/effects/SkDiscretePathEffect.h"
     #include "include/effects/SkGradientShader.h"
-    #include "include/effects/SkHighContrastFilter.h"
-    #include "include/effects/SkLumaColorFilter.h"
     #include "include/effects/SkOverdrawColorFilter.h"
     #include "include/effects/SkPerlinNoiseShader.h"
     #include "include/effects/SkRuntimeEffect.h"
     #include "include/effects/SkShaderMaskFilter.h"
     #include "include/effects/SkTableColorFilter.h"
     #include "src/core/SkColorFilter_Matrix.h"
+    #include "src/core/SkImageFilter_Base.h"
     #include "src/core/SkRecordedDrawable.h"
     #include "src/effects/SkDashImpl.h"
     #include "src/effects/SkEmbossMaskFilter.h"
@@ -76,9 +75,7 @@
 
         // Color filters.
         SkColorFilter_Matrix::RegisterFlattenables();
-        SkLumaColorFilter::RegisterFlattenable();
         SkColorFilterBase::RegisterFlattenables();
-        SkHighContrastFilter::RegisterFlattenables();
         SkTableColorFilter::RegisterFlattenables();
 
         // Shader & color filter.
@@ -119,6 +116,18 @@
      */
     void SkFlattenable::PrivateInitializer::InitImageFilters() {
         SkImageFilters::RegisterFlattenables();
+        SkRegisterAlphaThresholdImageFilterFlattenable();
+        SkRegisterArithmeticImageFilterFlattenable();
+        SkRegisterBlendImageFilterFlattenable();
+        SkRegisterBlurImageFilterFlattenable();
+        SkRegisterColorFilterImageFilterFlattenable();
+        SkRegisterComposeImageFilterFlattenable();
+        SkRegisterDisplacementMapImageFilterFlattenable();
+        SkRegisterDropShadowImageFilterFlattenable();
+        SkRegisterImageImageFilterFlattenable();
+        SkRegisterLightingImageFilterFlattenables();
+        SkRegisterMagnifierImageFilterFlattenable();
+        SkRegisterMatrixConvolutionImageFilterFlattenable();
         SK_REGISTER_FLATTENABLE(SkLocalMatrixImageFilter);
         SK_REGISTER_FLATTENABLE(SkMatrixImageFilter);
     }

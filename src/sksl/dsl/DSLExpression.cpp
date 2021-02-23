@@ -19,6 +19,10 @@
 
 #include "math.h"
 
+#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#endif
+
 namespace SkSL {
 
 namespace dsl {
@@ -26,7 +30,12 @@ namespace dsl {
 DSLExpression::DSLExpression() {}
 
 DSLExpression::DSLExpression(std::unique_ptr<SkSL::Expression> expression)
-    : fExpression(DSLWriter::Check(std::move(expression))) {}
+    : fExpression(std::move(expression)) {
+    if (DSLWriter::Compiler().errorCount()) {
+        DSLWriter::ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str());
+        DSLWriter::Compiler().setErrorCount(0);
+    }
+}
 
 DSLExpression::DSLExpression(float value)
     : fExpression(std::make_unique<SkSL::FloatLiteral>(DSLWriter::Context(),
@@ -58,6 +67,13 @@ DSLExpression::DSLExpression(const DSLVar& var)
                                                         SkSL::VariableReference::RefKind::kRead)) {}
 
 DSLExpression::~DSLExpression() {
+#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+    if (fExpression && DSLWriter::InFragmentProcessor()) {
+        DSLWriter::CurrentEmitArgs()->fFragBuilder->codeAppend(
+                DSLStatement(this->release()).release());
+        return;
+    }
+#endif
     SkASSERTF(fExpression == nullptr,
               "Expression destroyed without being incorporated into program");
 }
@@ -96,6 +112,10 @@ DSLExpression DSLExpression::b() {
 
 DSLExpression DSLExpression::a() {
     return Swizzle(this->release(), A);
+}
+
+DSLExpression DSLExpression::field(const char* name) {
+    return DSLWriter::ConvertField(this->release(), name);
 }
 
 DSLExpression DSLExpression::operator=(DSLExpression right) {

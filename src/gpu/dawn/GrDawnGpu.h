@@ -54,8 +54,6 @@ public:
                                                                int sampleCnt,
                                                                GrProtected) override;
     void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) override;
-
-    void testingOnly_flushGpuAndSync() override;
 #endif
 
     sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget*,
@@ -101,7 +99,7 @@ public:
     void appendCommandBuffer(wgpu::CommandBuffer commandBuffer);
 
     void waitOnAllBusyStagingBuffers();
-    SkSL::String SkSLToSPIRV(const char* shaderString, SkSL::Program::Kind, bool flipY,
+    SkSL::String SkSLToSPIRV(const char* shaderString, SkSL::ProgramKind, bool flipY,
                              uint32_t rtHeightOffset, SkSL::Program::Inputs*);
     wgpu::ShaderModule createShaderModule(const SkSL::String& spirvSource);
 

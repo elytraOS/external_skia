@@ -92,6 +92,9 @@ config("skia_private") {
   if (skia_use_vma) {
     defines += [ "SK_USE_VMA" ]
   }
+  if (skia_enable_winuwp) {
+    defines += [ "SK_WINUWP" ]
+  }
 }
 
 # Any code that's linked into Skia-the-library should use this config via += skia_library_configs.
@@ -255,6 +258,7 @@ template("optional") {
                              "*",
                              [
                                "public_defines",
+                               "sources_for_tests",
                                "sources_when_disabled",
                                "configs_to_remove",
                              ])
@@ -262,6 +266,31 @@ template("optional") {
       configs += skia_library_configs
       if (defined(invoker.configs_to_remove)) {
         configs -= invoker.configs_to_remove
+      }
+    }
+    if (defined(invoker.sources_for_tests) && skia_enable_tools) {
+      source_set(target_name + "_tests") {
+        check_includes = false
+        forward_variables_from(invoker,
+                               "*",
+                               [
+                                 "public_defines",
+                                 "sources",
+                                 "sources_for_tests",
+                                 "sources_when_disabled",
+                                 "configs_to_remove",
+                               ])
+        testonly = true
+        sources = invoker.sources_for_tests
+        if (!defined(deps)) {
+          deps = []
+        }
+        deps += [ ":test" ]
+        all_dependent_configs = [ ":" + target_name + "_public" ]
+        configs += skia_library_configs
+        if (defined(invoker.configs_to_remove)) {
+          configs -= invoker.configs_to_remove
+        }
       }
     }
   } else {
@@ -276,6 +305,7 @@ template("optional") {
                                "libs",
                                "frameworks",
                                "sources",
+                               "sources_for_tests",
                                "sources_when_disabled",
                                "configs_to_remove",
                              ])
@@ -283,6 +313,10 @@ template("optional") {
         sources = invoker.sources_when_disabled
       }
       configs += skia_library_configs
+    }
+    if (defined(invoker.sources_for_tests)) {
+      source_set(target_name + "_tests") {
+      }
     }
   }
 }
@@ -324,6 +358,7 @@ optional("fontmgr_android") {
     "src/ports/SkFontMgr_android_parser.cpp",
     "src/ports/SkFontMgr_android_parser.h",
   ]
+  sources_for_tests = [ "tests/FontMgrAndroidParserTest.cpp" ]
 }
 optional("fontmgr_android_factory") {
   enabled = skia_enable_fontmgr_android
@@ -396,6 +431,7 @@ optional("fontmgr_fontconfig") {
   public = [ "include/ports/SkFontMgr_fontconfig.h" ]
   deps = [ ":typeface_freetype" ]
   sources = [ "src/ports/SkFontMgr_fontconfig.cpp" ]
+  sources_for_tests = [ "tests/FontMgrFontConfigTest.cpp" ]
 }
 optional("fontmgr_fontconfig_factory") {
   enabled = skia_enable_fontmgr_fontconfig
@@ -526,8 +562,7 @@ if (skia_lex) {
     # GN insists its outputs should go somewhere underneath target_out_dir, so we trick it with a
     # path that starts with target_out_dir and then uses ".." to back up into the src dir.
     outputs = [
-      "$target_out_dir/" +
-          rebase_path("src/sksl/lex/SkSLLexer.h", target_out_dir),
+      "$target_out_dir/" + rebase_path("src/sksl/SkSLLexer.h", target_out_dir),
       # the script also modifies the corresponding .cpp file, but if we tell GN that it gets
       # confused due to the same file being named by two different paths
     ]
@@ -570,6 +605,7 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
       "src/core/SkVM.cpp",
       "src/gpu/GrBlockAllocator.cpp",
       "src/gpu/GrMemoryPool.cpp",
+      "src/gpu/GrShaderUtils.cpp",
       "src/ports/SkMemory_malloc.cpp",
       "src/ports/SkOSFile_stdio.cpp",
       "src/sksl/SkSLMain.cpp",
@@ -781,6 +817,12 @@ if (skia_compile_sksl_tests) {
     lang = "--skvm"
     settings = "--settings"
   }
+  compile_sksl("stage_tests") {
+    sources = sksl_stage_tests_sources
+    outExtensions = [ ".stage" ]
+    lang = "--stage"
+    settings = "--settings"
+  }
   compile_sksl("spirv_tests") {
     sources = sksl_spirv_tests_sources
     outExtensions = [ ".asm.frag" ]
@@ -857,7 +899,7 @@ optional("gpu") {
       sources += [ "src/gpu/gl/mac/GrGLMakeNativeInterface_mac.cpp" ]
     } else if (is_ios) {
       sources += [ "src/gpu/gl/iOS/GrGLMakeNativeInterface_iOS.cpp" ]
-    } else if (is_win) {
+    } else if (is_win && !skia_enable_winuwp) {
       sources += [ "src/gpu/gl/win/GrGLMakeNativeInterface_win.cpp" ]
       if (target_cpu != "arm64") {
         libs += [ "OpenGL32.lib" ]
@@ -1277,12 +1319,17 @@ component("skia") {
       "src/ports/SkOSLibrary_win.cpp",
     ]
     libs += [
-      "FontSub.lib",
       "Ole32.lib",
       "OleAut32.lib",
-      "User32.lib",
-      "Usp10.lib",
     ]
+
+    if (!skia_enable_winuwp) {
+      libs += [
+        "FontSub.lib",
+        "User32.lib",
+        "Usp10.lib",
+      ]
+    }
   } else {
     sources += [
       "src/ports/SkOSFile_posix.cpp",
@@ -1835,7 +1882,7 @@ if (skia_enable_tools) {
         sources += [ "tools/AutoreleasePool.mm" ]
         frameworks += [ "Foundation.framework" ]
       }
-    } else if (is_win) {
+    } else if (is_win && !skia_enable_winuwp) {
       libs += [ "DbgHelp.lib" ]
     }
 
@@ -1884,6 +1931,23 @@ if (skia_enable_tools) {
     }
   }
 
+  test_lib("test") {
+    sources = [
+      "tests/Test.cpp",
+      "tests/Test.h",
+      "tests/TestUtils.cpp",
+      "tests/TestUtils.h",
+    ]
+    deps = [
+      ":flags",
+      ":skia",
+      ":tool_utils",
+    ]
+    public_deps = [
+      ":gpu_tool_utils",  # Test.h #includes headers from this target.
+    ]
+  }
+
   import("gn/tests.gni")
   test_lib("tests") {
     sources = tests_sources + pathops_tests_sources
@@ -1896,15 +1960,12 @@ if (skia_enable_tools) {
     if (skia_use_gl) {
       sources += gl_tests_sources
     }
-    if (!skia_enable_fontmgr_android) {
-      sources -= [ "//tests/FontMgrAndroidParserTest.cpp" ]
-    }
-    if (!skia_enable_fontmgr_fontconfig) {
-      sources -= [ "//tests/FontMgrFontConfigTest.cpp" ]
-    }
     deps = [
       ":flags",
+      ":fontmgr_android_tests",
+      ":fontmgr_fontconfig_tests",
       ":skia",
+      ":test",
       ":tool_utils",
       "experimental/skrive:tests",
       "modules/skottie:tests",
@@ -1915,9 +1976,6 @@ if (skia_enable_tools) {
       "//third_party/libpng",
       "//third_party/libwebp",
       "//third_party/zlib",
-    ]
-    public_deps = [
-      ":gpu_tool_utils",  # Test.h #includes headers from this target.
     ]
   }
 

@@ -72,10 +72,10 @@ void CPPCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                                              Precedence parentPrecedence) {
     const Expression& left = *b.left();
     const Expression& right = *b.right();
-    Token::Kind op = b.getOperator();
-    if (op == Token::Kind::TK_PERCENT) {
+    Operator op = b.getOperator();
+    if (op.kind() == Token::Kind::TK_PERCENT) {
         // need to use "%%" instead of "%" b/c the code will be inside of a printf
-        Precedence precedence = Operators::GetBinaryPrecedence(op);
+        Precedence precedence = op.getBinaryPrecedence();
         if (precedence >= parentPrecedence) {
             this->write("(");
         }
@@ -388,7 +388,7 @@ int CPPCodeGenerator::getChildFPIndex(const Variable& var) const {
 }
 
 String CPPCodeGenerator::getSampleVarName(const char* prefix, int sampleCounter) {
-    return String::printf("%s%zu", prefix, sampleCounter);
+    return String::printf("%s%d", prefix, sampleCounter);
 }
 
 void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {

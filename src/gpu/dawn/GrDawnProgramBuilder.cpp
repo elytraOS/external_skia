@@ -7,6 +7,7 @@
 
 #include "src/gpu/dawn/GrDawnProgramBuilder.h"
 
+#include "src/gpu/GrAutoLocaleSetter.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrStencilSettings.h"
@@ -263,6 +264,8 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
                                                  bool hasDepthStencil,
                                                  wgpu::TextureFormat depthStencilFormat,
                                                  GrProgramDesc* desc) {
+    GrAutoLocaleSetter als("C");
+
     GrDawnProgramBuilder builder(gpu, renderTarget, programInfo, desc);
     if (!builder.emitAndInstallProcs()) {
         return nullptr;
@@ -277,9 +280,9 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
 
     SkSL::Program::Inputs vertInputs, fragInputs;
     bool flipY = programInfo.origin() != kTopLeft_GrSurfaceOrigin;
-    auto vsModule = builder.createShaderModule(builder.fVS, SkSL::Program::kVertex_Kind, flipY,
+    auto vsModule = builder.createShaderModule(builder.fVS, SkSL::ProgramKind::kVertex, flipY,
                                                &vertInputs);
-    auto fsModule = builder.createShaderModule(builder.fFS, SkSL::Program::kFragment_Kind, flipY,
+    auto fsModule = builder.createShaderModule(builder.fFS, SkSL::ProgramKind::kFragment, flipY,
                                                &fragInputs);
     GrSPIRVUniformHandler::UniformInfoArray& uniforms = builder.fUniformHandler.fUniforms;
     uint32_t uniformBufferSize = builder.fUniformHandler.fCurrentUBOOffset;
@@ -426,7 +429,7 @@ GrDawnProgramBuilder::GrDawnProgramBuilder(GrDawnGpu* gpu,
 }
 
 wgpu::ShaderModule GrDawnProgramBuilder::createShaderModule(const GrGLSLShaderBuilder& builder,
-                                                            SkSL::Program::Kind kind,
+                                                            SkSL::ProgramKind kind,
                                                             bool flipY,
                                                             SkSL::Program::Inputs* inputs) {
     wgpu::Device device = fGpu->device();

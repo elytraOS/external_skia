@@ -105,29 +105,22 @@ static bool parse_marker(const SkSL::StringFragment& marker, uint32_t* id, uint3
 static bool init_uniform_type(const SkSL::Context& ctx,
                               const SkSL::Type* type,
                               SkRuntimeEffect::Uniform* v) {
-#define SET_TYPES(cpu_type, gpu_type)                       \
-    do {                                                    \
-        v->type = SkRuntimeEffect::Uniform::Type::cpu_type; \
-        v->gpuType = gpu_type;                              \
-        return true;                                        \
-    } while (false)
+    using Type = SkRuntimeEffect::Uniform::Type;
 
-    if (type == ctx.fTypes.fFloat.get())    { SET_TYPES(kFloat,    kFloat_GrSLType);    }
-    if (type == ctx.fTypes.fHalf.get())     { SET_TYPES(kFloat,    kHalf_GrSLType);     }
-    if (type == ctx.fTypes.fFloat2.get())   { SET_TYPES(kFloat2,   kFloat2_GrSLType);   }
-    if (type == ctx.fTypes.fHalf2.get())    { SET_TYPES(kFloat2,   kHalf2_GrSLType);    }
-    if (type == ctx.fTypes.fFloat3.get())   { SET_TYPES(kFloat3,   kFloat3_GrSLType);   }
-    if (type == ctx.fTypes.fHalf3.get())    { SET_TYPES(kFloat3,   kHalf3_GrSLType);    }
-    if (type == ctx.fTypes.fFloat4.get())   { SET_TYPES(kFloat4,   kFloat4_GrSLType);   }
-    if (type == ctx.fTypes.fHalf4.get())    { SET_TYPES(kFloat4,   kHalf4_GrSLType);    }
-    if (type == ctx.fTypes.fFloat2x2.get()) { SET_TYPES(kFloat2x2, kFloat2x2_GrSLType); }
-    if (type == ctx.fTypes.fHalf2x2.get())  { SET_TYPES(kFloat2x2, kHalf2x2_GrSLType);  }
-    if (type == ctx.fTypes.fFloat3x3.get()) { SET_TYPES(kFloat3x3, kFloat3x3_GrSLType); }
-    if (type == ctx.fTypes.fHalf3x3.get())  { SET_TYPES(kFloat3x3, kHalf3x3_GrSLType);  }
-    if (type == ctx.fTypes.fFloat4x4.get()) { SET_TYPES(kFloat4x4, kFloat4x4_GrSLType); }
-    if (type == ctx.fTypes.fHalf4x4.get())  { SET_TYPES(kFloat4x4, kHalf4x4_GrSLType);  }
-
-#undef SET_TYPES
+    if (type == ctx.fTypes.fFloat.get())    { v->type = Type::kFloat;    return true; }
+    if (type == ctx.fTypes.fHalf.get())     { v->type = Type::kFloat;    return true; }
+    if (type == ctx.fTypes.fFloat2.get())   { v->type = Type::kFloat2;   return true; }
+    if (type == ctx.fTypes.fHalf2.get())    { v->type = Type::kFloat2;   return true; }
+    if (type == ctx.fTypes.fFloat3.get())   { v->type = Type::kFloat3;   return true; }
+    if (type == ctx.fTypes.fHalf3.get())    { v->type = Type::kFloat3;   return true; }
+    if (type == ctx.fTypes.fFloat4.get())   { v->type = Type::kFloat4;   return true; }
+    if (type == ctx.fTypes.fHalf4.get())    { v->type = Type::kFloat4;   return true; }
+    if (type == ctx.fTypes.fFloat2x2.get()) { v->type = Type::kFloat2x2; return true; }
+    if (type == ctx.fTypes.fHalf2x2.get())  { v->type = Type::kFloat2x2; return true; }
+    if (type == ctx.fTypes.fFloat3x3.get()) { v->type = Type::kFloat3x3; return true; }
+    if (type == ctx.fTypes.fHalf3x3.get())  { v->type = Type::kFloat3x3; return true; }
+    if (type == ctx.fTypes.fFloat4x4.get()) { v->type = Type::kFloat4x4; return true; }
+    if (type == ctx.fTypes.fHalf4x4.get())  { v->type = Type::kFloat4x4; return true; }
 
     return false;
 }
@@ -137,7 +130,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& opti
     SkSL::Program::Settings settings;
     settings.fInlineThreshold = options.inlineThreshold;
     settings.fAllowNarrowingConversions = true;
-    auto program = compiler->convertProgram(SkSL::Program::kRuntimeEffect_Kind,
+    auto program = compiler->convertProgram(SkSL::ProgramKind::kRuntimeEffect,
                                             SkSL::String(sksl.c_str(), sksl.size()),
                                             settings);
     // TODO: Many errors aren't caught until we process the generated Program here. Catching those
@@ -462,6 +455,21 @@ public:
                                    /*device=*/zeroCoord, /*local=*/zeroCoord, sampleChild);
     }
 
+    uint32_t onGetFlags() const override {
+        skvm::Builder  p;
+        SkColorSpace*  dstCS = sk_srgb_singleton();  // This _shouldn't_ matter for alpha.
+        skvm::Uniforms uniforms{p.uniform(), 0};
+        SkArenaAlloc   alloc{16};
+
+        skvm::Color in = p.load({skvm::PixelFormat::FLOAT, 32,32,32,32, 0,32,64,96}, p.arg(16)),
+                   out = this->onProgram(&p,in,dstCS,&uniforms,&alloc);
+
+        if (out.a.id == in.a.id) {
+            return SkColorFilter::kAlphaUnchanged_Flag;
+        }
+        return 0;
+    }
+
     void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeString(fEffect->source().c_str());
         if (fUniforms) {
@@ -488,7 +496,7 @@ sk_sp<SkFlattenable> SkRuntimeColorFilter::CreateProc(SkReadBuffer& buffer) {
     buffer.readString(&sksl);
     sk_sp<SkData> uniforms = buffer.readByteArrayAsData();
 
-    auto effect = std::get<0>(SkRuntimeEffect::Make(std::move(sksl)));
+    auto effect = SkRuntimeEffect::Make(std::move(sksl)).effect;
     if (!buffer.validate(effect != nullptr)) {
         return nullptr;
     }
@@ -539,8 +547,20 @@ public:
             fp->addChild(std::move(childFP));
         }
         std::unique_ptr<GrFragmentProcessor> result = std::move(fp);
+        // If the shader was created with isOpaque = true, we *force* that result here.
+        // CPU does the same thing (in SkShaderBase::program).
+        if (fIsOpaque) {
+            result = GrFragmentProcessor::SwizzleOutput(std::move(result), GrSwizzle::RGB1());
+        }
         result = GrMatrixEffect::Make(matrix, std::move(result));
-        if (GrColorTypeClampType(args.fDstColorInfo->colorType()) != GrClampType::kNone) {
+        // Three cases of GrClampType to think about:
+        //   kAuto   - Normalized fixed-point. If fIsOpaque, then A is 1 (above), and the format's
+        //             range ensures RGB must be no larger. If !fIsOpaque, we clamp here.
+        //   kManual - Normalized floating point. Whether or not we set A above, the format's range
+        //             means we need to clamp RGB.
+        //   kNone   - Unclamped floating point. No clamping is done, ever.
+        GrClampType clampType = GrColorTypeClampType(args.fDstColorInfo->colorType());
+        if (clampType == GrClampType::kManual || (clampType == GrClampType::kAuto && !fIsOpaque)) {
             return GrFragmentProcessor::ClampPremulOutput(std::move(result));
         } else {
             return result;
@@ -647,7 +667,7 @@ sk_sp<SkFlattenable> SkRTShader::CreateProc(SkReadBuffer& buffer) {
         localMPtr = &localM;
     }
 
-    auto effect = std::get<0>(SkRuntimeEffect::Make(std::move(sksl)));
+    auto effect = SkRuntimeEffect::Make(std::move(sksl)).effect;
     if (!buffer.validate(effect != nullptr)) {
         return nullptr;
     }

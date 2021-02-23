@@ -32,7 +32,7 @@ static sk_sp<GrDirectContext> make_mock_context() {
     return GrDirectContext::MakeMock(&mockOptions, ctxOptions);
 }
 
-static void test_stroke(skiatest::Reporter* r, GrDirectContext* ctx, GrMeshDrawOp::Target* target,
+static void test_stroke(skiatest::Reporter* r, GrDirectContext* ctx, GrMockOpTarget* target,
                         const SkPath& path, SkRandom& rand) {
     SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
     stroke.setStrokeStyle(.1f);
@@ -41,10 +41,11 @@ static void test_stroke(skiatest::Reporter* r, GrDirectContext* ctx, GrMeshDrawO
         for (int i = 0; i < 16; ++i) {
             float scale = ldexpf(rand.nextF() + 1, i);
             auto matrix = SkMatrix::Scale(scale, scale);
-            GrStrokeIndirectTessellator tessellator(matrix, path, stroke, path.countVerbs(),
-                                                    target->allocator());
+            GrStrokeIndirectTessellator tessellator(GrStrokeTessellateShader::ShaderFlags::kNone,
+                                                    matrix, {path, stroke, SK_PMColor4fWHITE},
+                                                    path.countVerbs(), target->allocator());
             tessellator.verifyResolveLevels(r, target, matrix, path, stroke);
-            tessellator.prepare(target, matrix, path, stroke, path.countVerbs());
+            tessellator.prepare(target, matrix);
             tessellator.verifyBuffers(r, target, matrix, stroke);
         }
     }
@@ -239,7 +240,8 @@ static bool check_first_resolve_levels(skiatest::Reporter* r,
                                        int8_t** nextResolveLevel, float tolerance) {
     for (float numSegments : firstNumSegments) {
         if (numSegments < 0) {
-            REPORTER_ASSERT(r, *(*nextResolveLevel)++ == (int)numSegments);
+            int8_t val = *(*nextResolveLevel)++;
+            REPORTER_ASSERT(r, val == (int)numSegments);
             continue;
         }
         // The first stroke's resolve levels aren't  written out until the end of
@@ -263,11 +265,14 @@ static float test_tolerance(SkPaint::Join joinType) {
 }
 
 void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
-                                                      GrMeshDrawOp::Target* target,
+                                                      GrMockOpTarget* target,
                                                       const SkMatrix& viewMatrix,
                                                       const SkPath& path,
                                                       const SkStrokeRec& stroke) {
     GrStrokeTessellateShader::Tolerances tolerances(viewMatrix.getMaxScale(), stroke.getWidth());
+    int8_t resolveLevelForCircles = SkTPin<float>(
+            sk_float_nextlog2(tolerances.fNumRadialSegmentsPerRadian * SK_ScalarPI),
+            1, kMaxResolveLevel);
     float tolerance = test_tolerance(stroke.getJoin());
     int8_t* nextResolveLevel = fResolveLevels;
     auto iterate = SkPathPriv::Iterate(path);
@@ -316,11 +321,11 @@ void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
                 SkVector b = pts[2] - pts[1];
                 bool hasCusp = (a.cross(b) == 0 && a.dot(b) < 0);
                 if (hasCusp) {
-                    // The quad has a cusp. Make sure we wrote out a -1 to signal that.
+                    // The quad has a cusp. Make sure we wrote out a -resolveLevelForCircles.
                     if (isFirstStroke) {
-                        firstNumSegments.push_back(-1);
+                        firstNumSegments.push_back(-resolveLevelForCircles);
                     } else {
-                        REPORTER_ASSERT(r, *nextResolveLevel++ == -1);
+                        REPORTER_ASSERT(r, *nextResolveLevel++ == -resolveLevelForCircles);
                     }
                 }
                 float numParametricSegments = (hasCusp) ? 0 : GrWangsFormula::quadratic(
@@ -354,7 +359,8 @@ void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
                 n = GrPathUtils::findCubicConvex180Chops(pts, T, &areCusps);
                 SkChopCubicAt(pts, chops, T, n);
                 if (n > 0) {
-                    int signal = -((n << 1) | (int)areCusps);
+                    int cuspResolveLevel = (areCusps) ? resolveLevelForCircles : 0;
+                    int signal = -((n << 4) | cuspResolveLevel);
                     if (isFirstStroke) {
                         firstNumSegments.push_back((float)signal);
                     } else {
@@ -421,20 +427,20 @@ void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
     SkASSERT(nextResolveLevel == fResolveLevels + fResolveLevelArrayCount);
 }
 
-void GrStrokeIndirectTessellator::verifyBuffers(skiatest::Reporter* r,
-                                                GrMeshDrawOp::Target* target,
+void GrStrokeIndirectTessellator::verifyBuffers(skiatest::Reporter* r, GrMockOpTarget* target,
                                                 const SkMatrix& viewMatrix,
                                                 const SkStrokeRec& stroke) {
-    using IndirectInstance = GrStrokeTessellateShader::IndirectInstance;
+    // Make sure the resolve level we assigned to each instance agrees with the actual data.
+    struct IndirectInstance {
+        SkPoint fPts[4];
+        SkPoint fLastControlPoint;
+        float fNumTotalEdges;
+    };
+    auto instance = static_cast<const IndirectInstance*>(target->peekStaticVertexData());
+    auto* indirect = static_cast<const GrDrawIndirectCommand*>(target->peekStaticIndirectData());
     GrStrokeTessellateShader::Tolerances tolerances(viewMatrix.getMaxScale(), stroke.getWidth());
     float tolerance = test_tolerance(stroke.getJoin());
-    // Make sure the resolve level we assign to each instance agrees with the actual data.
-    // GrMockOpTarget returns the same pointers every time.
-    int _;
-    auto instance = (const IndirectInstance*)target->makeVertexSpace(0, 0, nullptr, &_);
-    size_t __;
-    auto indirect = target->makeDrawIndirectSpace(0, nullptr, &__);
-    for (int i = 0; i < fDrawIndirectCount; ++i) {
+    for (int i = 0; i < fChainedDrawIndirectCount; ++i) {
         int numExtraEdgesInJoin = (stroke.getJoin() == SkPaint::kMiter_Join) ? 4 : 3;
         int numStrokeEdges = indirect->fVertexCount/2 - numExtraEdgesInJoin;
         int numSegments = numStrokeEdges - 1;
@@ -444,7 +450,7 @@ void GrStrokeIndirectTessellator::verifyBuffers(skiatest::Reporter* r,
         REPORTER_ASSERT(r, 1 << resolveLevel == numSegments);
         for (unsigned j = 0; j < indirect->fInstanceCount; ++j) {
             SkASSERT(fabsf(instance->fNumTotalEdges) == indirect->fVertexCount/2);
-            const SkPoint* p = instance->fPts.data();
+            const SkPoint* p = instance->fPts;
             float numParametricSegments = GrWangsFormula::cubic(
                     tolerances.fParametricIntolerance, p);
             float alternateNumParametricSegments = numParametricSegments;

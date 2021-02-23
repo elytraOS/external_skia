@@ -84,9 +84,10 @@ public:
                            GrSurfaceOrigin);
 
     // Adds a task that writes the data from the passed GrMipLevels to dst. The lifetime of the
-    // pixel data in the levels should be tied to the passed SkData. srcColorType is the color
-    // type of the GrMipLevels. dstColorType is the color type being used with dst and must
-    // be compatible with dst's format according to GrCaps::areColorTypeAndFormatCompatible().
+    // pixel data in the levels should be tied to the passed SkData or the caller must flush the
+    // context before the data may become invalid. srcColorType is the color type of the
+    // GrMipLevels. dstColorType is the color type being used with dst and must be compatible with
+    // dst's format according to GrCaps::areColorTypeAndFormatCompatible().
     bool newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
                             SkIRect rect,
                             GrColorType srcColorType,
@@ -107,6 +108,10 @@ public:
     // Returns a direct pointer to the coverage counting path renderer, or null if it is not
     // supported and turned on.
     GrCoverageCountingPathRenderer* getCoverageCountingPathRenderer();
+
+    // Returns a direct pointer to the tessellation path renderer, or null if it is not supported
+    // and turned on.
+    GrPathRenderer* getTessellationPathRenderer();
 
     void flushIfNecessary();
 
@@ -145,10 +150,9 @@ private:
     void closeActiveOpsTask();
 
     // return true if any GrRenderTasks were actually executed; false otherwise
-    bool executeRenderTasks(int startIndex, int stopIndex, GrOpFlushState*,
-                            int* numRenderTasksExecuted);
+    bool executeRenderTasks(GrOpFlushState*);
 
-    void removeRenderTasks(int startIndex, int stopIndex);
+    void removeRenderTasks();
 
     void sortTasks();
     void reorderTasks();

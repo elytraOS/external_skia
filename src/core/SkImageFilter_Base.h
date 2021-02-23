@@ -477,4 +477,23 @@ static inline const SkImageFilter_Base* as_IFB(const SkImageFilter* filter) {
         }                                                           \
     } while (0)
 
+
+/**
+ * All image filter implementations defined for the include/effects/SkImageFilters.h factories
+ * are entirely encapsulated within their own CPP files. SkFlattenable deserialization needs a hook
+ * into these types, so their registration functions are exposed here.
+ */
+void SkRegisterAlphaThresholdImageFilterFlattenable();
+void SkRegisterArithmeticImageFilterFlattenable();
+void SkRegisterBlendImageFilterFlattenable();
+void SkRegisterBlurImageFilterFlattenable();
+void SkRegisterColorFilterImageFilterFlattenable();
+void SkRegisterComposeImageFilterFlattenable();
+void SkRegisterDisplacementMapImageFilterFlattenable();
+void SkRegisterDropShadowImageFilterFlattenable();
+void SkRegisterImageImageFilterFlattenable();
+void SkRegisterLightingImageFilterFlattenables();
+void SkRegisterMagnifierImageFilterFlattenable();
+void SkRegisterMatrixConvolutionImageFilterFlattenable();
+
 #endif // SkImageFilter_Base_DEFINED

@@ -38,7 +38,7 @@ static std::unique_ptr<Expression> negate_operand(const Expression& operand) {
 std::unique_ptr<Expression> PrefixExpression::constantPropagate(const IRGenerator& irGenerator,
                                                                 const DefinitionMap& definitions) {
     if (this->operand()->isCompileTimeConstant()) {
-        if (this->getOperator() == Token::Kind::TK_MINUS) {
+        if (this->getOperator().kind() == Token::Kind::TK_MINUS) {
             // Constant-propagate negation onto compile-time constants.
             switch (this->operand()->kind()) {
                 case Expression::Kind::kFloatLiteral:
@@ -58,15 +58,14 @@ std::unique_ptr<Expression> PrefixExpression::constantPropagate(const IRGenerato
                     for (const std::unique_ptr<Expression>& arg : constructor.arguments()) {
                         args.push_back(negate_operand(*arg));
                     }
-                    return std::make_unique<Constructor>(constructor.fOffset,
-                                                         &constructor.type(),
-                                                         std::move(args));
+                    return Constructor::Make(irGenerator.fContext, constructor.fOffset,
+                                             constructor.type(), std::move(args));
                 }
 
                 default:
                     break;
             }
-        } else if (this->getOperator() == Token::Kind::TK_LOGICALNOT) {
+        } else if (this->getOperator().kind() == Token::Kind::TK_LOGICALNOT) {
             if (this->operand()->is<BoolLiteral>()) {
                 // Convert !boolLiteral(true) to boolLiteral(false).
                 const BoolLiteral& b = this->operand()->as<BoolLiteral>();

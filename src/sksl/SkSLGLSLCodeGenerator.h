@@ -55,13 +55,12 @@ public:
                       OutputStream* out)
     : INHERITED(program, errors, out)
     , fLineEnding("\n")
-    , fContext(*context)
-    , fProgramKind(program->fKind) {}
+    , fContext(*context) {}
 
     bool generateCode() override;
 
 protected:
-    using Precedence = Operators::Precedence;
+    using Precedence = Operator::Precedence;
 
     void write(const char* s);
 
@@ -181,7 +180,6 @@ protected:
     StringStream fGlobals;
     StringStream fExtraFunctions;
     String fFunctionHeader;
-    Program::Kind fProgramKind;
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;

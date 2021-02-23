@@ -35,18 +35,19 @@ bool test_int() {
     ok = true;
     ok = ivec4(unknown) == ivec4(unknown);
     ok = ok && ivec4(unknown) == ivec4(unknown);
-    ok = ok;
-    ok = ok;
-    ok = ok;
     ok = ok && ivec4(unknown) == ivec4(unknown);
     ok = ok && ivec4(unknown) == ivec4(unknown);
     ok = ok && ivec4(unknown) == ivec4(unknown);
     ivec4 val = ivec4(unknown);
     val += ivec4(1);
     val -= ivec4(1);
+    val = val + ivec4(1);
+    val = val - ivec4(1);
     ok = ok && val == ivec4(unknown);
     val *= ivec4(2);
     val /= ivec4(2);
+    val = val * ivec4(2);
+    val = val / ivec4(2);
     ok = ok && val == ivec4(unknown);
     return ok;
 }
@@ -82,18 +83,19 @@ vec4 main() {
     _2_ok = true;
     _2_ok = vec4(_1_unknown) == vec4(_1_unknown);
     _2_ok = _2_ok && vec4(_1_unknown) == vec4(_1_unknown);
-    _2_ok = _2_ok;
-    _2_ok = _2_ok;
-    _2_ok = _2_ok;
     _2_ok = _2_ok && vec4(_1_unknown) == vec4(_1_unknown);
     _2_ok = _2_ok && vec4(_1_unknown) == vec4(_1_unknown);
     _2_ok = _2_ok && vec4(_1_unknown) == vec4(_1_unknown);
     vec4 _3_val = vec4(_1_unknown);
     _3_val += vec4(1.0);
     _3_val -= vec4(1.0);
+    _3_val = _3_val + vec4(1.0);
+    _3_val = _3_val - vec4(1.0);
     _2_ok = _2_ok && _3_val == vec4(_1_unknown);
     _3_val *= vec4(2.0);
     _3_val /= vec4(2.0);
+    _3_val = _3_val * vec4(2.0);
+    _3_val = _3_val / vec4(2.0);
     _2_ok = _2_ok && _3_val == vec4(_1_unknown);
     return _2_ok && test_int() ? colorGreen : colorRed;
 

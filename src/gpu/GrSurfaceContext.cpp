@@ -498,7 +498,7 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
     bool convert = premul || unpremul || needColorConversion || makeTight ||
                    (src.colorType() != allowedColorType) || flip;
 
-    if (convert || !src.ownsPixels()) {
+    if (convert) {
         GrImageInfo tmpInfo(allowedColorType,
                             this->colorInfo().alphaType(),
                             this->colorInfo().refColorSpace(),
@@ -514,7 +514,7 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
     GrMipLevel level;
     level.fPixels = src.addr();
     level.fRowBytes = src.rowBytes();
-    return dContext->priv().drawingManager()->newWritePixelsTask(
+    bool result = dContext->priv().drawingManager()->newWritePixelsTask(
             this->asSurfaceProxyRef(),
             SkIRect::MakePtSize(pt, src.dimensions()),
             src.colorType(),
@@ -522,6 +522,12 @@ bool GrSurfaceContext::writePixels(GrDirectContext* dContext, GrPixmap src, SkIP
             &level,
             1,
             src.pixelStorage());
+    if (result && !src.ownsPixels()) {
+        // If the pixmap doesn't own its pixels then we must flush so that they are pushed to
+        // the GPU driver before we return.
+        dContext->priv().flushSurface(dstProxy);
+    }
+    return result;
 }
 
 void GrSurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
@@ -1280,6 +1286,9 @@ GrSurfaceContext::PixelTransferResult GrSurfaceContext::transferPixels(GrColorTy
 
     size_t rowBytes = GrColorTypeBytesPerPixel(supportedRead.fColorType) * rect.width();
     size_t size = rowBytes * rect.height();
+    // By using kStream_GrAccessPattern here, we are not able to cache and reuse the buffer for
+    // multiple reads. Switching to kDynamic_GrAccessPattern would allow for this, however doing
+    // so causes a crash in a chromium test. See skbug.com/11297
     auto buffer = direct->priv().resourceProvider()->createBuffer(
             size, GrGpuBufferType::kXferGpuToCpu, GrAccessPattern::kStream_GrAccessPattern);
     if (!buffer) {

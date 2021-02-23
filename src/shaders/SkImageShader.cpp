@@ -577,11 +577,7 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
     }
     matrix.normalizePerspective();
 
-    if (sampling.useCubic &&
-        SkMatrixPriv::AdjustHighQualityFilterLevel(matrix, true) != kHigh_SkFilterQuality)
-    {
-        sampling = SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNearest);
-    }
+    SkASSERT(!sampling.useCubic || sampling.mipmap == SkMipmapMode::kNone);
     auto* access = SkMipmapAccessor::Make(alloc, fImage.get(), matrix, sampling.mipmap);
     if (!access) {
         return false;
@@ -879,15 +875,6 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
 
     skvm::Coord upperLocal = SkShaderBase::ApplyMatrix(p, upperInv, origLocal, uniforms);
 
-    // All existing SkColorTypes pass these checks.  We'd only fail here adding new ones.
-    skvm::PixelFormat unused;
-    if (true  && !SkColorType_to_PixelFormat(upper.colorType(), &unused)) {
-        return {};
-    }
-    if (lower && !SkColorType_to_PixelFormat(lower->colorType(), &unused)) {
-        return {};
-    }
-
     // We can exploit image opacity to skip work unpacking alpha channels.
     const bool input_is_opaque = SkAlphaTypeIsOpaque(upper.alphaType())
                               || SkColorTypeIsAlwaysOpaque(upper.colorType());
@@ -924,8 +911,7 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
     };
 
     auto setup_uniforms = [&](const SkPixmap& pm) -> Uniforms {
-        skvm::PixelFormat pixelFormat;
-        SkAssertResult(SkColorType_to_PixelFormat(pm.colorType(), &pixelFormat));
+        skvm::PixelFormat pixelFormat = skvm::SkColorType_to_PixelFormat(pm.colorType());
         return {
             p->uniformF(uniforms->pushF(     pm.width())),
             p->uniformF(uniforms->pushF(1.0f/pm.width())), // iff tileX == kRepeat

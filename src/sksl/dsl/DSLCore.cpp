@@ -8,6 +8,7 @@
 #include "src/sksl/dsl/DSLCore.h"
 
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -17,6 +18,7 @@
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
+#include "src/sksl/ir/SkSLSwizzle.h"
 
 namespace SkSL {
 
@@ -28,31 +30,14 @@ void Start(SkSL::Compiler* compiler) {
 }
 
 void End() {
+    SkASSERTF(!DSLWriter::InFragmentProcessor(),
+              "more calls to StartFragmentProcessor than to EndFragmentProcessor");
     DSLWriter::SetInstance(nullptr);
 }
 #endif // SK_SUPPORT_GPU && !defined(SKSL_STANDALONE)
 
 void SetErrorHandler(ErrorHandler* errorHandler) {
     DSLWriter::SetErrorHandler(errorHandler);
-}
-
-static char swizzle_component(SwizzleComponent c) {
-    switch (c) {
-        case X:
-            return 'x';
-        case Y:
-            return 'y';
-        case Z:
-            return 'z';
-        case W:
-            return 'w';
-        case ZERO:
-            return '0';
-        case ONE:
-            return '1';
-        default:
-            SkUNREACHABLE;
-    }
 }
 
 class DSLCore {
@@ -73,7 +58,7 @@ public:
 
         // in C++17, we could just do:
         // (argArray.push_back(args.release()), ...);
-        int unused[] = {0, (ignore(argArray.push_back(args.release())), 0)...};
+        int unused[] = {0, (DSLWriter::Ignore(argArray.push_back(args.release())), 0)...};
         static_cast<void>(unused);
 
         return ir.call(/*offset=*/-1, ir.convertIdentifier(-1, name), std::move(argArray));
@@ -132,30 +117,32 @@ public:
         }
     }
 
-    static DSLExpression Swizzle(DSLExpression base, SwizzleComponent a) {
-        char mask[] = { swizzle_component(a), 0 };
-        return DSLWriter::IRGenerator().convertSwizzle(base.release(), mask);
+    static DSLExpression Swizzle(DSLExpression base, SkSL::SwizzleComponent::Type a) {
+        return Swizzle::MakeWith01(DSLWriter::Context(), base.release(), ComponentArray{a});
     }
 
-    static DSLExpression Swizzle(DSLExpression base, SwizzleComponent a, SwizzleComponent b) {
-        char mask[] = { swizzle_component(a), swizzle_component(b), 0 };
-        return DSLWriter::IRGenerator().convertSwizzle(base.release(), mask);
+    static DSLExpression Swizzle(DSLExpression base,
+                                 SkSL::SwizzleComponent::Type a,
+                                 SkSL::SwizzleComponent::Type b) {
+        return Swizzle::MakeWith01(DSLWriter::Context(), base.release(), ComponentArray{a, b});
     }
 
-    static DSLExpression Swizzle(DSLExpression base, SwizzleComponent a, SwizzleComponent b,
-                                 SwizzleComponent c) {
-        char mask[] = { swizzle_component(a), swizzle_component(b), swizzle_component(c), 0 };
-        return DSLWriter::IRGenerator().convertSwizzle(base.release(), mask);
+    static DSLExpression Swizzle(DSLExpression base,
+                                 SkSL::SwizzleComponent::Type a,
+                                 SkSL::SwizzleComponent::Type b,
+                                 SkSL::SwizzleComponent::Type c) {
+        return Swizzle::MakeWith01(DSLWriter::Context(), base.release(), ComponentArray{a, b, c});
     }
 
-    static DSLExpression Swizzle(DSLExpression base, SwizzleComponent a, SwizzleComponent b,
-                                 SwizzleComponent c, SwizzleComponent d) {
-        char mask[] = { swizzle_component(a), swizzle_component(b), swizzle_component(c),
-                        swizzle_component(d), 0 };
-        return DSLWriter::IRGenerator().convertSwizzle(base.release(), mask);
+    static DSLExpression Swizzle(DSLExpression base,
+                                 SkSL::SwizzleComponent::Type a,
+                                 SkSL::SwizzleComponent::Type b,
+                                 SkSL::SwizzleComponent::Type c,
+                                 SkSL::SwizzleComponent::Type d) {
+        return Swizzle::MakeWith01(DSLWriter::Context(), base.release(), ComponentArray{a,b,c,d});
     }
 
-    static DSLExpression Ternary(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse) {
+    static DSLExpression Select(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse) {
         return DSLWriter::IRGenerator().convertTernaryExpression(test.release(), ifTrue.release(),
                                                                  ifFalse.release());
     }
@@ -163,9 +150,6 @@ public:
     static DSLStatement While(DSLExpression test, DSLStatement stmt) {
         return DSLWriter::IRGenerator().convertWhile(/*offset=*/-1, test.release(), stmt.release());
     }
-
-private:
-    static void ignore(std::unique_ptr<SkSL::Expression>&) {}
 };
 
 DSLVar sk_FragColor() {
@@ -209,8 +193,8 @@ DSLStatement Return(DSLExpression expr) {
     return DSLCore::Return(std::move(expr));
 }
 
-DSLExpression Ternary(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse) {
-    return DSLCore::Ternary(std::move(test), std::move(ifTrue), std::move(ifFalse));
+DSLExpression Select(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse) {
+    return DSLCore::Select(std::move(test), std::move(ifTrue), std::move(ifFalse));
 }
 
 DSLStatement While(DSLExpression test, DSLStatement stmt) {
@@ -381,21 +365,28 @@ DSLExpression Step(DSLExpression edge, DSLExpression x) {
     return DSLCore::Call("step", std::move(edge), std::move(x));
 }
 
-DSLExpression Swizzle(DSLExpression base, SwizzleComponent a) {
+DSLExpression Swizzle(DSLExpression base, SkSL::SwizzleComponent::Type a) {
     return DSLCore::Swizzle(std::move(base), a);
 }
 
-DSLExpression Swizzle(DSLExpression base, SwizzleComponent a, SwizzleComponent b) {
+DSLExpression Swizzle(DSLExpression base,
+                      SkSL::SwizzleComponent::Type a,
+                      SkSL::SwizzleComponent::Type b) {
     return DSLCore::Swizzle(std::move(base), a, b);
 }
 
-DSLExpression Swizzle(DSLExpression base, SwizzleComponent a, SwizzleComponent b,
-                      SwizzleComponent c) {
+DSLExpression Swizzle(DSLExpression base,
+                      SkSL::SwizzleComponent::Type a,
+                      SkSL::SwizzleComponent::Type b,
+                      SkSL::SwizzleComponent::Type c) {
     return DSLCore::Swizzle(std::move(base), a, b, c);
 }
 
-DSLExpression Swizzle(DSLExpression base, SwizzleComponent a, SwizzleComponent b,
-                      SwizzleComponent c, SwizzleComponent d) {
+DSLExpression Swizzle(DSLExpression base,
+                      SkSL::SwizzleComponent::Type a,
+                      SkSL::SwizzleComponent::Type b,
+                      SkSL::SwizzleComponent::Type c,
+                      SkSL::SwizzleComponent::Type d) {
     return DSLCore::Swizzle(std::move(base), a, b, c, d);
 }
 

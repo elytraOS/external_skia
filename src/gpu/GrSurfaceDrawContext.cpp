@@ -77,7 +77,7 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
-using SimplifyStroke = GrStyledShape::SimplifyStroke;
+using DoSimplify = GrStyledShape::DoSimplify;
 
 class AutoCheckFlush {
 public:
@@ -723,7 +723,7 @@ void GrSurfaceDrawContext::drawRect(const GrClip* clip,
     }
     assert_alive(paint);
     this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
-                                     GrStyledShape(rect, *style, SimplifyStroke::kNo));
+                                     GrStyledShape(rect, *style, DoSimplify::kNo));
 }
 
 void GrSurfaceDrawContext::drawQuadSet(const GrClip* clip,
@@ -1017,7 +1017,7 @@ void GrSurfaceDrawContext::drawRRect(const GrClip* origClip,
 
     assert_alive(paint);
     this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
-                                     GrStyledShape(rrect, style, SimplifyStroke::kNo));
+                                     GrStyledShape(rrect, style, DoSimplify::kNo));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1344,7 +1344,8 @@ void GrSurfaceDrawContext::drawDRRect(const GrClip* clip,
     path.addRRect(inner);
     path.addRRect(outer);
     path.setFillType(SkPathFillType::kEvenOdd);
-    this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix, GrStyledShape(path));
+    this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
+                                     GrStyledShape(path, DoSimplify::kNo));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1443,7 +1444,7 @@ void GrSurfaceDrawContext::drawOval(const GrClip* clip,
     assert_alive(paint);
     this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
                                      GrStyledShape(SkRRect::MakeOval(oval), SkPathDirection::kCW, 2,
-                                                   false, style, SimplifyStroke::kNo));
+                                                   false, style, DoSimplify::kNo));
 }
 
 void GrSurfaceDrawContext::drawArc(const GrClip* clip,
@@ -1482,7 +1483,7 @@ void GrSurfaceDrawContext::drawArc(const GrClip* clip,
     }
     this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
                                      GrStyledShape::MakeArc(oval, startAngle, sweepAngle, useCenter,
-                                                            style, SimplifyStroke::kNo));
+                                                            style, DoSimplify::kNo));
 }
 
 void GrSurfaceDrawContext::drawImageLattice(const GrClip* clip,
@@ -1560,7 +1561,7 @@ void GrSurfaceDrawContext::drawPath(const GrClip* clip,
     SkDEBUGCODE(this->validate();)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrSurfaceDrawContext", "drawPath", fContext);
 
-    GrStyledShape shape(path, style, SimplifyStroke::kNo);
+    GrStyledShape shape(path, style, DoSimplify::kNo);
     this->drawShape(clip, std::move(paint), aa, viewMatrix, std::move(shape));
 }
 
@@ -1787,19 +1788,6 @@ void GrSurfaceDrawContext::drawShapeUsingPathRenderer(const GrClip* clip,
         return;
     }
 
-    // Always simplify the stroke for now. In the future we will give the tessellator a chance to
-    // claim strokes before trying to simplify them.
-    shape.simplifyStroke();
-
-    if (attemptDrawSimple || shape.simplified()) {
-        // Usually we enter drawShapeUsingPathRenderer() because the shape+style was too
-        // complex for dedicated draw ops. However, if GrStyledShape was able to reduce something
-        // we ought to try again instead of going right to path rendering.
-        if (this->drawSimpleShape(clip, &paint, aa, viewMatrix, shape)) {
-            return;
-        }
-    }
-
     SkIRect clipConservativeBounds = get_clip_bounds(this, clip);
 
     GrAAType aaType = this->chooseAAType(aa);
@@ -1813,18 +1801,48 @@ void GrSurfaceDrawContext::drawShapeUsingPathRenderer(const GrClip* clip,
     canDrawArgs.fClipConservativeBounds = &clipConservativeBounds;
     canDrawArgs.fTargetIsWrappedVkSecondaryCB = this->wrapsVkSecondaryCB();
     canDrawArgs.fHasUserStencilSettings = false;
-
-    GrPathRenderer* pr;
-    static constexpr GrPathRendererChain::DrawType kType = GrPathRendererChain::DrawType::kColor;
-    if (shape.isEmpty() && !shape.inverseFilled()) {
-        return;
-    }
-
     canDrawArgs.fAAType = aaType;
 
-    // Try a 1st time without applying any of the style to the geometry (and barring sw)
-    pr = this->drawingManager()->getPathRenderer(canDrawArgs, false, kType);
+    constexpr static bool kDisallowSWPathRenderer = false;
+    constexpr static bool kAllowSWPathRenderer = true;
+    using DrawType = GrPathRendererChain::DrawType;
+
+    GrPathRenderer* pr = nullptr;
+
+    if (!shape.style().strokeRec().isFillStyle() && !shape.isEmpty()) {
+        // Give the tessellation path renderer a chance to claim this stroke before we simplify it.
+        GrPathRenderer* tess = this->drawingManager()->getTessellationPathRenderer();
+        if (tess && tess->canDrawPath(canDrawArgs) == GrPathRenderer::CanDrawPath::kYes) {
+            pr = tess;
+        }
+    }
+
+    if (!pr) {
+        // The shape isn't a stroke that can be drawn directly. Simplify if possible.
+        shape.simplify();
+
+        if (shape.isEmpty() && !shape.inverseFilled()) {
+            return;
+        }
+
+        if (attemptDrawSimple || shape.simplified()) {
+            // Usually we enter drawShapeUsingPathRenderer() because the shape+style was too complex
+            // for dedicated draw ops. However, if GrStyledShape was able to reduce something we
+            // ought to try again instead of going right to path rendering.
+            if (this->drawSimpleShape(clip, &paint, aa, viewMatrix, shape)) {
+                return;
+            }
+        }
+
+        // Try a 1st time without applying any of the style to the geometry (and barring sw)
+        pr = this->drawingManager()->getPathRenderer(canDrawArgs, kDisallowSWPathRenderer,
+                                                     DrawType::kColor);
+    }
+
     SkScalar styleScale =  GrStyle::MatrixToScaleFactor(viewMatrix);
+    if (styleScale == 0.0f) {
+        return;
+    }
 
     if (!pr && shape.style().pathEffect()) {
         // It didn't work above, so try again with the path effect applied.
@@ -1832,7 +1850,8 @@ void GrSurfaceDrawContext::drawShapeUsingPathRenderer(const GrClip* clip,
         if (shape.isEmpty()) {
             return;
         }
-        pr = this->drawingManager()->getPathRenderer(canDrawArgs, false, kType);
+        pr = this->drawingManager()->getPathRenderer(canDrawArgs, kDisallowSWPathRenderer,
+                                                     DrawType::kColor);
     }
     if (!pr) {
         if (shape.style().applies()) {
@@ -1841,7 +1860,8 @@ void GrSurfaceDrawContext::drawShapeUsingPathRenderer(const GrClip* clip,
                 return;
             }
             // This time, allow SW renderer
-            pr = this->drawingManager()->getPathRenderer(canDrawArgs, true, kType);
+            pr = this->drawingManager()->getPathRenderer(canDrawArgs, kAllowSWPathRenderer,
+                                                         DrawType::kColor);
         } else {
             pr = this->drawingManager()->getSoftwarePathRenderer();
 #if GR_PATH_RENDERER_SPEW

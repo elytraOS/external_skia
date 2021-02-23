@@ -182,23 +182,7 @@ static std::unique_ptr<Statement>* find_parent_statement(
 std::unique_ptr<Expression> clone_with_ref_kind(const Expression& expr,
                                                 VariableReference::RefKind refKind) {
     std::unique_ptr<Expression> clone = expr.clone();
-    class SetRefKindInExpression : public ProgramWriter {
-    public:
-        SetRefKindInExpression(VariableReference::RefKind refKind) : fRefKind(refKind) {}
-        bool visitExpression(Expression& expr) override {
-            if (expr.is<VariableReference>()) {
-                expr.as<VariableReference>().setRefKind(fRefKind);
-            }
-            return INHERITED::visitExpression(expr);
-        }
-
-    private:
-        VariableReference::RefKind fRefKind;
-
-        using INHERITED = ProgramWriter;
-    };
-
-    SetRefKindInExpression{refKind}.visitExpression(*clone);
+    Analysis::UpdateRefKind(clone.get(), refKind);
     return clone;
 }
 
@@ -307,9 +291,8 @@ void Inliner::ensureScopedBlocks(Statement* inlinedBody, Statement* parentStmt) 
     }
 }
 
-void Inliner::reset(ModifiersPool* modifiers, const Program::Settings* settings) {
+void Inliner::reset(ModifiersPool* modifiers) {
     fModifiers = modifiers;
-    fSettings = settings;
     fMangler.reset();
     fInlinedStatementCounter = 0;
 }
@@ -349,9 +332,9 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kConstructor: {
             const Constructor& constructor = expression.as<Constructor>();
-            return std::make_unique<Constructor>(offset,
-                                                 constructor.type().clone(symbolTableForExpression),
-                                                 argList(constructor.arguments()));
+            return Constructor::Make(*fContext, offset,
+                                     *constructor.type().clone(symbolTableForExpression),
+                                     argList(constructor.arguments()));
         }
         case Expression::Kind::kExternalFunctionCall: {
             const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
@@ -390,7 +373,7 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
             return expression.clone();
         case Expression::Kind::kSwizzle: {
             const Swizzle& s = expression.as<Swizzle>();
-            return std::make_unique<Swizzle>(*fContext, expr(s.base()), s.components());
+            return Swizzle::Make(*fContext, expr(s.base()), s.components());
         }
         case Expression::Kind::kTernary: {
             const TernaryExpression& t = expression.as<TernaryExpression>();
@@ -638,7 +621,6 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     // order guarantees. Since we can't use gotos (which are normally used to replace return
     // statements), we wrap the whole function in a loop and use break statements to jump to the
     // end.
-    SkASSERT(fSettings);
     SkASSERT(fContext);
     SkASSERT(call);
     SkASSERT(this->isSafeToInline(call->function().definition()));
@@ -788,10 +770,8 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
 }
 
 bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
-    SkASSERT(fSettings);
-
     // A threshold of zero indicates that the inliner is completely disabled, so we can just return.
-    if (fSettings->fInlineThreshold <= 0) {
+    if (this->settings().fInlineThreshold <= 0) {
         return false;
     }
 
@@ -1020,9 +1000,9 @@ public:
                 // It is illegal for side-effects from x() or y() to occur. The simplest way to
                 // enforce that rule is to avoid inlining the right side entirely. However, it is
                 // safe for other types of binary expression to inline both sides.
-                Token::Kind op = binaryExpr.getOperator();
-                bool shortCircuitable = (op == Token::Kind::TK_LOGICALAND ||
-                                         op == Token::Kind::TK_LOGICALOR);
+                Operator op = binaryExpr.getOperator();
+                bool shortCircuitable = (op.kind() == Token::Kind::TK_LOGICALAND ||
+                                         op.kind() == Token::Kind::TK_LOGICALOR);
                 if (!shortCircuitable) {
                     this->visitExpression(&binaryExpr.right());
                 }
@@ -1114,7 +1094,7 @@ int Inliner::getFunctionSize(const FunctionDeclaration& funcDecl, FunctionSizeCa
     auto [iter, wasInserted] = cache->insert({&funcDecl, 0});
     if (wasInserted) {
         iter->second = Analysis::NodeCountUpToLimit(*funcDecl.definition(),
-                                                    fSettings->fInlineThreshold);
+                                                    this->settings().fInlineThreshold);
     }
     return iter->second;
 }
@@ -1146,7 +1126,7 @@ void Inliner::buildCandidateList(const std::vector<std::unique_ptr<ProgramElemen
 
     // If the inline threshold is unlimited, or if we have no candidates left, our candidate list is
     // complete.
-    if (fSettings->fInlineThreshold == INT_MAX || candidates.empty()) {
+    if (this->settings().fInlineThreshold == INT_MAX || candidates.empty()) {
         return;
     }
 
@@ -1160,34 +1140,32 @@ void Inliner::buildCandidateList(const std::vector<std::unique_ptr<ProgramElemen
         candidateTotalCost[&fnDecl] += this->getFunctionSize(fnDecl, &functionSizeCache);
     }
 
-    candidates.erase(
-            std::remove_if(candidates.begin(),
-                           candidates.end(),
-                           [&](const InlineCandidate& candidate) {
-                               const FunctionDeclaration& fnDecl = candidate_func(candidate);
-                               if (fnDecl.modifiers().fFlags & Modifiers::kInline_Flag) {
-                                   // Functions marked `inline` ignore size limitations.
-                                   return false;
-                               }
-                               if (usage->get(fnDecl) == 1) {
-                                   // If a function is only used once, it's cost-free to inline.
-                                   return false;
-                               }
-                               if (candidateTotalCost[&fnDecl] <= fSettings->fInlineThreshold) {
-                                   // We won't exceed the inline threshold by inlining this.
-                                   return false;
-                               }
-                               // Inlining this function will add too many IRNodes.
-                               return true;
-                           }),
-            candidates.end());
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                        [&](const InlineCandidate& candidate) {
+                            const FunctionDeclaration& fnDecl = candidate_func(candidate);
+                            if (fnDecl.modifiers().fFlags & Modifiers::kInline_Flag) {
+                                // Functions marked `inline` ignore size limitations.
+                                return false;
+                            }
+                            if (usage->get(fnDecl) == 1) {
+                                // If a function is only used once, it's cost-free to inline.
+                                return false;
+                            }
+                            if (candidateTotalCost[&fnDecl] <= this->settings().fInlineThreshold) {
+                                // We won't exceed the inline threshold by inlining this.
+                                return false;
+                            }
+                            // Inlining this function will add too many IRNodes.
+                            return true;
+                        }),
+         candidates.end());
 }
 
 bool Inliner::analyze(const std::vector<std::unique_ptr<ProgramElement>>& elements,
                       std::shared_ptr<SymbolTable> symbols,
                       ProgramUsage* usage) {
     // A threshold of zero indicates that the inliner is completely disabled, so we can just return.
-    if (fSettings->fInlineThreshold <= 0) {
+    if (this->settings().fInlineThreshold <= 0) {
         return false;
     }
 

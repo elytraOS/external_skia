@@ -204,13 +204,13 @@ bool SkImage_GpuBase::onIsValid(GrRecordingContext* context) const {
 }
 
 sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
-        GrRecordingContext* context,
+        GrContextThreadSafeProxy* tsp,
         SkISize dimensions,
         GrBackendFormat backendFormat,
         GrMipmapped mipMapped,
         PromiseImageTextureFulfillProc fulfillProc,
         sk_sp<GrRefCntedCallback> releaseHelper) {
-    SkASSERT(context);
+    SkASSERT(tsp);
     SkASSERT(!dimensions.isEmpty());
     SkASSERT(releaseHelper);
 
@@ -306,30 +306,42 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
             }
 
             sk_sp<GrTexture> tex;
-            static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
-            GrUniqueKey key;
-            GrUniqueKey::Builder builder(&key, kDomain, 1, "promise");
-            builder[0] = promiseTexture->uniqueID();
-            builder.finish();
-            // A texture with this key may already exist from a different instance of this lazy
-            // callback. This could happen if the client fulfills a promise image with a texture
-            // that was previously used to fulfill a different promise image.
-            if (auto surf = resourceProvider->findByUniqueKey<GrSurface>(key)) {
-                tex = sk_ref_sp(surf->asTexture());
-                SkASSERT(tex);
-            } else {
-                if ((tex = resourceProvider->wrapBackendTexture(
-                             backendTexture, kBorrow_GrWrapOwnership, GrWrapCacheable::kYes,
-                             kRead_GrIOType))) {
-                    tex->resourcePriv().setUniqueKey(key);
-                } else {
+            static bool kDisableCaching = true;
+            if (kDisableCaching) {
+                tex = resourceProvider->wrapBackendTexture(backendTexture,
+                                                           kBorrow_GrWrapOwnership,
+                                                           GrWrapCacheable::kYes,
+                                                           kRead_GrIOType);
+                if (!tex) {
                     return {};
                 }
+                tex->setRelease(fReleaseHelper);
+            } else {
+                static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
+                GrUniqueKey key;
+                GrUniqueKey::Builder builder(&key, kDomain, 1, "promise");
+                builder[0] = promiseTexture->uniqueID();
+                builder.finish();
+                // A texture with this key may already exist from a different instance of this lazy
+                // callback. This could happen if the client fulfills a promise image with a texture
+                // that was previously used to fulfill a different promise image.
+                if (auto surf = resourceProvider->findByUniqueKey<GrSurface>(key)) {
+                    tex = sk_ref_sp(surf->asTexture());
+                    SkASSERT(tex);
+                } else {
+                    if ((tex = resourceProvider->wrapBackendTexture(
+                                 backendTexture, kBorrow_GrWrapOwnership, GrWrapCacheable::kYes,
+                                 kRead_GrIOType))) {
+                        tex->resourcePriv().setUniqueKey(key);
+                    } else {
+                        return {};
+                    }
+                }
+                // Because we're caching the GrTextureObject we have to use this "idle proc"
+                // mechanism to know when it's safe to delete the underlying backend texture.
+                tex->addIdleProc(std::move(fReleaseHelper));
+                promiseTexture->addKeyToInvalidate(tex->getContext()->priv().contextID(), key);
             }
-            // Because we're caching the GrTextureObject we have to use this "idle proc" mechanism
-            // to know when it's safe to delete the underlying backend texture.
-            tex->addIdleProc(std::move(fReleaseHelper));
-            promiseTexture->addKeyToInvalidate(tex->getContext()->priv().contextID(), key);
             fTexture = tex.get();
             // We need to hold on to the GrTexture in case our proxy gets reinstantiated. However,
             // we can't unref in our destructor because we may be on another thread then. So we
@@ -349,17 +361,6 @@ sk_sp<GrTextureProxy> SkImage_GpuBase::MakePromiseImageLazyProxy(
         bool fFulfillProcFailed = false;
     } callback(fulfillProc, std::move(releaseHelper));
 
-    GrProxyProvider* proxyProvider = context->priv().proxyProvider();
-
-    // Ganesh assumes that, when wrapping a mipmapped backend texture from a client, that its
-    // mipmaps are fully fleshed out.
-    GrMipmapStatus mipmapStatus = (GrMipmapped::kYes == mipMapped) ? GrMipmapStatus::kValid
-                                                                   : GrMipmapStatus::kNotAllocated;
-
-    // We pass kReadOnly here since we should treat content of the client's texture as immutable.
-    // The promise API provides no way for the client to indicated that the texture is protected.
-    return proxyProvider->createLazyProxy(std::move(callback), backendFormat, dimensions, mipMapped,
-                                          mipmapStatus, GrInternalSurfaceFlags::kReadOnly,
-                                          SkBackingFit::kExact, SkBudgeted::kNo, GrProtected::kNo,
-                                          GrSurfaceProxy::UseAllocator::kYes);
+    return GrProxyProvider::CreatePromiseProxy(tsp, std::move(callback), backendFormat, dimensions,
+                                               mipMapped);
 }

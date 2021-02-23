@@ -14,6 +14,7 @@
 #include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/dsl/DSLCore.h"
+#include "src/sksl/ir/SkSLConstructor.h"
 
 #if !SKSL_USE_THREAD_LOCAL
 #include <pthread.h>
@@ -25,11 +26,21 @@ namespace dsl {
 
 DSLWriter::DSLWriter(SkSL::Compiler* compiler)
     : fCompiler(compiler) {
-    SkSL::ParsedModule module = fCompiler->moduleForProgramKind(SkSL::Program::kFragment_Kind);
+    SkSL::ParsedModule module = fCompiler->moduleForProgramKind(SkSL::ProgramKind::kFragment);
+    fConfig.fKind = SkSL::ProgramKind::kFragment;
+
     SkSL::IRGenerator& ir = *fCompiler->fIRGenerator;
+    fOldSymbolTable = ir.fSymbolTable;
+    fOldConfig = fCompiler->fContext->fConfig;
     ir.fSymbolTable = module.fSymbols;
-    ir.fSettings = &fSettings;
+    fCompiler->fContext->fConfig = &fConfig;
     ir.pushSymbolTable();
+}
+
+DSLWriter::~DSLWriter() {
+    SkSL::IRGenerator& ir = *fCompiler->fIRGenerator;
+    ir.fSymbolTable = fOldSymbolTable;
+    fCompiler->fContext->fConfig = fOldConfig;
 }
 
 SkSL::IRGenerator& DSLWriter::IRGenerator() {
@@ -71,6 +82,10 @@ void DSLWriter::EndFragmentProcessor() {
     instance.fStack.pop();
     IRGenerator().popSymbolTable();
 }
+
+GrGLSLUniformHandler::UniformHandle DSLWriter::VarUniformHandle(const DSLVar& var) {
+    return var.uniformHandle();
+}
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
 std::unique_ptr<SkSL::Expression> DSLWriter::Check(std::unique_ptr<SkSL::Expression> expr) {
@@ -92,32 +107,39 @@ DSLExpression DSLWriter::Construct(const SkSL::Type& type, std::vector<DSLExpres
     for (DSLExpression& arg : rawArgs) {
         args.push_back(arg.release());
     }
-    return DSLExpression(DSLWriter::IRGenerator().call(
-                                         /*offset=*/-1,
-                                         std::make_unique<SkSL::TypeReference>(DSLWriter::Context(),
-                                                                               /*offset=*/-1,
-                                                                               &type),
-                                         std::move(args)));
+    return DSLExpression(SkSL::Constructor::Make(Context(), /*offset=*/-1, type, std::move(args)));
 }
 
-DSLExpression DSLWriter::ConvertBinary(std::unique_ptr<Expression> left, Token::Kind op,
+DSLExpression DSLWriter::ConvertBinary(std::unique_ptr<Expression> left, Operator op,
                                        std::unique_ptr<Expression> right) {
-    return DSLExpression(Check(IRGenerator().convertBinaryExpression(std::move(left), op,
-                                                                     std::move(right))));
+    return IRGenerator().convertBinaryExpression(std::move(left), op, std::move(right));
+}
+
+DSLExpression DSLWriter::ConvertField(std::unique_ptr<Expression> base, const char* name) {
+    return IRGenerator().convertField(std::move(base), name);
 }
 
 DSLExpression DSLWriter::ConvertIndex(std::unique_ptr<Expression> base,
                                       std::unique_ptr<Expression> index) {
-    return DSLExpression(Check(IRGenerator().convertIndex(std::move(base), std::move(index))));
+    return IRGenerator().convertIndex(std::move(base), std::move(index));
 }
 
-DSLExpression DSLWriter::ConvertPostfix(std::unique_ptr<Expression> expr, Token::Kind op) {
-    return DSLExpression(Check(IRGenerator().convertPostfixExpression(std::move(expr), op)));
+DSLExpression DSLWriter::ConvertPostfix(std::unique_ptr<Expression> expr, Operator op) {
+    return IRGenerator().convertPostfixExpression(std::move(expr), op);
 }
 
-DSLExpression DSLWriter::ConvertPrefix(Token::Kind op, std::unique_ptr<Expression> expr) {
-    return DSLExpression(Check(IRGenerator().convertPrefixExpression(op, std::move(expr))));
+DSLExpression DSLWriter::ConvertPrefix(Operator op, std::unique_ptr<Expression> expr) {
+    return IRGenerator().convertPrefixExpression(op, std::move(expr));
 }
+
+DSLStatement DSLWriter::ConvertSwitch(std::unique_ptr<Expression> value,
+                                      ExpressionArray caseValues,
+                                      SkTArray<SkSL::StatementArray> caseStatements) {
+    return IRGenerator().convertSwitch(/*offset=*/-1, /*isStatic=*/false, std::move(value),
+                                       std::move(caseValues), std::move(caseStatements),
+                                       IRGenerator().fSymbolTable);
+}
+
 
 void DSLWriter::ReportError(const char* msg) {
     if (Instance().fErrorHandler) {

@@ -408,11 +408,17 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fPreferFullscreenClears = true;
     }
 
-    if (kQualcomm_VkVendor == properties.vendorID || kARM_VkVendor == properties.vendorID) {
-        // On Qualcomm and ARM mapping a gpu buffer and doing both reads and writes to it is slow.
-        // Thus for index and vertex buffers we will force to use a cpu side buffer and then copy
-        // the whole buffer up to the gpu.
-        fBufferMapThreshold = SK_MaxS32;
+    if (properties.vendorID == kNvidia_VkVendor || properties.vendorID == kAMD_VkVendor) {
+        // On discrete GPUs it can be faster to read gpu only memory compared to memory that is also
+        // mappable on the host.
+        fGpuOnlyBuffersMorePerformant = true;
+
+        // On discrete GPUs we try to use special DEVICE_LOCAL and HOST_VISIBLE memory for our
+        // cpu write, gpu read buffers. This memory is not ideal to be kept persistently mapped.
+        // Some discrete GPUs do not expose this special memory, however we still disable
+        // persistently mapped buffers for all of them since most GPUs with updated drivers do
+        // expose it. If this becomes an issue we can try to be more fine grained.
+        fShouldPersistentlyMapCpuToGpuBuffers = false;
     }
 
     if (kQualcomm_VkVendor == properties.vendorID) {
@@ -468,11 +474,11 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
 void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties& properties) {
 #if defined(SK_BUILD_FOR_WIN)
     if (kNvidia_VkVendor == properties.vendorID || kIntel_VkVendor == properties.vendorID) {
-        fMustSleepOnTearDown = true;
+        fMustSyncCommandBuffersWithQueue = true;
     }
 #elif defined(SK_BUILD_FOR_ANDROID)
     if (kImagination_VkVendor == properties.vendorID) {
-        fMustSleepOnTearDown = true;
+        fMustSyncCommandBuffersWithQueue = true;
     }
 #endif
 

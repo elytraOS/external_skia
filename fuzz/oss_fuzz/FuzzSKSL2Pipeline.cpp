@@ -8,6 +8,8 @@
 #include "src/gpu/GrShaderCaps.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLPipelineStageCodeGenerator.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLVariable.h"
 
 #include "fuzz/Fuzz.h"
 
@@ -16,7 +18,7 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
     SkSL::Compiler compiler(caps.get());
     SkSL::Program::Settings settings;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-                                                    SkSL::Program::kRuntimeEffect_Kind,
+                                                    SkSL::ProgramKind::kRuntimeEffect,
                                                     SkSL::String((const char*) bytes->data(),
                                                                  bytes->size()),
                                                     settings);
@@ -24,8 +26,30 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
         return false;
     }
 
-    SkSL::PipelineStage::Args args;
-    SkSL::PipelineStage::ConvertProgram(*program, &args);
+    class Callbacks : public SkSL::PipelineStage::Callbacks {
+        using String = SkSL::String;
+
+        String declareUniform(const SkSL::VarDeclaration* decl) override {
+            return decl->var().name();
+        }
+
+        void defineFunction(const char* /*decl*/, const char* /*body*/, bool /*isMain*/) override {}
+        void defineStruct(const char* /*definition*/) override {}
+        void declareGlobal(const char* /*declaration*/) override {}
+
+        String sampleChild(int index, String coords) override {
+            return SkSL::String::printf("sample(%d%s%s)", index, coords.empty() ? "" : ", ",
+                                        coords.c_str());
+        }
+
+        String sampleChildWithMatrix(int index, String matrix) override {
+            return SkSL::String::printf("sample(%d%s%s)", index, matrix.empty() ? "" : ", ",
+                                        matrix.c_str());
+        }
+    };
+
+    Callbacks callbacks;
+    SkSL::PipelineStage::ConvertProgram(*program, "coords", &callbacks);
     return true;
 }
 

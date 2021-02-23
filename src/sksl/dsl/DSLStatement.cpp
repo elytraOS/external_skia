@@ -13,6 +13,10 @@
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 
+#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#endif
+
 namespace SkSL {
 
 namespace dsl {
@@ -32,11 +36,20 @@ DSLStatement::DSLStatement(std::unique_ptr<SkSL::Expression> expr)
 
 DSLStatement::DSLStatement(std::unique_ptr<SkSL::Statement> stmt)
     : fStatement(std::move(stmt)) {
-    if (!fStatement) {
-        SkASSERTF(DSLWriter::Compiler().errorCount(),
-                  "statement is null, but no errors were reported");
+    if (DSLWriter::Compiler().errorCount()) {
         DSLWriter::ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str());
+        DSLWriter::Compiler().setErrorCount(0);
     }
+}
+
+DSLStatement::~DSLStatement() {
+#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+    if (fStatement && DSLWriter::InFragmentProcessor()) {
+        DSLWriter::CurrentEmitArgs()->fFragBuilder->codeAppend(this->release());
+        return;
+    }
+#endif
+    SkASSERTF(!fStatement, "Statement destroyed without being incorporated into program");
 }
 
 } // namespace dsl

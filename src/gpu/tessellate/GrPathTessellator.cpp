@@ -24,9 +24,8 @@ GrPathIndirectTessellator::GrPathIndirectTessellator(const SkMatrix& viewMatrix,
         int level;
         switch (verb) {
             case SkPathVerb::kConic:
-                // We use the same quadratic formula for conics, ignoring w. This appears to be
-                // an upper bound on what the actual number of subdivisions would have been.
-                [[fallthrough]];
+                level = GrWangsFormula::conic_log2(1.f / kLinearizationIntolerance, pts, *w, xform);
+                break;
             case SkPathVerb::kQuad:
                 level = GrWangsFormula::quadratic_log2(kLinearizationIntolerance, pts, xform);
                 break;
@@ -110,9 +109,9 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
     // possible resolve level (kMaxResolveLevel; resolveLevel=0 never has any instances), plus one
     // more for the optional inner fan triangles.
     int indirectLockCnt = kMaxResolveLevel + 1;
-    GrDrawIndexedIndirectCommand* indirectData = target->makeDrawIndexedIndirectSpace(
+    GrDrawIndexedIndirectWriter indirectWriter = target->makeDrawIndexedIndirectSpace(
             indirectLockCnt, &fIndirectDrawBuffer, &fIndirectDrawOffset);
-    if (!indirectData) {
+    if (!indirectWriter.isValid()) {
         SkASSERT(!fIndirectDrawBuffer);
         return;
     }
@@ -126,8 +125,10 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
         // at the beginning of the instance buffer. Add a special-case indirect draw here that will
         // emit the triangles [P0, P1, P2] from these 4-point instances.
         SkASSERT(fIndirectDrawCount < indirectLockCnt);
-        indirectData[fIndirectDrawCount++] = GrMiddleOutCubicShader::MakeDrawTrianglesIndirectCmd(
-                numTrianglesAtBeginningOfData, fBaseInstance);
+        GrMiddleOutCubicShader::WriteDrawTrianglesIndirectCmd(&indirectWriter,
+                                                              numTrianglesAtBeginningOfData,
+                                                              fBaseInstance);
+        ++fIndirectDrawCount;
         runningInstanceCount = numTrianglesAtBeginningOfData;
     }
     SkASSERT(fResolveLevelCounts[0] == 0);
@@ -139,8 +140,10 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
         }
         instanceLocations[resolveLevel] = instanceData + runningInstanceCount * 4;
         SkASSERT(fIndirectDrawCount < indirectLockCnt);
-        indirectData[fIndirectDrawCount++] = GrMiddleOutCubicShader::MakeDrawCubicsIndirectCmd(
-                resolveLevel, instanceCountAtCurrLevel, fBaseInstance + runningInstanceCount);
+        GrMiddleOutCubicShader::WriteDrawCubicsIndirectCmd(&indirectWriter, resolveLevel,
+                                                           instanceCountAtCurrLevel,
+                                                           fBaseInstance + runningInstanceCount);
+        ++fIndirectDrawCount;
         runningInstanceCount += instanceCountAtCurrLevel;
     }
 
@@ -174,9 +177,9 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
                 default:
                     continue;
                 case SkPathVerb::kConic:
-                    // We use the same quadratic formula for conics, ignoring w. This appears to be
-                    // an upper bound on what the actual number of subdivisions would have been.
-                    [[fallthrough]];
+                    level = GrWangsFormula::conic_log2(1.f / kLinearizationIntolerance, pts, *w,
+                                                       xform);
+                    break;
                 case SkPathVerb::kQuad:
                     level = GrWangsFormula::quadratic_log2(kLinearizationIntolerance, pts, xform);
                     break;

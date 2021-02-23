@@ -53,6 +53,8 @@ public:
         return true;
     }
 
+    size_t onTextureSize() const override { return fView.proxy()->gpuMemorySize(); }
+
     sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
                                                 GrDirectContext*) const final;
 
@@ -76,8 +78,9 @@ public:
 
     /**
      * This is the implementation of SkDeferredDisplayListRecorder::makePromiseImage.
+     * TODO: Make this public, and remove the SkDDLRecorder entry point.
      */
-    static sk_sp<SkImage> MakePromiseTexture(GrRecordingContext*,
+    static sk_sp<SkImage> MakePromiseTexture(sk_sp<GrContextThreadSafeProxy>,
                                              const GrBackendFormat& backendFormat,
                                              SkISize dimensions,
                                              GrMipmapped mipMapped,

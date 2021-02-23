@@ -9,7 +9,9 @@
 #define SKSL_DSLWRITER
 
 #include "src/sksl/SkSLMangler.h"
+#include "src/sksl/SkSLOperators.h"
 #include "src/sksl/dsl/DSLExpression.h"
+#include "src/sksl/dsl/DSLStatement.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLStatement.h"
@@ -40,6 +42,8 @@ class ErrorHandler;
 class DSLWriter {
 public:
     DSLWriter(SkSL::Compiler* compiler);
+
+    ~DSLWriter();
 
     /**
      * Returns the Compiler used by DSL operations in the current thread.
@@ -105,6 +109,10 @@ public:
         return Instance().fStack.top().fEmitArgs;
     }
 
+    static bool InFragmentProcessor() {
+        return !Instance().fStack.empty();
+    }
+
     /**
      * Pushes a new processor / emitArgs pair for the current thread.
      */
@@ -115,6 +123,8 @@ public:
      * Pops the processor / emitArgs pair associated with the current thread.
      */
     static void EndFragmentProcessor();
+
+    static GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     /**
@@ -126,15 +136,23 @@ public:
 
     static DSLExpression Construct(const SkSL::Type& type, std::vector<DSLExpression> rawArgs);
 
-    static DSLExpression ConvertBinary(std::unique_ptr<Expression> left, Token::Kind op,
-                                std::unique_ptr<Expression> right);
+    static DSLExpression ConvertBinary(std::unique_ptr<Expression> left, Operator op,
+                                       std::unique_ptr<Expression> right);
+
+    static DSLExpression ConvertField(std::unique_ptr<Expression> base, const char* name);
 
     static DSLExpression ConvertIndex(std::unique_ptr<Expression> base,
                                       std::unique_ptr<Expression> index);
 
-    static DSLExpression ConvertPostfix(std::unique_ptr<Expression> expr, Token::Kind op);
+    static DSLExpression ConvertPostfix(std::unique_ptr<Expression> expr, Operator op);
 
-    static DSLExpression ConvertPrefix(Token::Kind op, std::unique_ptr<Expression> expr);
+    static DSLExpression ConvertPrefix(Operator op, std::unique_ptr<Expression> expr);
+
+    static DSLStatement ConvertSwitch(std::unique_ptr<Expression> value,
+                                      ExpressionArray caseValues,
+                                      SkTArray<SkSL::StatementArray> caseStatements);
+
+    static void Ignore(std::unique_ptr<SkSL::Expression>&) {}
 
     /**
      * Sets the ErrorHandler associated with the current thread. This object will be notified when
@@ -163,8 +181,10 @@ public:
     static void SetInstance(std::unique_ptr<DSLWriter> instance);
 
 private:
-    SkSL::Program::Settings fSettings;
+    SkSL::ProgramConfig fConfig;
     SkSL::Compiler* fCompiler;
+    std::shared_ptr<SkSL::SymbolTable> fOldSymbolTable;
+    SkSL::ProgramConfig* fOldConfig;
     std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
     ErrorHandler* fErrorHandler = nullptr;
     bool fMangle = true;

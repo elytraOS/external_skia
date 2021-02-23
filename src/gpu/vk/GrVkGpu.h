@@ -15,7 +15,6 @@
 #include "src/gpu/vk/GrVkCaps.h"
 #include "src/gpu/vk/GrVkMSAALoadManager.h"
 #include "src/gpu/vk/GrVkMemory.h"
-#include "src/gpu/vk/GrVkMeshBuffer.h"
 #include "src/gpu/vk/GrVkResourceProvider.h"
 #include "src/gpu/vk/GrVkSemaphore.h"
 #include "src/gpu/vk/GrVkUtil.h"
@@ -23,8 +22,7 @@
 class GrDirectContext;
 class GrPipeline;
 
-class GrVkBuffer2;
-class GrVkBufferImpl;
+class GrVkBuffer;
 class GrVkCommandPool;
 class GrVkMemoryAllocator;
 class GrVkPipeline;
@@ -99,8 +97,6 @@ public:
                                                                GrProtected) override;
     void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) override;
 
-    void testingOnly_flushGpuAndSync() override;
-
     void resetShaderCacheForTesting() const override {
         fResourceProvider.resetShaderCacheForTesting();
     }
@@ -171,12 +167,9 @@ public:
 
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
-    void copyBuffer(GrVkBuffer* srcBuffer, GrVkBuffer* dstBuffer, VkDeviceSize srcOffset,
-                    VkDeviceSize dstOffset, VkDeviceSize size);
-    void copyBuffer(GrVkBuffer* srcBuffer, sk_sp<GrVkBuffer2> dstBuffer, VkDeviceSize srcOffset,
-                    VkDeviceSize dstOffset, VkDeviceSize size);
-    bool updateBuffer(GrVkBuffer* buffer, const void* src, VkDeviceSize offset, VkDeviceSize size);
-    bool updateBuffer(sk_sp<GrVkBuffer2> buffer, const void* src, VkDeviceSize offset,
+    void copyBuffer(sk_sp<GrGpuBuffer> srcBuffer, sk_sp<GrGpuBuffer> dstBuffer,
+                    VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
+    bool updateBuffer(sk_sp<GrVkBuffer> buffer, const void* src, VkDeviceSize offset,
                       VkDeviceSize size);
 
     enum PersistentCacheKeyType : uint32_t {

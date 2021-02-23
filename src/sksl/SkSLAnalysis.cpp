@@ -269,7 +269,6 @@ public:
         this->visitExpression(expr);
         if (info) {
             info->fAssignedVar = fAssignedVar;
-            info->fIsSwizzled = fIsSwizzled;
         }
         return fErrors->errorCount() == oldErrorCount;
     }
@@ -295,17 +294,14 @@ public:
 
             case Expression::Kind::kSwizzle: {
                 const Swizzle& swizzle = expr.as<Swizzle>();
-                fIsSwizzled = true;
                 this->checkSwizzleWrite(swizzle);
                 this->visitExpression(*swizzle.base());
                 break;
             }
-            case Expression::Kind::kIndex: {
-                Expression& inner = *expr.as<IndexExpression>().base();
-                fIsSwizzled |= inner.type().isVector();
-                this->visitExpression(inner);
+            case Expression::Kind::kIndex:
+                this->visitExpression(*expr.as<IndexExpression>().base());
                 break;
-            }
+
             default:
                 fErrors->error(expr.fOffset, "cannot assign to this expression");
                 break;
@@ -315,8 +311,8 @@ public:
 private:
     void checkSwizzleWrite(const Swizzle& swizzle) {
         int bits = 0;
-        for (int idx : swizzle.components()) {
-            SkASSERT(idx <= 3);
+        for (int8_t idx : swizzle.components()) {
+            SkASSERT(idx >= SwizzleComponent::X && idx <= SwizzleComponent::W);
             int bit = 1 << idx;
             if (bits & bit) {
                 fErrors->error(swizzle.fOffset,
@@ -329,7 +325,6 @@ private:
 
     ErrorReporter* fErrors;
     VariableReference* fAssignedVar = nullptr;
-    bool fIsSwizzled = false;
 
     using INHERITED = ProgramVisitor;
 };
@@ -394,8 +389,7 @@ bool ProgramUsage::isDead(const Variable& v) const {
                              Modifiers::kVarying_Flag))) {
         return false;
     }
-    return !counts.fWrite || (!counts.fRead && !(modifiers.fFlags &
-                                                 (Modifiers::kPLS_Flag | Modifiers::kPLSOut_Flag)));
+    return !counts.fWrite || !counts.fRead;
 }
 
 int ProgramUsage::get(const FunctionDeclaration& f) const {
@@ -441,6 +435,27 @@ bool Analysis::StatementWritesToVariable(const Statement& stmt, const Variable& 
 bool Analysis::IsAssignable(Expression& expr, AssignmentInfo* info, ErrorReporter* errors) {
     TrivialErrorReporter trivialErrors;
     return IsAssignableVisitor{errors ? errors : &trivialErrors}.visit(expr, info);
+}
+
+void Analysis::UpdateRefKind(Expression* expr, VariableRefKind refKind) {
+    class RefKindWriter : public ProgramWriter {
+    public:
+        RefKindWriter(VariableReference::RefKind refKind) : fRefKind(refKind) {}
+
+        bool visitExpression(Expression& expr) override {
+            if (expr.is<VariableReference>()) {
+                expr.as<VariableReference>().setRefKind(fRefKind);
+            }
+            return INHERITED::visitExpression(expr);
+        }
+
+    private:
+        VariableReference::RefKind fRefKind;
+
+        using INHERITED = ProgramWriter;
+    };
+
+    RefKindWriter{refKind}.visitExpression(*expr);
 }
 
 bool Analysis::IsTrivialExpression(const Expression& expr) {
@@ -522,7 +537,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
         return "expected loop index on left hand side of condition";
     }
     // relational_operator is one of: > >= < <= == or !=
-    switch (cond.getOperator()) {
+    switch (cond.getOperator().kind()) {
         case Token::Kind::TK_GT:
         case Token::Kind::TK_GTEQ:
         case Token::Kind::TK_LT:
@@ -559,7 +574,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
             if (!getConstant(next.right(), &loopInfo.fDelta)) {
                 return "loop index must be modified by a constant expression";
             }
-            switch (next.getOperator()) {
+            switch (next.getOperator().kind()) {
                 case Token::Kind::TK_PLUSEQ:                                      break;
                 case Token::Kind::TK_MINUSEQ: loopInfo.fDelta = -loopInfo.fDelta; break;
                 default:
@@ -571,7 +586,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
             if (!is_loop_index(next.operand())) {
                 return "expected loop index in loop expression";
             }
-            switch (next.getOperator()) {
+            switch (next.getOperator().kind()) {
                 case Token::Kind::TK_PLUSPLUS:   loopInfo.fDelta =  1; break;
                 case Token::Kind::TK_MINUSMINUS: loopInfo.fDelta = -1; break;
                 default:
@@ -583,7 +598,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
             if (!is_loop_index(next.operand())) {
                 return "expected loop index in loop expression";
             }
-            switch (next.getOperator()) {
+            switch (next.getOperator().kind()) {
                 case Token::Kind::TK_PLUSPLUS:   loopInfo.fDelta =  1; break;
                 case Token::Kind::TK_MINUSMINUS: loopInfo.fDelta = -1; break;
                 default:
@@ -608,7 +623,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
 
     double val = loopInfo.fStart;
     auto evalCond = [&]() {
-        switch (cond.getOperator()) {
+        switch (cond.getOperator().kind()) {
             case Token::Kind::TK_GT:   return val >  loopEnd;
             case Token::Kind::TK_GTEQ: return val >= loopEnd;
             case Token::Kind::TK_LT:   return val <  loopEnd;

@@ -9,7 +9,6 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkString.h"
 #include "include/private/SkTo.h"
-#include "include/utils/SkParsePath.h"
 #include "modules/svg/include/SkSVGAttributeParser.h"
 #include "modules/svg/include/SkSVGCircle.h"
 #include "modules/svg/include/SkSVGClipPath.h"
@@ -59,17 +58,6 @@ bool SetIRIAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     }
 
     node->setAttribute(attr, SkSVGStringValue(parseResult->iri()));
-    return true;
-}
-
-bool SetPathDataAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
-                          const char* stringValue) {
-    SkPath path;
-    if (!SkParsePath::FromSVGString(stringValue, &path)) {
-        return false;
-    }
-
-    node->setAttribute(attr, SkSVGPathValue(path));
     return true;
 }
 
@@ -124,18 +112,6 @@ bool SetObjectBoundingBoxUnitsAttribute(const sk_sp<SkSVGNode>& node,
     }
 
     node->setAttribute(attr, SkSVGObjectBoundingBoxUnitsValue(*parseResult));
-    return true;
-}
-
-bool SetPointsAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
-                        const char* stringValue) {
-    SkSVGPointsType points;
-    SkSVGAttributeParser parser(stringValue);
-    if (!parser.parsePoints(&points)) {
-        return false;
-    }
-
-    node->setAttribute(attr, SkSVGPointsValue(points));
     return true;
 }
 
@@ -231,16 +207,12 @@ struct AttrParseInfo {
 SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "cx"                 , { SkSVGAttribute::kCx               , SetLengthAttribute       }},
     { "cy"                 , { SkSVGAttribute::kCy               , SetLengthAttribute       }},
-    { "d"                  , { SkSVGAttribute::kD                , SetPathDataAttribute     }},
     { "filterUnits"        , { SkSVGAttribute::kFilterUnits      ,
                                SetObjectBoundingBoxUnitsAttribute }},
     // focal point x & y
     { "fx"                 , { SkSVGAttribute::kFx               , SetLengthAttribute       }},
     { "fy"                 , { SkSVGAttribute::kFy               , SetLengthAttribute       }},
     { "height"             , { SkSVGAttribute::kHeight           , SetLengthAttribute       }},
-    { "offset"             , { SkSVGAttribute::kOffset           , SetLengthAttribute       }},
-    { "patternTransform"   , { SkSVGAttribute::kPatternTransform , SetTransformAttribute    }},
-    { "points"             , { SkSVGAttribute::kPoints           , SetPointsAttribute       }},
     { "preserveAspectRatio", { SkSVGAttribute::kPreserveAspectRatio,
                                SetPreserveAspectRatioAttribute }},
     { "r"                  , { SkSVGAttribute::kR                , SetLengthAttribute       }},

@@ -30,14 +30,14 @@
 
 namespace SkSL {
 
-void BasicBlock::Node::setExpression(std::unique_ptr<Expression> expr, ProgramUsage* usage) {
+void BasicBlockNode::setExpression(std::unique_ptr<Expression> expr, ProgramUsage* usage) {
     SkASSERT(!this->isStatement());
     usage->remove(fExpression->get());
     *fExpression = std::move(expr);
 }
 
-std::unique_ptr<Statement> BasicBlock::Node::setStatement(std::unique_ptr<Statement> stmt,
-                                                          ProgramUsage* usage) {
+std::unique_ptr<Statement> BasicBlockNode::setStatement(std::unique_ptr<Statement> stmt,
+                                                        ProgramUsage* usage) {
     SkASSERT(!this->isExpression());
     // See comment in header - we assume that stmt was already counted in usage (it was a subset
     // of fStatement). There is no way to verify that, unfortunately.
@@ -197,7 +197,7 @@ bool BasicBlock::tryRemoveExpression(std::vector<BasicBlock::Node>::iterator* it
     switch (expr->kind()) {
         case Expression::Kind::kBinary: {
             BinaryExpression& b = expr->as<BinaryExpression>();
-            if (b.getOperator() == Token::Kind::TK_EQ) {
+            if (b.getOperator().kind() == Token::Kind::TK_EQ) {
                 if (!this->tryRemoveLValueBefore(iter, b.left().get())) {
                     return false;
                 }
@@ -349,8 +349,8 @@ void CFGGenerator::addExpression(CFG& cfg, std::unique_ptr<Expression>* e, bool 
     switch ((*e)->kind()) {
         case Expression::Kind::kBinary: {
             BinaryExpression& b = e->get()->as<BinaryExpression>();
-            Token::Kind op = b.getOperator();
-            switch (op) {
+            Operator op = b.getOperator();
+            switch (op.kind()) {
                 case Token::Kind::TK_LOGICALAND: // fall through
                 case Token::Kind::TK_LOGICALOR: {
                     // this isn't as precise as it could be -- we don't bother to track that if we
@@ -374,14 +374,16 @@ void CFGGenerator::addExpression(CFG& cfg, std::unique_ptr<Expression>* e, bool 
                     break;
                 }
                 default:
-                    this->addExpression(cfg, &b.left(),
-                                        !Operators::IsAssignment(b.getOperator()));
+                    this->addExpression(cfg, &b.left(), !b.getOperator().isAssignment());
                     this->addExpression(cfg, &b.right(), constantPropagate);
                     cfg.currentBlock().fNodes.push_back(
                             BasicBlock::MakeExpression(e, constantPropagate));
             }
             break;
         }
+        case Expression::Kind::kCodeString:
+            SkDEBUGFAIL("shouldn't be able to receive kCodeString here");
+            break;
         case Expression::Kind::kConstructor: {
             Constructor& c = e->get()->as<Constructor>();
             for (auto& arg : c.arguments()) {
@@ -421,9 +423,10 @@ void CFGGenerator::addExpression(CFG& cfg, std::unique_ptr<Expression>* e, bool 
         }
         case Expression::Kind::kPrefix: {
             PrefixExpression& p = e->get()->as<PrefixExpression>();
-            this->addExpression(cfg, &p.operand(), constantPropagate &&
-                                                  p.getOperator() != Token::Kind::TK_PLUSPLUS &&
-                                                  p.getOperator() != Token::Kind::TK_MINUSMINUS);
+            this->addExpression(cfg, &p.operand(),
+                                constantPropagate &&
+                                p.getOperator().kind() != Token::Kind::TK_PLUSPLUS &&
+                                p.getOperator().kind() != Token::Kind::TK_MINUSMINUS);
             cfg.currentBlock().fNodes.push_back(BasicBlock::MakeExpression(e, constantPropagate));
             break;
         }

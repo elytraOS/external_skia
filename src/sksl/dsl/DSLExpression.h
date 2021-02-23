@@ -20,7 +20,7 @@ class Expression;
 
 namespace dsl {
 
-class DSLExpression;
+class DSLStatement;
 class DSLVar;
 
 /**
@@ -84,6 +84,11 @@ public:
     DSLExpression a();
 
     /**
+     * Creates an SkSL struct field access expression.
+     */
+    DSLExpression field(const char* name);
+
+    /**
      * Creates an SkSL array index expression.
      */
     DSLExpression operator[](DSLExpression index);
@@ -103,6 +108,11 @@ private:
     std::unique_ptr<SkSL::Expression> coerceAndRelease(const SkSL::Type& type);
 
     std::unique_ptr<SkSL::Expression> fExpression;
+
+    friend DSLExpression SampleChild(int index, DSLExpression coords);
+
+    template<class... Cases>
+    friend DSLStatement Switch(DSLExpression value, Cases... cases);
 
     friend class DSLCore;
     friend class DSLVar;
