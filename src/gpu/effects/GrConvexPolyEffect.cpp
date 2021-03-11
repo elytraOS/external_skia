@@ -44,8 +44,8 @@ void GrGLConvexPolyEffect::emitCode(EmitArgs& args) {
     StartFragmentProcessor(this, &args);
     Var edgeArray(kUniform_Modifier, Array(kHalf3, cpe.getEdgeCount()));
     fEdgeUniform = VarUniformHandle(edgeArray);
-    Var alpha(kHalf, "alpha");
-    Declare(alpha, 1);
+    Var alpha(kHalf, "alpha", 1);
+    Declare(alpha);
     Var edge(kHalf, "edge");
     Declare(edge);
     for (int i = 0; i < cpe.getEdgeCount(); ++i) {
@@ -156,12 +156,6 @@ GrFPResult GrConvexPolyEffect::Make(std::unique_ptr<GrFragmentProcessor> inputFP
     return GrConvexPolyEffect::Make(std::move(inputFP), type, n, edges);
 }
 
-GrFPResult GrConvexPolyEffect::Make(std::unique_ptr<GrFragmentProcessor> inputFP,
-                                    GrClipEdgeType edgeType, const SkRect& rect) {
-    // TODO: Replace calls to this method with calling GrAARectEffect::Make directly
-    return GrFPSuccess(GrAARectEffect::Make(std::move(inputFP), edgeType, rect));
-}
-
 GrConvexPolyEffect::~GrConvexPolyEffect() {}
 
 void GrConvexPolyEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
@@ -169,8 +163,8 @@ void GrConvexPolyEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
     GrGLConvexPolyEffect::GenKey(*this, caps, b);
 }
 
-GrGLSLFragmentProcessor* GrConvexPolyEffect::onCreateGLSLInstance() const  {
-    return new GrGLConvexPolyEffect;
+std::unique_ptr<GrGLSLFragmentProcessor> GrConvexPolyEffect::onMakeProgramImpl() const {
+    return std::make_unique<GrGLConvexPolyEffect>();
 }
 
 GrConvexPolyEffect::GrConvexPolyEffect(std::unique_ptr<GrFragmentProcessor> inputFP,

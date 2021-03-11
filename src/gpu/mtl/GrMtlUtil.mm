@@ -51,13 +51,13 @@ MTLTextureDescriptor* GrGetMTLTextureDescriptor(id<MTLTexture> mtlTexture) {
 static const bool gPrintSKSL = false;
 static const bool gPrintMSL = false;
 
-id<MTLLibrary> GrGenerateMtlShaderLibrary(const GrMtlGpu* gpu,
-                                          const SkSL::String& sksl,
-                                          SkSL::ProgramKind programKind,
-                                          const SkSL::Program::Settings& settings,
-                                          SkSL::String* msl,
-                                          SkSL::Program::Inputs* outInputs,
-                                          GrContextOptions::ShaderErrorHandler* errorHandler) {
+bool GrSkSLToMSL(const GrMtlGpu* gpu,
+                 const SkSL::String& sksl,
+                 SkSL::ProgramKind programKind,
+                 const SkSL::Program::Settings& settings,
+                 SkSL::String* msl,
+                 SkSL::Program::Inputs* outInputs,
+                 GrContextOptions::ShaderErrorHandler* errorHandler) {
 #ifdef SK_DEBUG
     SkSL::String src = GrShaderUtils::PrettyPrint(sksl);
 #else
@@ -70,7 +70,7 @@ id<MTLLibrary> GrGenerateMtlShaderLibrary(const GrMtlGpu* gpu,
                                                   settings);
     if (!program || !compiler->toMetal(*program, msl)) {
         errorHandler->compileError(src.c_str(), compiler->errorText().c_str());
-        return nil;
+        return false;
     }
 
     if (gPrintSKSL || gPrintMSL) {
@@ -86,7 +86,7 @@ id<MTLLibrary> GrGenerateMtlShaderLibrary(const GrMtlGpu* gpu,
     }
 
     *outInputs = program->fInputs;
-    return GrCompileMtlShaderLibrary(gpu, *msl, errorHandler);
+    return true;
 }
 
 id<MTLLibrary> GrCompileMtlShaderLibrary(const GrMtlGpu* gpu,
@@ -111,6 +111,21 @@ id<MTLLibrary> GrCompileMtlShaderLibrary(const GrMtlGpu* gpu,
     }
 
     return compiledLibrary;
+}
+
+void GrPrecompileMtlShaderLibrary(const GrMtlGpu* gpu,
+                                  const SkSL::String& msl) {
+    auto nsSource = [[NSString alloc] initWithBytesNoCopy:const_cast<char*>(msl.c_str())
+                                                   length:msl.size()
+                                                 encoding:NSUTF8StringEncoding
+                                             freeWhenDone:NO];
+    // Do nothing after completion for now.
+    // TODO: cache the result somewhere so we can use it later.
+    MTLNewLibraryCompletionHandler completionHandler =
+            ^(id<MTLLibrary> library, NSError* error) {};
+    [gpu->device() newLibraryWithSource:nsSource
+                                options:nil
+                      completionHandler:completionHandler];
 }
 
 // Wrapper to get atomic assignment for compiles and pipeline creation

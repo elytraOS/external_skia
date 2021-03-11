@@ -8,8 +8,8 @@
 #ifndef SkSLAnalysis_DEFINED
 #define SkSLAnalysis_DEFINED
 
+#include "include/private/SkSLDefines.h"
 #include "include/private/SkSLSampleUsage.h"
-#include "src/sksl/SkSLDefines.h"
 
 #include <memory>
 
@@ -42,6 +42,25 @@ struct Analysis {
 
     static int NodeCountUpToLimit(const FunctionDefinition& function, int limit);
 
+    /**
+     * Finds unconditional exits from a switch-case. Returns true if this statement unconditionally
+     * causes an exit from this switch (via continue, break or return).
+     */
+    static bool SwitchCaseContainsUnconditionalExit(Statement& stmt);
+
+    /**
+     * A switch-case "falls through" when it doesn't have an unconditional exit.
+     */
+    static bool SwitchCaseFallsThrough(Statement& stmt) {
+        return !SwitchCaseContainsUnconditionalExit(stmt);
+    }
+
+    /**
+     * Finds conditional exits from a switch-case. Returns true if this statement contains a
+     * conditional that wraps a potential exit from the switch (via continue, break or return).
+     */
+    static bool SwitchCaseContainsConditionalExit(Statement& stmt);
+
     static std::unique_ptr<ProgramUsage> GetUsage(const Program& program);
     static std::unique_ptr<ProgramUsage> GetUsage(const LoadedModule& module);
 
@@ -50,10 +69,15 @@ struct Analysis {
     struct AssignmentInfo {
         VariableReference* fAssignedVar = nullptr;
     };
-    static bool IsAssignable(Expression& expr, AssignmentInfo* info,
+    static bool IsAssignable(Expression& expr, AssignmentInfo* info = nullptr,
                              ErrorReporter* errors = nullptr);
 
+    // Updates the `refKind` field of exactly one VariableReference inside `expr`.
+    // `expr` must be `IsAssignable`; returns an error otherwise.
+    static bool MakeAssignmentExpr(Expression* expr, VariableRefKind kind, ErrorReporter* errors);
+
     // Updates the `refKind` field of every VariableReference found within `expr`.
+    // `expr` is allowed to have zero, one, or multiple VariableReferences.
     static void UpdateRefKind(Expression* expr, VariableRefKind refKind);
 
     // A "trivial" expression is one where we'd feel comfortable cloning it multiple times in
@@ -71,6 +95,25 @@ struct Analysis {
     // - myStruct.myArrayField[7].xyz
     static bool IsTrivialExpression(const Expression& expr);
 
+    // Returns true if both expression trees are the same. The left side is expected to be an
+    // lvalue. Intended for use by the optimizer; won't necessarily catch complex cases.
+    static bool IsSelfAssignment(const Expression& left, const Expression& right);
+
+    // Is 'expr' a constant-expression, as defined by GLSL 1.0, section 5.10? A constant expression
+    // is one of:
+    //
+    // - A literal value
+    // - A global or local variable qualified as 'const', excluding function parameters
+    // - An expression formed by an operator on operands that are constant expressions, including
+    //   getting an element of a constant vector or a constant matrix, or a field of a constant
+    //   structure
+    // - A constructor whose arguments are all constant expressions
+    //
+    // GLSL (but not SkSL, yet - skbug.com/10835) also provides:
+    // - A built-in function call whose arguments are all constant expressions, with the exception
+    //   of the texture lookup functions
+    static bool IsConstantExpression(const Expression& expr);
+
     struct UnrollableLoopInfo {
         const Variable* fIndex;
         double fStart;
@@ -78,15 +121,22 @@ struct Analysis {
         int fCount;
     };
 
-    // Ensures that 'loop' meets the strict requirements of The OpenGL ES Shading Language 1.00,
+    // Ensures that a for-loop meets the strict requirements of The OpenGL ES Shading Language 1.00,
     // Appendix A, Section 4.
     // Information about the loop's structure are placed in outLoopInfo (if not nullptr).
     // If the function returns false, specific reasons are reported via errors (if not nullptr).
-    static bool ForLoopIsValidForES2(const ForStatement& loop,
+    static bool ForLoopIsValidForES2(int offset,
+                                     const Statement* loopInitializer,
+                                     const Expression* loopTest,
+                                     const Expression* loopNext,
+                                     const Statement* loopStatement,
                                      UnrollableLoopInfo* outLoopInfo,
                                      ErrorReporter* errors);
 
     static void ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors);
+
+    // Detects functions that fail to return a value on at least one path.
+    static bool CanExitWithoutReturningValue(const FunctionDefinition& funcDef);
 };
 
 /**

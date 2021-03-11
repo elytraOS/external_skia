@@ -63,7 +63,7 @@ GrProcessorSet::Analysis GrStrokeTessellateOp::finalize(const GrCaps& caps,
                                                         bool hasMixedSampledCoverage,
                                                         GrClampType clampType) {
     // Make sure the finalize happens before combining. We might change fNeedsStencil here.
-    SkASSERT(fPathStrokeList.begin().fCurr->fNext == nullptr);
+    SkASSERT(fPathStrokeList.fNext == nullptr);
     SkASSERT(fAAType != GrAAType::kCoverage || hasMixedSampledCoverage);
     const GrProcessorSet::Analysis& analysis = fProcessors.finalize(
             this->headColor(), GrProcessorAnalysisCoverage::kNone, clip,
@@ -92,6 +92,9 @@ GrOp::CombineResult GrStrokeTessellateOp::onCombineIfPossible(GrOp* grOp, SkAren
         !DynamicStroke::StrokesHaveEqualDynamicState(this->headStroke(), op->headStroke())) {
         // The paths have different stroke properties. We will need to enable dynamic stroke if we
         // still decide to combine them.
+        if (this->headStroke().isHairlineStyle()) {
+            return CombineResult::kCannotCombine;  // Dynamic hairlines aren't supported.
+        }
         combinedFlags |= ShaderFlags::kDynamicStroke;
     }
     if (!(combinedFlags & ShaderFlags::kDynamicColor) && this->headColor() != op->headColor()) {
@@ -120,9 +123,16 @@ GrOp::CombineResult GrStrokeTessellateOp::onCombineIfPossible(GrOp* grOp, SkAren
         return CombineResult::kMayChain;
     }
 
-    fPathStrokeList.concat(std::move(op->fPathStrokeList), alloc);
-    fTotalCombinedVerbCnt += op->fTotalCombinedVerbCnt;
     fShaderFlags = combinedFlags;
+
+    // Concat the op's PathStrokeList. Since the head element is allocated inside the op, we need to
+    // copy it.
+    auto* headCopy = alloc->make<PathStrokeList>(std::move(op->fPathStrokeList));
+    *fPathStrokeTail = headCopy;
+    fPathStrokeTail = (op->fPathStrokeTail == &op->fPathStrokeList.fNext) ? &headCopy->fNext
+                                                                          : op->fPathStrokeTail;
+
+    fTotalCombinedVerbCnt += op->fTotalCombinedVerbCnt;
     return CombineResult::kMerged;
 }
 
@@ -163,8 +173,7 @@ void GrStrokeTessellateOp::prePrepareTessellator(GrPathShader::ProgramArgs&& arg
     if (this->canUseHardwareTessellation(caps) &&
         ((fShaderFlags & ShaderFlags::kDynamicColor) || fTotalCombinedVerbCnt > 50)) {
         SkASSERT(!this->nextInChain());  // We never chain when hw tessellation is an option.
-        fTessellator = arena->make<GrStrokeHardwareTessellator>(fShaderFlags,
-                                                                std::move(fPathStrokeList),
+        fTessellator = arena->make<GrStrokeHardwareTessellator>(fShaderFlags, &fPathStrokeList,
                                                                 fTotalCombinedVerbCnt,
                                                                 *caps.shaderCaps());
         shaderMode = GrStrokeTessellateShader::Mode::kTessellation;
@@ -184,15 +193,14 @@ void GrStrokeTessellateOp::prePrepareTessellator(GrPathShader::ProgramArgs&& arg
             }
         }
         auto* headTessellator = arena->make<GrStrokeIndirectTessellator>(
-                fShaderFlags, fViewMatrix, std::move(fPathStrokeList), fTotalCombinedVerbCnt,
-                arena);
+                fShaderFlags, fViewMatrix, &fPathStrokeList, fTotalCombinedVerbCnt, arena);
         // Make a tessellator for every chained op after us. These will all append to the head
         // tessellator's shared indirect-draw list during prepare().
         for (GrStrokeTessellateOp* op = this->nextInChain(); op; op = op->nextInChain()) {
             SkASSERT(fViewMatrix == op->fViewMatrix);
             auto* chainedTessellator = arena->make<GrStrokeIndirectTessellator>(
-                    fShaderFlags, fViewMatrix, std::move(op->fPathStrokeList),
-                    op->fTotalCombinedVerbCnt, arena);
+                    fShaderFlags, fViewMatrix, &op->fPathStrokeList, op->fTotalCombinedVerbCnt,
+                    arena);
             headTessellator->addToChain(chainedTessellator);
         }
         fTessellator = headTessellator;

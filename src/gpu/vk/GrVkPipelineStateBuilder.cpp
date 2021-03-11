@@ -29,7 +29,9 @@ GrVkPipelineState* GrVkPipelineStateBuilder::CreatePipelineState(
         VkRenderPass compatibleRenderPass,
         bool overrideSubpassForResolveLoad) {
 
-    gpu->stats()->incShaderCompilations();
+    GrVkResourceProvider& resourceProvider = gpu->resourceProvider();
+
+    resourceProvider.pipelineStateCache()->stats()->incShaderCompilations();
 
     // ensure that we use "." as a decimal separator when creating SkSL code
     GrAutoLocaleSetter als("C");
@@ -160,11 +162,13 @@ void GrVkPipelineStateBuilder::storeShadersInCache(const SkSL::String shaders[],
     // to the key right after the base key.
     sk_sp<SkData> key = SkData::MakeWithoutCopy(this->desc().asKey(),
                                                 this->desc().initialKeyLength()+4);
+    SkString description = GrProgramDesc::Describe(fRenderTarget, fProgramInfo, *this->caps());
 
     sk_sp<SkData> data = GrPersistentCacheUtils::PackCachedShaders(isSkSL ? kSKSL_Tag : kSPIRV_Tag,
                                                                    shaders,
                                                                    inputs, kGrShaderTypeCount);
-    this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data);
+
+    this->gpu()->getContext()->priv().getPersistentCache()->store(*key, *data, description);
 }
 
 GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
@@ -376,5 +380,5 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
                                  fUniformHandler.fSamplers,
                                  std::move(fGeometryProcessor),
                                  std::move(fXferProcessor),
-                                 std::move(fFragmentProcessors));
+                                 std::move(fFPImpls));
 }

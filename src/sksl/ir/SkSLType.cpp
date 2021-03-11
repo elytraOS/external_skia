@@ -270,9 +270,23 @@ std::unique_ptr<Expression> Type::coerceExpression(std::unique_ptr<Expression> e
     ExpressionArray args;
     args.push_back(std::move(expr));
     if (!this->isScalar()) {
-        return Constructor::Make(context, offset, *this, std::move(args));
+        return Constructor::Convert(context, offset, *this, std::move(args));
     }
-    return Constructor::Make(context, offset, this->scalarTypeForLiteral(), std::move(args));
+    return Constructor::Convert(context, offset, this->scalarTypeForLiteral(), std::move(args));
 }
+
+bool Type::isOrContainsArray() const {
+    if (this->isStruct()) {
+        for (const Field& f : this->fields()) {
+            if (f.fType->isOrContainsArray()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    return this->isArray();
+}
+
 
 }  // namespace SkSL

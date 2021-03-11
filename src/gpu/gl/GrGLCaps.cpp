@@ -594,12 +594,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     fPreferVRAMUseOverFlushes = !isANGLE;
 #endif
 
-    if (kARM_GrGLVendor == ctxInfo.vendor()) {
-        // ARM seems to do better with larger quantities of fine triangles, as opposed to using the
-        // sample mask. (At least in our current round rect op.)
-        fPreferTrianglesOverSampleMask = true;
-    }
-
     if (kChromium_GrGLDriver == ctxInfo.driver()) {
         fMustClearUploadedBufferData = true;
     }
@@ -1102,8 +1096,6 @@ void GrGLCaps::initBlendEqationSupport(const GrGLContextInfo& ctxInfo) {
     } else if (ctxInfo.hasExtension("GL_KHR_blend_equation_advanced") && layoutQualifierSupport) {
         fBlendEquationSupport = kAdvanced_BlendEquationSupport;
         shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kGeneralEnable_AdvBlendEqInteraction;
-        // TODO: Use kSpecificEnables_AdvBlendEqInteraction if "blend_support_all_equations" is
-        // slow on a particular platform.
     }
 }
 
@@ -4598,8 +4590,7 @@ GrProgramDesc GrGLCaps::makeDesc(GrRenderTarget* rt,
                                  ProgramDescOverrideFlags overrideFlags) const {
     SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
-    SkDEBUGCODE(bool result =) GrProgramDesc::Build(&desc, rt, programInfo, *this);
-    SkASSERT(result == desc.isValid());
+    GrProgramDesc::Build(&desc, rt, programInfo, *this);
     return desc;
 }
 

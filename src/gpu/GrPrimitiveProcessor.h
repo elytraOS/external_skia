@@ -181,7 +181,9 @@ public:
      * Computes a key for the transforms owned by an FP based on the shader code that will be
      * emitted by the primitive processor to implement them.
      */
-    uint32_t computeCoordTransformsKey(const GrFragmentProcessor& fp) const;
+    static uint32_t ComputeCoordTransformsKey(const GrFragmentProcessor& fp);
+
+    static constexpr int kCoordTransformKeyBits = 4;
 
     /**
      * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this geometry
@@ -200,11 +202,15 @@ public:
 
         auto add_attributes = [=](const Attribute* attrs, int attrCount) {
             for (int i = 0; i < attrCount; ++i) {
-                b->add32(attrs[i].isInitialized() ? (attrs[i].cpuType() << 16) | attrs[i].gpuType()
-                                                  : ~0);
+                const Attribute& attr = attrs[i];
+                b->appendComment(attr.isInitialized() ? attr.name() : "unusedAttr");
+                b->addBits(8, attr.isInitialized() ? attr.cpuType() : 0xff, "attrType");
+                b->addBits(8, attr.isInitialized() ? attr.gpuType() : 0xff, "attrGpuType");
             }
         };
+        b->add32(fVertexAttributes.fRawCount, "numVertexAttributes");
         add_attributes(fVertexAttributes.fAttributes, fVertexAttributes.fRawCount);
+        b->add32(fInstanceAttributes.fRawCount, "numInstanceAttributes");
         add_attributes(fInstanceAttributes.fAttributes, fInstanceAttributes.fRawCount);
     }
 

@@ -33,7 +33,7 @@
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrContextOptions.h"
 #include "src/gpu/GrDrawOpAtlas.h"
-#include "src/gpu/text/GrSDFTOptions.h"
+#include "src/gpu/text/GrSDFTControl.h"
 #endif
 
 static SkDescriptor* auto_descriptor_from_desc(const SkDescriptor* source_desc,
@@ -818,19 +818,19 @@ protected:
     void drawGlyphRunList(const SkGlyphRunList& glyphRunList) override {
         #if SK_SUPPORT_GPU
         GrContextOptions ctxOptions;
-        GrSDFTOptions options =
-                {ctxOptions.fMinDistanceFieldFontSize, ctxOptions.fGlyphsAsPathsFontSize};
+        GrSDFTControl control =
+                GrSDFTControl{fDFTSupport,
+                              this->surfaceProps().isUseDeviceIndependentFonts(),
+                              ctxOptions.fMinDistanceFieldFontSize,
+                              ctxOptions.fGlyphsAsPathsFontSize};
 
-        const SkPoint drawOrigin = glyphRunList.origin();
-        const SkPaint& drawPaint = glyphRunList.paint();
+        SkMatrix drawMatrix = this->localToDevice();
+        drawMatrix.preTranslate(glyphRunList.origin().x(), glyphRunList.origin().y());
         for (auto& glyphRun : glyphRunList) {
             fPainter.processGlyphRun(glyphRun,
-                                     this->localToDevice(),
-                                     drawOrigin,
-                                     drawPaint,
-                                     this->surfaceProps(),
-                                     fDFTSupport,
-                                     options,
+                                     drawMatrix,
+                                     glyphRunList.paint(),
+                                     control,
                                      nullptr);
         }
         #endif  // SK_SUPPORT_GPU

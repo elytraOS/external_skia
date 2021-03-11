@@ -12,7 +12,7 @@
 #include <memory>
 #include "stdlib.h"
 #include "string.h"
-#include "src/sksl/SkSLDefines.h"
+#include "include/private/SkSLDefines.h"
 #include "src/sksl/SkSLLexer.h"
 
 #ifndef SKSL_STANDALONE
@@ -142,11 +142,6 @@ public:
     bool fMustEnableAdvBlendEqs = false;
     bool mustEnableAdvBlendEqs() const {
         return fMustEnableAdvBlendEqs;
-    }
-
-    bool fMustEnableSpecificAdvBlendEqs = false;
-    bool mustEnableSpecificAdvBlendEqs() const {
-        return fMustEnableSpecificAdvBlendEqs;
     }
 
     bool fCanUseAnyFunctionInShader = true;

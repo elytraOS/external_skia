@@ -33,15 +33,15 @@ public:
      * @return the created pipeline if generation was successful; nullptr otherwise
      */
     static GrMtlPipelineState* CreatePipelineState(GrMtlGpu*,
-                                                   GrRenderTarget*,
                                                    const GrProgramDesc&,
                                                    const GrProgramInfo&);
 
-private:
-    GrMtlPipelineStateBuilder(GrMtlGpu*, GrRenderTarget*,
-                              const GrProgramDesc&, const GrProgramInfo&);
+    static bool PrecompileShaders(GrMtlGpu*, const SkData&);
 
-    GrMtlPipelineState* finalize(GrRenderTarget*, const GrProgramDesc&, const GrProgramInfo&);
+private:
+    GrMtlPipelineStateBuilder(GrMtlGpu*, const GrProgramDesc&, const GrProgramInfo&);
+
+    GrMtlPipelineState* finalize(const GrProgramDesc&, const GrProgramInfo&);
 
     const GrCaps* caps() const override;
 
@@ -51,17 +51,11 @@ private:
 
     void finalizeFragmentSecondaryColor(GrShaderVar& outputColor) override;
 
-    id<MTLLibrary> generateMtlShaderLibrary(const SkSL::String& sksl,
-                                            SkSL::ProgramKind kind,
-                                            const SkSL::Program::Settings& settings,
-                                            SkSL::String* msl,
-                                            SkSL::Program::Inputs* inputs,
-                                            GrContextOptions::ShaderErrorHandler* errorHandler);
     id<MTLLibrary> compileMtlShaderLibrary(const SkSL::String& shader,
                                            SkSL::Program::Inputs inputs,
                                            GrContextOptions::ShaderErrorHandler* errorHandler);
     void storeShadersInCache(const SkSL::String shaders[], const SkSL::Program::Inputs inputs[],
-                             bool isSkSL);
+                             SkSL::Program::Settings*, bool isSkSL);
 
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
     const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }

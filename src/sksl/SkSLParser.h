@@ -12,11 +12,11 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include "include/private/SkSLLayout.h"
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLASTNode.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLLexer.h"
-#include "src/sksl/ir/SkSLLayout.h"
 
 namespace SkSL {
 
@@ -38,22 +38,8 @@ public:
         INPUT_ATTACHMENT_INDEX,
         ORIGIN_UPPER_LEFT,
         OVERRIDE_COVERAGE,
+        EARLY_FRAGMENT_TESTS,
         BLEND_SUPPORT_ALL_EQUATIONS,
-        BLEND_SUPPORT_MULTIPLY,
-        BLEND_SUPPORT_SCREEN,
-        BLEND_SUPPORT_OVERLAY,
-        BLEND_SUPPORT_DARKEN,
-        BLEND_SUPPORT_LIGHTEN,
-        BLEND_SUPPORT_COLORDODGE,
-        BLEND_SUPPORT_COLORBURN,
-        BLEND_SUPPORT_HARDLIGHT,
-        BLEND_SUPPORT_SOFTLIGHT,
-        BLEND_SUPPORT_DIFFERENCE,
-        BLEND_SUPPORT_EXCLUSION,
-        BLEND_SUPPORT_HSL_HUE,
-        BLEND_SUPPORT_HSL_SATURATION,
-        BLEND_SUPPORT_HSL_COLOR,
-        BLEND_SUPPORT_HSL_LUMINOSITY,
         PUSH_CONSTANT,
         POINTS,
         LINES,
@@ -202,8 +188,6 @@ private:
     StringFragment layoutIdentifier();
 
     StringFragment layoutCode();
-
-    Layout::Key layoutKey();
 
     Layout::CType layoutCType();
 

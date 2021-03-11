@@ -65,6 +65,12 @@
     #include "tools/viewer/SkRiveSlide.h"
 #endif
 
+namespace SkSL {
+extern bool gSkSLOptimizer;
+extern bool gSkSLInliner;
+extern bool gSkSLControlFlowAnalysis;
+}
+
 class CapturingShaderErrorHandler : public GrContextOptions::ShaderErrorHandler {
 public:
     void compileError(const char* shader, const char* errors) override {
@@ -378,6 +384,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     fRefresh = FLAGS_redraw;
 
     fImGuiLayer.setScaleFactor(fWindow->scaleFactor());
+    fStatsLayer.setDisplayScale((fZoomUI ? 2.0f : 1.0f) * fWindow->scaleFactor());
 
     // Configure timers
     fStatsLayer.setActive(FLAGS_stats);
@@ -668,7 +675,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     });
     fCommands.addCommand('u', "GUI", "Zoom UI", [this]() {
         fZoomUI = !fZoomUI;
-        fStatsLayer.setDisplayScale(fZoomUI ? 2.0f : 1.0f);
+        fStatsLayer.setDisplayScale((fZoomUI ? 2.0f : 1.0f) * fWindow->scaleFactor());
         fWindow->inval();
     });
     fCommands.addCommand('$', "ViaSerialize", "Toggle ViaSerialize", [this]() {
@@ -1277,17 +1284,15 @@ public:
 
             const SkTextBlobBuilder::RunBuffer& runBuffer
                 = it.positioning() == SkTextBlobRunIterator::kDefault_Positioning
-                    ? SkTextBlobBuilderPriv::AllocRunText(&builder, font,
-                        it.glyphCount(), it.offset().x(),it.offset().y(), it.textSize(), SkString())
+                    ? builder.allocRunText(font, it.glyphCount(), it.offset().x(),it.offset().y(),
+                                           it.textSize())
                 : it.positioning() == SkTextBlobRunIterator::kHorizontal_Positioning
-                    ? SkTextBlobBuilderPriv::AllocRunTextPosH(&builder, font,
-                        it.glyphCount(), it.offset().y(), it.textSize(), SkString())
+                    ? builder.allocRunTextPosH(font, it.glyphCount(), it.offset().y(),
+                                               it.textSize())
                 : it.positioning() == SkTextBlobRunIterator::kFull_Positioning
-                    ? SkTextBlobBuilderPriv::AllocRunTextPos(&builder, font,
-                        it.glyphCount(), it.textSize(), SkString())
+                    ? builder.allocRunTextPos(font, it.glyphCount(), it.textSize())
                 : it.positioning() == SkTextBlobRunIterator::kRSXform_Positioning
-                    ? SkTextBlobBuilderPriv::AllocRunRSXForm(&builder, font,
-                        it.glyphCount(), it.textSize(), SkString())
+                    ? builder.allocRunTextRSXform(font, it.glyphCount(), it.textSize())
                 : (SkASSERT_RELEASE(false), SkTextBlobBuilder::RunBuffer());
             uint32_t glyphCount = it.glyphCount();
             if (it.glyphs()) {
@@ -2339,6 +2344,13 @@ void Viewer::drawImGui() {
             if (ImGui::CollapsingHeader("Shaders")) {
                 bool sksl = params.fGrContextOptions.fShaderCacheStrategy ==
                             GrContextOptions::ShaderCacheStrategy::kSkSL;
+
+                int optLevel =                           sksl ? kShaderOptLevel_Source :
+                               SkSL::gSkSLControlFlowAnalysis ? kShaderOptLevel_ControlFlow :
+                                           SkSL::gSkSLInliner ? kShaderOptLevel_Inline :
+                                         SkSL::gSkSLOptimizer ? kShaderOptLevel_Optimize :
+                                                                kShaderOptLevel_Compile;
+
 #if defined(SK_VULKAN)
                 const bool isVulkan = fBackendType == sk_app::Window::kVulkan_BackendType;
 #else
@@ -2350,7 +2362,7 @@ void Viewer::drawImGui() {
                 static bool gLoadPending = false;
                 if (gLoadPending) {
                     auto collectShaders = [this](sk_sp<const SkData> key, sk_sp<SkData> data,
-                                                 int hitCount) {
+                                                 const SkString& description, int hitCount) {
                         CachedShader& entry(fCachedShaders.push_back());
                         entry.fKey = key;
                         SkMD5 hash;
@@ -2359,6 +2371,7 @@ void Viewer::drawImGui() {
                         for (int i = 0; i < 16; ++i) {
                             entry.fKeyString.appendf("%02x", digest.data[i]);
                         }
+                        entry.fKeyDescription = description;
 
                         SkReadBuffer reader(data->data(), data->size());
                         entry.fShaderType = GrPersistentCacheUtils::GetType(&reader);
@@ -2386,17 +2399,47 @@ void Viewer::drawImGui() {
 #endif
                 }
 
-                // Defer actually doing the load/save logic so that we can trigger a save when we
+                // Defer actually doing the View/Apply logic so that we can trigger an Apply when we
                 // start or finish hovering on a tree node in the list below:
-                bool doLoad = ImGui::Button("Load"); ImGui::SameLine();
-                bool doSave = ImGui::Button("Save"); ImGui::SameLine();
-                if (ImGui::Checkbox("SkSL", &sksl)) {
+                bool doView      = ImGui::Button("View"); ImGui::SameLine();
+                bool doApply     = ImGui::Button("Apply Changes"); ImGui::SameLine();
+                bool doDump      = ImGui::Button("Dump SkSL to resources/sksl/");
+
+                int newOptLevel = optLevel;
+                ImGui::RadioButton("SkSL", &newOptLevel, kShaderOptLevel_Source);
+                ImGui::SameLine();
+                ImGui::RadioButton("Compile", &newOptLevel, kShaderOptLevel_Compile);
+                ImGui::SameLine();
+                ImGui::RadioButton("Optimize", &newOptLevel, kShaderOptLevel_Optimize);
+                ImGui::SameLine();
+                ImGui::RadioButton("Inline", &newOptLevel, kShaderOptLevel_Inline);
+                ImGui::SameLine();
+                ImGui::RadioButton("Control-Flow", &newOptLevel, kShaderOptLevel_ControlFlow);
+
+                // If we are changing the compile mode, we want to reset the cache and redo
+                // everything.
+                if (doDump || newOptLevel != optLevel) {
+                    sksl = doDump || (newOptLevel == kShaderOptLevel_Source);
+                    SkSL::gSkSLOptimizer           = (newOptLevel >= kShaderOptLevel_Optimize);
+                    SkSL::gSkSLInliner             = (newOptLevel >= kShaderOptLevel_Inline);
+                    SkSL::gSkSLControlFlowAnalysis = (newOptLevel >= kShaderOptLevel_ControlFlow);
+
                     params.fGrContextOptions.fShaderCacheStrategy =
                             sksl ? GrContextOptions::ShaderCacheStrategy::kSkSL
                                  : GrContextOptions::ShaderCacheStrategy::kBackendSource;
                     paramsChanged = true;
-                    doLoad = true;
-                    fDeferredActions.push_back([=]() { fPersistentCache.reset(); });
+                    doView = true;
+
+                    fDeferredActions.push_back([=]() {
+                        // Reset the cache.
+                        fPersistentCache.reset();
+                        // Dump the cache once we have drawn a frame with it.
+                        if (doDump) {
+                            fDeferredActions.push_back([this]() {
+                                this->dumpShadersToResources();
+                            });
+                        }
+                    });
                 }
 
                 ImGui::BeginChild("##ScrollingRegion");
@@ -2404,9 +2447,9 @@ void Viewer::drawImGui() {
                     bool inTreeNode = ImGui::TreeNode(entry.fKeyString.c_str());
                     bool hovered = ImGui::IsItemHovered();
                     if (hovered != entry.fHovered) {
-                        // Force a save to patch the highlight shader in/out
+                        // Force an Apply to patch the highlight shader in/out
                         entry.fHovered = hovered;
-                        doSave = true;
+                        doApply = true;
                     }
                     if (inTreeNode) {
                         auto stringBox = [](const char* label, std::string* str) {
@@ -2415,6 +2458,10 @@ void Viewer::drawImGui() {
                             ImVec2 boxSize(-1.0f, ImGui::GetTextLineHeight() * std::min(lines, 30));
                             ImGui::InputTextMultiline(label, str, boxSize);
                         };
+                        if (ImGui::TreeNode("Key")) {
+                            ImGui::TextWrapped("%s", entry.fKeyDescription.c_str());
+                            ImGui::TreePop();
+                        }
                         stringBox("##VP", &entry.fShader[kVertex_GrShaderType]);
                         stringBox("##FP", &entry.fShader[kFragment_GrShaderType]);
                         ImGui::TreePop();
@@ -2422,17 +2469,18 @@ void Viewer::drawImGui() {
                 }
                 ImGui::EndChild();
 
-                if (doLoad) {
+                if (doView) {
                     fPersistentCache.reset();
                     ctx->priv().getGpu()->resetShaderCacheForTesting();
                     gLoadPending = true;
                 }
+
                 // We don't support updating SPIRV shaders. We could re-assemble them (with edits),
                 // but I'm not sure anyone wants to do that.
                 if (isVulkan && !sksl) {
-                    doSave = false;
+                    doApply = false;
                 }
-                if (doSave) {
+                if (doApply) {
                     fPersistentCache.reset();
                     ctx->priv().getGpu()->resetShaderCacheForTesting();
                     for (auto& entry : fCachedShaders) {
@@ -2462,7 +2510,7 @@ void Viewer::drawImGui() {
                                                                               entry.fShader,
                                                                               entry.fInputs,
                                                                               kGrShaderTypeCount);
-                        fPersistentCache.store(*entry.fKey, *data);
+                        fPersistentCache.store(*entry.fKey, *data, entry.fKeyDescription);
 
                         entry.fShader[kFragment_GrShaderType] = backup;
                     }
@@ -2544,11 +2592,62 @@ void Viewer::drawImGui() {
     }
 }
 
-void Viewer::onIdle() {
-    for (int i = 0; i < fDeferredActions.count(); ++i) {
-        fDeferredActions[i]();
+void Viewer::dumpShadersToResources() {
+    // Sort the list of cached shaders so we can maintain some minimal level of consistency.
+    // It doesn't really matter, but it will keep files from switching places unpredictably.
+    std::vector<const CachedShader*> shaders;
+    shaders.reserve(fCachedShaders.size());
+    for (const CachedShader& shader : fCachedShaders) {
+        shaders.push_back(&shader);
     }
-    fDeferredActions.reset();
+
+    std::sort(shaders.begin(), shaders.end(), [](const CachedShader* a, const CachedShader* b) {
+        return std::tie(a->fShader[kFragment_GrShaderType], a->fShader[kVertex_GrShaderType]) <
+               std::tie(b->fShader[kFragment_GrShaderType], b->fShader[kVertex_GrShaderType]);
+    });
+
+    // Make the resources/sksl/SlideName/ directory.
+    SkString directory = SkStringPrintf("%ssksl/%s",
+                                        GetResourcePath().c_str(),
+                                        fSlides[fCurrentSlide]->getName().c_str());
+    if (!sk_mkdir(directory.c_str())) {
+        SkDEBUGFAILF("Unable to create directory '%s'", directory.c_str());
+        return;
+    }
+
+    int index = 0;
+    for (const auto& entry : shaders) {
+        SkString vertPath = SkStringPrintf("%s/Vertex_%02d.vert", directory.c_str(), index);
+        FILE* vertFile = sk_fopen(vertPath.c_str(), kWrite_SkFILE_Flag);
+        if (vertFile) {
+            const SkSL::String& vertText = entry->fShader[kVertex_GrShaderType];
+            SkAssertResult(sk_fwrite(vertText.c_str(), vertText.size(), vertFile));
+            sk_fclose(vertFile);
+        } else {
+            SkDEBUGFAILF("Unable to write shader to path '%s'", vertPath.c_str());
+        }
+
+        SkString fragPath = SkStringPrintf("%s/Fragment_%02d.frag", directory.c_str(), index);
+        FILE* fragFile = sk_fopen(fragPath.c_str(), kWrite_SkFILE_Flag);
+        if (fragFile) {
+            const SkSL::String& fragText = entry->fShader[kFragment_GrShaderType];
+            SkAssertResult(sk_fwrite(fragText.c_str(), fragText.size(), fragFile));
+            sk_fclose(fragFile);
+        } else {
+            SkDEBUGFAILF("Unable to write shader to path '%s'", fragPath.c_str());
+        }
+
+        ++index;
+    }
+}
+
+void Viewer::onIdle() {
+    SkTArray<std::function<void()>> actionsToRun;
+    actionsToRun.swap(fDeferredActions);
+
+    for (const auto& fn : actionsToRun) {
+        fn();
+    }
 
     fStatsLayer.beginTiming(fAnimateTimer);
     fAnimTimer.updateTime();

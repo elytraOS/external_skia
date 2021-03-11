@@ -25,6 +25,8 @@
 
 namespace SkSL {
 
+extern bool gSkSLControlFlowAnalysis;
+
 static const int32_t SKSL_MAGIC  = 0x0; // FIXME: we should probably register a magic number
 
 void SPIRVCodeGenerator::setupIntrinsics() {
@@ -236,7 +238,19 @@ void SPIRVCodeGenerator::writeOpCode(SpvOp_ opCode, int length, OutputStream& ou
         case SpvOpMemberDecorate:
             break;
         default:
-            SkASSERT(fCurrentBlock);
+            if (fProgram.fConfig->fSettings.fDeadCodeElimination) {
+                // When dead-code elimination is enabled, all code should be reachable and an
+                // associated block should already exist.
+                SkASSERT(fCurrentBlock);
+            } else {
+                // When dead-code elimination is disabled, we may find ourselves with instructions
+                // that don't have an associated block. This should be a rare event, but if it
+                // happens, synthesize a label; this is necessary to satisfy the validator.
+                if (fCurrentBlock == 0) {
+                    this->writeLabel(this->nextId(), out);
+                }
+            }
+            break;
     }
     this->writeWord((length << 16) | opCode, out);
 }
@@ -526,9 +540,12 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
                                        type.columns(), fConstantBuffer);
                 break;
             case Type::TypeKind::kMatrix:
-                this->writeInstruction(SpvOpTypeMatrix, result,
-                                       this->getType(index_type(fContext, type), layout),
-                                       type.columns(), fConstantBuffer);
+                this->writeInstruction(
+                        SpvOpTypeMatrix,
+                        result,
+                        this->getType(IndexExpression::IndexType(fContext, type), layout),
+                        type.columns(),
+                        fConstantBuffer);
                 break;
             case Type::TypeKind::kStruct:
                 this->writeStruct(type, layout, result);
@@ -1985,10 +2002,10 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                         Modifiers(Layout(/*flags=*/0, /*location=*/-1,
                                          fProgram.fConfig->fSettings.fRTHeightOffset,
                                          /*binding=*/-1, /*index=*/-1, /*set=*/-1, /*builtin=*/-1,
-                                         /*inputAttachmentIndex=*/-1, Layout::Format::kUnspecified,
+                                         /*inputAttachmentIndex=*/-1,
                                          Layout::kUnspecified_Primitive, /*maxVertices=*/1,
                                          /*invocations=*/-1, /*marker=*/"", /*when=*/"",
-                                         Layout::kNo_Key, Layout::CType::kDefault),
+                                         Layout::CType::kDefault),
                                   /*flags=*/0),
                         SKSL_RTHEIGHT_NAME, fContext.fTypes.fFloat.get());
                 StringFragment name("sksl_synthetic_uniforms");
@@ -2007,9 +2024,9 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                 Modifiers modifiers(
                         Layout(flags, /*location=*/-1, /*offset=*/-1, binding, /*index=*/-1,
                                set, /*builtin=*/-1, /*inputAttachmentIndex=*/-1,
-                               Layout::Format::kUnspecified, Layout::kUnspecified_Primitive,
+                               Layout::kUnspecified_Primitive,
                                /*maxVertices=*/-1, /*invocations=*/-1, /*marker=*/"", /*when=*/"",
-                               Layout::kNo_Key, Layout::CType::kDefault),
+                               Layout::CType::kDefault),
                         Modifiers::kUniform_Flag);
                 const Variable* intfVar = fSynthetics.takeOwnershipOfSymbol(
                         std::make_unique<Variable>(/*offset=*/-1,

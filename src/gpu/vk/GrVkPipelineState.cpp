@@ -37,13 +37,13 @@ GrVkPipelineState::GrVkPipelineState(
         const UniformInfoArray& samplers,
         std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
         std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
-        std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors)
+        std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls)
         : fPipeline(std::move(pipeline))
         , fSamplerDSHandle(samplerDSHandle)
         , fBuiltinUniformHandles(builtinUniformHandles)
         , fGeometryProcessor(std::move(geometryProcessor))
         , fXferProcessor(std::move(xferProcessor))
-        , fFragmentProcessors(std::move(fragmentProcessors))
+        , fFPImpls(std::move(fpImpls))
         , fDataManager(uniforms, uniformSize, usePushConstants) {
     fNumSamplers = samplers.count();
     for (const auto& sampler : samplers.items()) {
@@ -71,10 +71,9 @@ bool GrVkPipelineState::setAndBindUniforms(GrVkGpu* gpu,
 
     fGeometryProcessor->setData(fDataManager, programInfo.primProc());
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
-        auto& pipelineFP = programInfo.pipeline().getFragmentProcessor(i);
-        auto& baseGLSLFP = *fFragmentProcessors[i];
-        for (auto [fp, glslFP] : GrGLSLFragmentProcessor::ParallelRange(pipelineFP, baseGLSLFP)) {
-            glslFP.setData(fDataManager, fp);
+        auto& fp = programInfo.pipeline().getFragmentProcessor(i);
+        for (auto [fp, impl] : GrGLSLFragmentProcessor::ParallelRange(fp, *fFPImpls[i])) {
+            impl.setData(fDataManager, fp);
         }
     }
 
@@ -222,8 +221,9 @@ bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
 bool GrVkPipelineState::setAndBindInputAttachment(GrVkGpu* gpu,
                                                   GrVkRenderTarget* renderTarget,
                                                   GrVkCommandBuffer* commandBuffer) {
-    SkASSERT(renderTarget->supportsInputAttachmentUsage());
+    SkASSERT(renderTarget->colorAttachment()->supportsInputAttachmentUsage());
     const GrVkDescriptorSet* descriptorSet = renderTarget->inputDescSet(gpu, /*forResolve=*/false);
+
     if (!descriptorSet) {
         return false;
     }

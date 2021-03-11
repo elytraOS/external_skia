@@ -95,12 +95,10 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
         "Not Supported",
         "Automatic",
         "General Enable",
-        "Specific Enables",
     };
     static_assert(0 == kNotSupported_AdvBlendEqInteraction);
     static_assert(1 == kAutomatic_AdvBlendEqInteraction);
     static_assert(2 == kGeneralEnable_AdvBlendEqInteraction);
-    static_assert(3 == kSpecificEnables_AdvBlendEqInteraction);
     static_assert(SK_ARRAY_COUNT(kAdvBlendEqInteractionStr) == kLast_AdvBlendEqInteraction + 1);
 
     writer->appendBool("FB Fetch Support", fFBFetchSupport);
@@ -177,6 +175,9 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fMustWriteToFragColor);
         SkASSERT(!fNoDefaultPrecisionForExternalSamplers);
     }
+    if (!options.fEnableExperimentalHardwareTessellation) {
+        fMaxTessellationSegments = 0;
+    }
 #if GR_TEST_UTILS
     if (options.fSuppressDualSourceBlending) {
         fDualSourceBlendingSupport = false;
@@ -184,15 +185,9 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
     if (options.fSuppressGeometryShaders) {
         fGeometryShaderSupport = false;
     }
-    if (options.fSuppressTessellationShaders) {
-        fMaxTessellationSegments = 0;
-    }
     if (options.fMaxTessellationSegmentsOverride > 0) {
         fMaxTessellationSegments = std::min(options.fMaxTessellationSegmentsOverride,
                                             fMaxTessellationSegments);
     }
-#else
-    // Tessellation shaders are still very experimental. Always disable them outside of test builds.
-    fMaxTessellationSegments = 0;
 #endif
 }

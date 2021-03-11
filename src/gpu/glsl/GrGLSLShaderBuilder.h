@@ -8,12 +8,13 @@
 #ifndef GrGLSLShaderBuilder_DEFINED
 #define GrGLSLShaderBuilder_DEFINED
 
+#include "include/private/SkSLString.h"
 #include "include/private/SkTDArray.h"
 #include "src/core/SkSpan.h"
 #include "src/gpu/GrShaderVar.h"
 #include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
-#include "src/sksl/SkSLString.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 #include <stdarg.h>
 
@@ -273,6 +274,8 @@ protected:
     SkString fCode;
     SkString fFunctions;
     SkString fExtensions;
+    // Hangs onto Declarations so we don't destroy them prior to the variables that refer to them.
+    SkSL::StatementArray fDeclarations;
 
     VarArray fInputs;
     VarArray fOutputs;

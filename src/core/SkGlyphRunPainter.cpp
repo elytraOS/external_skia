@@ -16,7 +16,7 @@
 #include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/ops/GrAtlasTextOp.h"
-#include "src/gpu/text/GrSDFTOptions.h"
+#include "src/gpu/text/GrSDFTControl.h"
 #include "src/gpu/text/GrTextBlobCache.h"
 #endif
 
@@ -48,7 +48,7 @@ SkGlyphRunListPainter::SkGlyphRunListPainter(const SkSurfaceProps& props,
         ,  fColorType{colorType}, fScalerContextFlags{flags}
         ,  fStrikeCache{strikeCache} {}
 
-// TODO: unify with code in GrSDFTOptions.cpp
+// TODO: unify with code in GrSDFTControl.cpp
 static SkScalerContextFlags compute_scaler_context_flags(const SkColorSpace* cs) {
     // If we're doing linear blending, then we can disable the gamma hacks.
     // Otherwise, leave them on. In either case, we still want the contrast boost:
@@ -139,25 +139,19 @@ void SkGlyphRunListPainter::drawForBitmapDevice(
 #if SK_SUPPORT_GPU
 void SkGlyphRunListPainter::processGlyphRun(const SkGlyphRun& glyphRun,
                                             const SkMatrix& drawMatrix,
-                                            SkPoint drawOrigin,
                                             const SkPaint& runPaint,
-                                            const SkSurfaceProps& props,
-                                            bool contextSupportsDistanceFieldText,
-                                            const GrSDFTOptions& options,
+                                            const GrSDFTControl& control,
                                             SkGlyphRunPainterInterface* process) {
     ScopedBuffers _ = this->ensureBuffers(glyphRun);
     fRejects.setSource(glyphRun.source());
     const SkFont& runFont = glyphRun.font();
-    bool useSDFT = options.canDrawAsDistanceFields(
-            runPaint, runFont, drawMatrix, props, contextSupportsDistanceFieldText);
 
-    bool usePaths =
-            useSDFT ? false : SkStrikeSpec::ShouldDrawAsPath(runPaint, runFont, drawMatrix);
+    GrSDFTControl::DrawingType drawingType = control.drawingType(runFont, runPaint, drawMatrix);
 
-    if (useSDFT) {
+    if (drawingType == GrSDFTControl::kSDFT) {
         // Process SDFT - This should be the .009% case.
         const auto& [strikeSpec, minScale, maxScale] =
-                SkStrikeSpec::MakeSDFT(runFont, runPaint, fDeviceProps, drawMatrix, options);
+                SkStrikeSpec::MakeSDFT(runFont, runPaint, fDeviceProps, drawMatrix, control);
 
         if (!strikeSpec.isEmpty()) {
             SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
@@ -175,7 +169,7 @@ void SkGlyphRunListPainter::processGlyphRun(const SkGlyphRun& glyphRun,
         }
     }
 
-    if (!usePaths && !fRejects.source().empty()) {
+    if (drawingType != GrSDFTControl::kPath && !fRejects.source().empty()) {
         // Process masks including ARGB - this should be the 99.99% case.
 
         SkStrikeSpec strikeSpec = SkStrikeSpec::MakeMask(
@@ -183,7 +177,7 @@ void SkGlyphRunListPainter::processGlyphRun(const SkGlyphRun& glyphRun,
 
         SkScopedStrikeForGPU strike = strikeSpec.findOrCreateScopedStrike(fStrikeCache);
 
-        fDrawable.startGPUDevice(fRejects.source(), drawOrigin, drawMatrix, strike->roundingSpec());
+        fDrawable.startGPUDevice(fRejects.source(), drawMatrix, strike->roundingSpec());
         strike->prepareForMaskDrawing(&fDrawable, &fRejects);
         fRejects.flipRejectsToSource();
 

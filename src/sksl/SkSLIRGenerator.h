@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "include/private/SkSLModifiers.h"
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLASTNode.h"
 #include "src/sksl/SkSLErrorReporter.h"
@@ -20,7 +21,6 @@
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLModifiers.h"
 #include "src/sksl/ir/SkSLModifiersDeclaration.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLSection.h"
@@ -105,8 +105,7 @@ private:
  */
 class IRGenerator {
 public:
-    IRGenerator(const Context* context,
-                const ShaderCapsClass* caps);
+    IRGenerator(const Context* context);
 
     struct IRBundle {
         std::vector<std::unique_ptr<ProgramElement>> fElements;
@@ -126,10 +125,6 @@ public:
             const char* text,
             size_t length,
             const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions);
-
-    // both of these functions return null and report an error if the setting does not exist
-    const Type* typeForSetting(int offset, String name) const;
-    std::unique_ptr<Expression> valueForSetting(int offset, String name) const;
 
     const Program::Settings& settings() const { return fContext.fConfig->fSettings; }
     ProgramKind programKind() const { return fContext.fConfig->fKind; }
@@ -155,9 +150,20 @@ private:
      */
     std::unique_ptr<ModifiersPool> releaseModifiers();
 
-    void checkModifiers(int offset, const Modifiers& modifiers, int permitted);
-    void checkVarDeclaration(int offset, const Modifiers& modifiers, const Type* baseType,
+    void checkModifiers(int offset,
+                        const Modifiers& modifiers,
+                        int permittedModifierFlags,
+                        int permittedLayoutFlags);
+    void checkVarDeclaration(int offset,
+                             const Modifiers& modifiers,
+                             const Type* baseType,
                              Variable::Storage storage);
+    std::unique_ptr<Variable> convertVar(int offset, const Modifiers& modifiers,
+                                         const Type* baseType, StringFragment name, bool isArray,
+                                         std::unique_ptr<Expression> arraySize,
+                                         Variable::Storage storage);
+    std::unique_ptr<Statement> convertVarDeclaration(std::unique_ptr<Variable> var,
+                                                     std::unique_ptr<Expression> value);
     std::unique_ptr<Statement> convertVarDeclaration(int offset, const Modifiers& modifiers,
                                                      const Type* baseType, StringFragment name,
                                                      bool isArray,
@@ -186,41 +192,21 @@ private:
     int convertArraySize(const Type& type, std::unique_ptr<Expression> s);
     bool containsConstantZero(Expression& expr);
     bool dividesByZero(Operator op, Expression& right);
-    std::unique_ptr<Expression> convertBinaryExpression(std::unique_ptr<Expression> left,
-                                                        Operator op,
-                                                        std::unique_ptr<Expression> right);
     std::unique_ptr<Block> convertBlock(const ASTNode& block);
     std::unique_ptr<Statement> convertBreak(const ASTNode& b);
     std::unique_ptr<Statement> convertContinue(const ASTNode& c);
     std::unique_ptr<Statement> convertDiscard(const ASTNode& d);
-    std::unique_ptr<Statement> convertDo(std::unique_ptr<Statement> stmt,
-                                         std::unique_ptr<Expression> test);
     std::unique_ptr<Statement> convertDo(const ASTNode& d);
-    std::unique_ptr<Statement> convertSwitch(int offset,
-                                             bool isStatic,
-                                             std::unique_ptr<Expression> value,
-                                             ExpressionArray caseValues,
-                                             SkTArray<StatementArray> caseStatements,
-                                             std::shared_ptr<SymbolTable> symbolTable);
     std::unique_ptr<Statement> convertSwitch(const ASTNode& s);
     std::unique_ptr<Expression> convertBinaryExpression(const ASTNode& expression);
     std::unique_ptr<Extension> convertExtension(int offset, StringFragment name);
     std::unique_ptr<Statement> convertExpressionStatement(const ASTNode& s);
     std::unique_ptr<Expression> convertField(std::unique_ptr<Expression> base,
                                              StringFragment field);
-    std::unique_ptr<Statement> convertFor(int offset,
-                                          std::unique_ptr<Statement> initializer,
-                                          std::unique_ptr<Expression> test,
-                                          std::unique_ptr<Expression> next,
-                                          std::unique_ptr<Statement> statement);
     std::unique_ptr<Statement> convertFor(const ASTNode& f);
     std::unique_ptr<Expression> convertIdentifier(int offset, StringFragment identifier);
     std::unique_ptr<Expression> convertIdentifier(const ASTNode& identifier);
     std::unique_ptr<Statement> convertIf(const ASTNode& s);
-    std::unique_ptr<Statement> convertIf(int offset, bool isStatic,
-                                         std::unique_ptr<Expression> test,
-                                         std::unique_ptr<Statement> ifTrue,
-                                         std::unique_ptr<Statement> ifFalse);
     std::unique_ptr<InterfaceBlock> convertInterfaceBlock(const ASTNode& s);
     Modifiers convertModifiers(const Modifiers& m);
     std::unique_ptr<Expression> convertPrefixExpression(const ASTNode& expression);
@@ -230,25 +216,14 @@ private:
     std::unique_ptr<Expression> convertCallExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertFieldExpression(const ASTNode& expression);
     std::unique_ptr<Expression> convertIndexExpression(const ASTNode& expression);
-    std::unique_ptr<Expression> convertIndex(std::unique_ptr<Expression> base,
-                                             std::unique_ptr<Expression> index);
-    std::unique_ptr<Expression> convertPostfixExpression(std::unique_ptr<Expression> base,
-                                                         Operator op);
     std::unique_ptr<Expression> convertPostfixExpression(const ASTNode& expression);
-    std::unique_ptr<Expression> convertPrefixExpression(Operator op,
-                                                        std::unique_ptr<Expression> base);
     std::unique_ptr<Expression> convertScopeExpression(const ASTNode& expression);
     std::unique_ptr<StructDefinition> convertStructDefinition(const ASTNode& expression);
     std::unique_ptr<Expression> convertTypeField(int offset, const Type& type,
                                                  StringFragment field);
     std::unique_ptr<Expression> convertSwizzle(std::unique_ptr<Expression> base, String fields);
-    std::unique_ptr<Expression> convertTernaryExpression(std::unique_ptr<Expression> test,
-                                                         std::unique_ptr<Expression> ifTrue,
-                                                         std::unique_ptr<Expression> ifFalse);
     std::unique_ptr<Expression> convertTernaryExpression(const ASTNode& expression);
     std::unique_ptr<Statement> convertVarDeclarationStatement(const ASTNode& s);
-    std::unique_ptr<Statement> convertWhile(int offset, std::unique_ptr<Expression> test,
-                                            std::unique_ptr<Statement> statement);
     std::unique_ptr<Statement> convertWhile(const ASTNode& w);
     void convertGlobalVarDeclarations(const ASTNode& decl);
     void convertEnum(const ASTNode& e);
@@ -271,35 +246,14 @@ private:
         return fContext.fConfig->strictES2Mode();
     }
 
+    const ShaderCapsClass& caps() const {
+        return fContext.fCaps;
+    }
+
     Program::Inputs fInputs;
-    const ShaderCapsClass* fCaps = nullptr;
 
     std::unique_ptr<ASTFile> fFile;
 
-    struct CapsValue {
-        CapsValue(bool b)         : fKind(kBool_Kind), fValue(b) {}
-        CapsValue(int i)          : fKind(kInt_Kind), fValue(i) {}
-        CapsValue(unsigned int i) : fKind(kInt_Kind), fValue(i) {}
-        CapsValue(float f)        : fKind(kFloat_Kind), fValueF(f) {}
-
-        std::unique_ptr<Expression> literal(const Context& context, int offset) const;
-
-        enum {
-            kBool_Kind,
-            kInt_Kind,
-            kFloat_Kind,
-        } fKind;
-
-        union {
-            int   fValue;  // for kBool_Kind and kInt_Kind
-            float fValueF; // for kFloat_Kind
-        };
-    };
-
-    static void FillCapsMap(const SkSL::ShaderCapsClass& caps,
-                            std::unordered_map<String, CapsValue>* capsMap);
-
-    std::unordered_map<String, CapsValue> fCapsMap;
     std::shared_ptr<SymbolTable> fSymbolTable = nullptr;
     // additional statements that need to be inserted before the one that convertStatement is
     // currently working on

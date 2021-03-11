@@ -1081,12 +1081,9 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
                                   ProgramDescOverrideFlags overrideFlags) const {
     SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
     GrProgramDesc desc;
-    if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
-        SkASSERT(!desc.isValid());
-        return desc;
-    }
+    GrProgramDesc::Build(&desc, rt, programInfo, *this);
 
-    GrProcessorKeyBuilder b(&desc.key());
+    GrProcessorKeyBuilder b(desc.key());
 
     b.add32(programInfo.backendFormat().asMtlFormat());
 
@@ -1099,7 +1096,7 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
 #endif
 
     b.add32(rt && rt->getStencilAttachment() ? this->preferredStencilFormat()
-                                             : MTLPixelFormatInvalid);
+                                              : MTLPixelFormatInvalid);
     b.add32((uint32_t)programInfo.isStencilEnabled());
     // Stencil samples don't seem to be tracked in the MTLRenderPipeline
 
@@ -1107,6 +1104,7 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
 
     b.add32(programInfo.primitiveTypeKey());
 
+    b.flush();
     return desc;
 }
 

@@ -7,6 +7,7 @@
 
 #include "src/sksl/SkSLAnalysis.h"
 
+#include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSampleUsage.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLErrorReporter.h"
@@ -20,7 +21,6 @@
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLModifiers.h"
 #include "src/sksl/ir/SkSLSection.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
@@ -329,6 +329,206 @@ private:
     using INHERITED = ProgramVisitor;
 };
 
+class SwitchCaseContainsExit : public ProgramVisitor {
+public:
+    SwitchCaseContainsExit(bool conditionalExits) : fConditionalExits(conditionalExits) {}
+
+    bool visitStatement(const Statement& stmt) override {
+        switch (stmt.kind()) {
+            case Statement::Kind::kBlock:
+            case Statement::Kind::kSwitchCase:
+                return INHERITED::visitStatement(stmt);
+
+            case Statement::Kind::kReturn:
+                // Returns are an early exit regardless of the surrounding control structures.
+                return fConditionalExits ? fInConditional : !fInConditional;
+
+            case Statement::Kind::kContinue:
+                // Continues are an early exit from switches, but not loops.
+                return !fInLoop &&
+                       (fConditionalExits ? fInConditional : !fInConditional);
+
+            case Statement::Kind::kBreak:
+                // Breaks cannot escape from switches or loops.
+                return !fInLoop && !fInSwitch &&
+                       (fConditionalExits ? fInConditional : !fInConditional);
+
+            case Statement::Kind::kIf: {
+                ++fInConditional;
+                bool result = INHERITED::visitStatement(stmt);
+                --fInConditional;
+                return result;
+            }
+
+            case Statement::Kind::kFor:
+            case Statement::Kind::kDo: {
+                // Loops are treated as conditionals because a loop could potentially execute zero
+                // times. We don't have a straightforward way to determine that a loop definitely
+                // executes at least once.
+                ++fInConditional;
+                ++fInLoop;
+                bool result = INHERITED::visitStatement(stmt);
+                --fInLoop;
+                --fInConditional;
+                return result;
+            }
+
+            case Statement::Kind::kSwitch: {
+                ++fInSwitch;
+                bool result = INHERITED::visitStatement(stmt);
+                --fInSwitch;
+                return result;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    bool fConditionalExits = false;
+    int fInConditional = 0;
+    int fInLoop = 0;
+    int fInSwitch = 0;
+    using INHERITED = ProgramVisitor;
+};
+
+class ReturnsOnAllPathsVisitor : public ProgramVisitor {
+public:
+    bool visitExpression(const Expression& expr) override {
+        // We can avoid processing expressions entirely.
+        return false;
+    }
+
+    bool visitStatement(const Statement& stmt) override {
+        switch (stmt.kind()) {
+            // Returns, breaks, or continues will stop the scan, so only one of these should ever be
+            // true.
+            case Statement::Kind::kReturn:
+                fFoundReturn = true;
+                return true;
+
+            case Statement::Kind::kBreak:
+                fFoundBreak = true;
+                return true;
+
+            case Statement::Kind::kContinue:
+                fFoundContinue = true;
+                return true;
+
+            case Statement::Kind::kIf: {
+                const IfStatement& i = stmt.as<IfStatement>();
+                ReturnsOnAllPathsVisitor trueVisitor;
+                ReturnsOnAllPathsVisitor falseVisitor;
+                trueVisitor.visitStatement(*i.ifTrue());
+                if (i.ifFalse()) {
+                    falseVisitor.visitStatement(*i.ifFalse());
+                }
+                // If either branch leads to a break or continue, we report the entire if as
+                // containing a break or continue, since we don't know which side will be reached.
+                fFoundBreak    = (trueVisitor.fFoundBreak    || falseVisitor.fFoundBreak);
+                fFoundContinue = (trueVisitor.fFoundContinue || falseVisitor.fFoundContinue);
+                // On the other hand, we only want to report returns that definitely happen, so we
+                // require those to be found on both sides.
+                fFoundReturn   = (trueVisitor.fFoundReturn   && falseVisitor.fFoundReturn);
+                return fFoundBreak || fFoundContinue || fFoundReturn;
+            }
+            case Statement::Kind::kFor: {
+                const ForStatement& f = stmt.as<ForStatement>();
+                // We assume a for/while loop runs for at least one iteration; this isn't strictly
+                // guaranteed, but it's better to be slightly over-permissive here than to fail on
+                // reasonable code.
+                ReturnsOnAllPathsVisitor forVisitor;
+                forVisitor.visitStatement(*f.statement());
+                // A for loop that contains a break or continue is safe; it won't exit the entire
+                // function, just the loop. So we disregard those signals.
+                fFoundReturn = forVisitor.fFoundReturn;
+                return fFoundReturn;
+            }
+            case Statement::Kind::kDo: {
+                const DoStatement& d = stmt.as<DoStatement>();
+                // Do-while blocks are always entered at least once.
+                ReturnsOnAllPathsVisitor doVisitor;
+                doVisitor.visitStatement(*d.statement());
+                // A do-while loop that contains a break or continue is safe; it won't exit the
+                // entire function, just the loop. So we disregard those signals.
+                fFoundReturn = doVisitor.fFoundReturn;
+                return fFoundReturn;
+            }
+            case Statement::Kind::kBlock:
+                // Blocks are definitely entered and don't imply any additional control flow.
+                // If the block contains a break, continue or return, we want to keep that.
+                return INHERITED::visitStatement(stmt);
+
+            case Statement::Kind::kSwitch: {
+                // Switches are the most complex control flow we need to deal with; fortunately we
+                // already have good primitives for dissecting them. We need to verify that:
+                // - a default case exists, so that every possible input value is covered
+                // - every switch-case either (a) returns unconditionally, or
+                //                            (b) falls through to another case that does
+                const SwitchStatement& s = stmt.as<SwitchStatement>();
+                bool foundDefault = false;
+                bool fellThrough = false;
+                for (const std::unique_ptr<SwitchCase>& sc : s.cases()) {
+                    // The default case is indicated by a null value. A switch without a default
+                    // case cannot definitively return, as its value might not be in the cases list.
+                    if (!sc->value()) {
+                        foundDefault = true;
+                    }
+                    // Scan this switch-case for any exit (break, continue or return).
+                    ReturnsOnAllPathsVisitor caseVisitor;
+                    caseVisitor.visitStatement(*sc);
+
+                    // If we found a break or continue, whether conditional or not, this switch case
+                    // can't be called an unconditional return. Switches absorb breaks but not
+                    // continues.
+                    if (caseVisitor.fFoundContinue) {
+                        fFoundContinue = true;
+                        return false;
+                    }
+                    if (caseVisitor.fFoundBreak) {
+                        return false;
+                    }
+                    // We just confirmed that there weren't any breaks or continues. If we didn't
+                    // find an unconditional return either, the switch is considered fallen-through.
+                    // (There might be a conditional return, but that doesn't count.)
+                    fellThrough = !caseVisitor.fFoundReturn;
+                }
+
+                // If we didn't find a default case, or the very last case fell through, this switch
+                // doesn't meet our criteria.
+                if (fellThrough || !foundDefault) {
+                    return false;
+                }
+
+                // We scanned the entire switch, found a default case, and every section either fell
+                // through or contained an unconditional return.
+                fFoundReturn = true;
+                return true;
+            }
+
+            case Statement::Kind::kSwitchCase:
+                // Recurse into the switch-case.
+                return INHERITED::visitStatement(stmt);
+
+            case Statement::Kind::kDiscard:
+            case Statement::Kind::kExpression:
+            case Statement::Kind::kInlineMarker:
+            case Statement::Kind::kNop:
+            case Statement::Kind::kVarDeclaration:
+                // None of these statements could contain a return.
+                break;
+        }
+
+        return false;
+    }
+
+    bool fFoundReturn = false;
+    bool fFoundBreak = false;
+    bool fFoundContinue = false;
+
+    using INHERITED = ProgramVisitor;
+};
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -354,6 +554,14 @@ bool Analysis::ReferencesFragCoords(const Program& program) {
 
 int Analysis::NodeCountUpToLimit(const FunctionDefinition& function, int limit) {
     return NodeCountVisitor{limit}.visit(*function.body());
+}
+
+bool Analysis::SwitchCaseContainsUnconditionalExit(Statement& stmt) {
+    return SwitchCaseContainsExit{/*conditionalExits=*/false}.visitStatement(stmt);
+}
+
+bool Analysis::SwitchCaseContainsConditionalExit(Statement& stmt) {
+    return SwitchCaseContainsExit{/*conditionalExits=*/true}.visitStatement(stmt);
 }
 
 std::unique_ptr<ProgramUsage> Analysis::GetUsage(const Program& program) {
@@ -458,6 +666,21 @@ void Analysis::UpdateRefKind(Expression* expr, VariableRefKind refKind) {
     RefKindWriter{refKind}.visitExpression(*expr);
 }
 
+bool Analysis::MakeAssignmentExpr(Expression* expr,
+                                  VariableReference::RefKind kind,
+                                  ErrorReporter* errors) {
+    Analysis::AssignmentInfo info;
+    if (!Analysis::IsAssignable(*expr, &info, errors)) {
+        return false;
+    }
+    if (!info.fAssignedVar) {
+        errors->error(expr->fOffset, "can't assign to expression '" + expr->description() + "'");
+        return false;
+    }
+    info.fAssignedVar->setRefKind(kind);
+    return true;
+}
+
 bool Analysis::IsTrivialExpression(const Expression& expr) {
     return expr.is<IntLiteral>() ||
            expr.is<FloatLiteral>() ||
@@ -477,7 +700,48 @@ bool Analysis::IsTrivialExpression(const Expression& expr) {
             IsTrivialExpression(*expr.as<IndexExpression>().base()));
 }
 
-static const char* invalid_for_ES2(const ForStatement& loop,
+bool Analysis::IsSelfAssignment(const Expression& left, const Expression& right) {
+    if (left.kind() != right.kind() || left.type() != right.type()) {
+        return false;
+    }
+
+    // This isn't a fully exhaustive list of expressions that could be involved in a self-
+    // assignment, particularly when arrays are involved; for instance, `x[y+1] = x[y+1]` isn't
+    // detected because we don't look at BinaryExpressions. Since this is intended to be used for
+    // optimization purposes, handling the common cases is sufficient.
+    switch (left.kind()) {
+        case Expression::Kind::kIntLiteral:
+            return left.as<IntLiteral>().value() == right.as<IntLiteral>().value();
+
+        case Expression::Kind::kFieldAccess:
+            return left.as<FieldAccess>().fieldIndex() == right.as<FieldAccess>().fieldIndex() &&
+                   IsSelfAssignment(*left.as<FieldAccess>().base(),
+                                    *right.as<FieldAccess>().base());
+
+        case Expression::Kind::kIndex:
+            return IsSelfAssignment(*left.as<IndexExpression>().index(),
+                                    *right.as<IndexExpression>().index()) &&
+                   IsSelfAssignment(*left.as<IndexExpression>().base(),
+                                    *right.as<IndexExpression>().base());
+
+        case Expression::Kind::kSwizzle:
+            return left.as<Swizzle>().components() == right.as<Swizzle>().components() &&
+                   IsSelfAssignment(*left.as<Swizzle>().base(), *right.as<Swizzle>().base());
+
+        case Expression::Kind::kVariableReference:
+            return left.as<VariableReference>().variable() ==
+                   right.as<VariableReference>().variable();
+
+        default:
+            return false;
+    }
+}
+
+static const char* invalid_for_ES2(int offset,
+                                   const Statement* loopInitializer,
+                                   const Expression* loopTest,
+                                   const Expression* loopNext,
+                                   const Statement* loopStatement,
                                    Analysis::UnrollableLoopInfo& loopInfo) {
     auto getConstant = [&](const std::unique_ptr<Expression>& expr, double* val) {
         if (!expr->isCompileTimeConstant()) {
@@ -496,13 +760,13 @@ static const char* invalid_for_ES2(const ForStatement& loop,
     //
     // init_declaration has the form: type_specifier identifier = constant_expression
     //
-    if (!loop.initializer()) {
+    if (!loopInitializer) {
         return "missing init declaration";
     }
-    if (!loop.initializer()->is<VarDeclaration>()) {
+    if (!loopInitializer->is<VarDeclaration>()) {
         return "invalid init declaration";
     }
-    const VarDeclaration& initDecl = loop.initializer()->as<VarDeclaration>();
+    const VarDeclaration& initDecl = loopInitializer->as<VarDeclaration>();
     if (!initDecl.baseType().isNumber()) {
         return "invalid type for loop index";
     }
@@ -526,13 +790,13 @@ static const char* invalid_for_ES2(const ForStatement& loop,
     //
     // condition has the form: loop_index relational_operator constant_expression
     //
-    if (!loop.test()) {
+    if (!loopTest) {
         return "missing condition";
     }
-    if (!loop.test()->is<BinaryExpression>()) {
+    if (!loopTest->is<BinaryExpression>()) {
         return "invalid condition";
     }
-    const BinaryExpression& cond = loop.test()->as<BinaryExpression>();
+    const BinaryExpression& cond = loopTest->as<BinaryExpression>();
     if (!is_loop_index(cond.left())) {
         return "expected loop index on left hand side of condition";
     }
@@ -562,12 +826,12 @@ static const char* invalid_for_ES2(const ForStatement& loop,
     // The spec doesn't mention prefix increment and decrement, but there is some consensus that
     // it's an oversight, so we allow those as well.
     //
-    if (!loop.next()) {
+    if (!loopNext) {
         return "missing loop expression";
     }
-    switch (loop.next()->kind()) {
+    switch (loopNext->kind()) {
         case Expression::Kind::kBinary: {
-            const BinaryExpression& next = loop.next()->as<BinaryExpression>();
+            const BinaryExpression& next = loopNext->as<BinaryExpression>();
             if (!is_loop_index(next.left())) {
                 return "expected loop index in loop expression";
             }
@@ -582,7 +846,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
             }
         } break;
         case Expression::Kind::kPrefix: {
-            const PrefixExpression& next = loop.next()->as<PrefixExpression>();
+            const PrefixExpression& next = loopNext->as<PrefixExpression>();
             if (!is_loop_index(next.operand())) {
                 return "expected loop index in loop expression";
             }
@@ -594,7 +858,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
             }
         } break;
         case Expression::Kind::kPostfix: {
-            const PostfixExpression& next = loop.next()->as<PostfixExpression>();
+            const PostfixExpression& next = loopNext->as<PostfixExpression>();
             if (!is_loop_index(next.operand())) {
                 return "expected loop index in loop expression";
             }
@@ -613,7 +877,7 @@ static const char* invalid_for_ES2(const ForStatement& loop,
     // Within the body of the loop, the loop index is not statically assigned to, nor is it used as
     // argument to a function 'out' or 'inout' parameter.
     //
-    if (Analysis::StatementWritesToVariable(*loop.statement(), initDecl.var())) {
+    if (Analysis::StatementWritesToVariable(*loopStatement, initDecl.var())) {
         return "loop index must not be modified within body of the loop";
     }
 
@@ -648,23 +912,30 @@ static const char* invalid_for_ES2(const ForStatement& loop,
     return nullptr;  // All checks pass
 }
 
-bool Analysis::ForLoopIsValidForES2(const ForStatement& loop,
+bool Analysis::ForLoopIsValidForES2(int offset,
+                                    const Statement* loopInitializer,
+                                    const Expression* loopTest,
+                                    const Expression* loopNext,
+                                    const Statement* loopStatement,
                                     Analysis::UnrollableLoopInfo* outLoopInfo,
                                     ErrorReporter* errors) {
     UnrollableLoopInfo ignored,
                        *loopInfo = outLoopInfo ? outLoopInfo : &ignored;
-    if (const char* msg = invalid_for_ES2(loop, *loopInfo)) {
+    if (const char* msg = invalid_for_ES2(
+                offset, loopInitializer, loopTest, loopNext, loopStatement, *loopInfo)) {
         if (errors) {
-            errors->error(loop.fOffset, msg);
+            errors->error(offset, msg);
         }
         return false;
     }
     return true;
 }
 
-class ES2IndexExpressionVisitor : public ProgramVisitor {
+// Checks for ES2 constant-expression rules, and (optionally) constant-index-expression rules
+// (if loopIndices is non-nullptr)
+class ConstantExpressionVisitor : public ProgramVisitor {
 public:
-    ES2IndexExpressionVisitor(const std::set<const Variable*>* loopIndices)
+    ConstantExpressionVisitor(const std::set<const Variable*>* loopIndices)
             : fLoopIndices(loopIndices) {}
 
     bool visitExpression(const Expression& e) override {
@@ -676,14 +947,21 @@ public:
             case Expression::Kind::kFloatLiteral:
                 return false;
 
-            // ... loop indices as defined in section 4. Today, SkSL allows no other variables,
-            // but GLSL allows 'const' variables, because it requires that const variables be
-            // initialized with constant-expressions. We could support that usage by checking
-            // for variables that are const, and whose initializing expression also pass our
-            // checks. For now, we'll be conservative. (skbug.com/10837)
-            case Expression::Kind::kVariableReference:
-                return fLoopIndices->find(e.as<VariableReference>().variable()) ==
-                       fLoopIndices->end();
+            // ... settings can appear in fragment processors; they will resolve when compiled
+            case Expression::Kind::kSetting:
+                return false;
+
+            // ... a global or local variable qualified as 'const', excluding function parameters.
+            // ... loop indices as defined in section 4. [constant-index-expression]
+            case Expression::Kind::kVariableReference: {
+                const Variable* v = e.as<VariableReference>().variable();
+                if ((v->storage() == Variable::Storage::kGlobal ||
+                     v->storage() == Variable::Storage::kLocal) &&
+                    (v->modifiers().fFlags & Modifiers::kConst_Flag)) {
+                    return false;
+                }
+                return !fLoopIndices || fLoopIndices->find(v) == fLoopIndices->end();
+            }
 
             // ... expressions composed of both of the above
             case Expression::Kind::kBinary:
@@ -696,7 +974,7 @@ public:
             case Expression::Kind::kTernary:
                 return INHERITED::visitExpression(e);
 
-            // These are completely disallowed in SkSL constant-index-expressions. GLSL allows
+            // These are completely disallowed in SkSL constant-(index)-expressions. GLSL allows
             // calls to built-in functions where the arguments are all constant-expressions, but
             // we don't guarantee that behavior. (skbug.com/10835)
             case Expression::Kind::kExternalFunctionCall:
@@ -707,7 +985,6 @@ public:
             case Expression::Kind::kDefined:
             case Expression::Kind::kExternalFunctionReference:
             case Expression::Kind::kFunctionReference:
-            case Expression::Kind::kSetting:
             case Expression::Kind::kTypeReference:
             default:
                 SkDEBUGFAIL("Unexpected expression type");
@@ -741,7 +1018,7 @@ public:
     bool visitExpression(const Expression& e) override {
         if (e.is<IndexExpression>()) {
             const IndexExpression& i = e.as<IndexExpression>();
-            ES2IndexExpressionVisitor indexerInvalid(&fLoopIndices);
+            ConstantExpressionVisitor indexerInvalid(&fLoopIndices);
             if (indexerInvalid.visitExpression(*i.index())) {
                 fErrors.error(i.fOffset, "index expression must be constant");
                 return true;
@@ -762,6 +1039,17 @@ private:
 void Analysis::ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors) {
     ES2IndexingVisitor visitor(errors);
     visitor.visitProgramElement(pe);
+}
+
+bool Analysis::IsConstantExpression(const Expression& expr) {
+    ConstantExpressionVisitor visitor(/*loopIndices=*/nullptr);
+    return !visitor.visitExpression(expr);
+}
+
+bool Analysis::CanExitWithoutReturningValue(const FunctionDefinition& funcDef) {
+    ReturnsOnAllPathsVisitor visitor;
+    visitor.visitStatement(*funcDef.body());
+    return !visitor.fFoundReturn;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -865,6 +1153,18 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
             }
             return false;
 
+        case Statement::Kind::kSwitchCase: {
+            auto& sc = s.template as<SwitchCase>();
+            if (sc.value() && this->visitExpression(*sc.value())) {
+                return true;
+            }
+            for (auto& stmt : sc.statements()) {
+                if (stmt && this->visitStatement(*stmt)) {
+                    return true;
+                }
+            }
+            return false;
+        }
         case Statement::Kind::kDo: {
             auto& d = s.template as<DoStatement>();
             return this->visitExpression(*d.test()) || this->visitStatement(*d.statement());
@@ -895,13 +1195,8 @@ bool TProgramVisitor<PROG, EXPR, STMT, ELEM>::visitStatement(STMT s) {
                 return true;
             }
             for (const auto& c : sw.cases()) {
-                if (c->value() && this->visitExpression(*c->value())) {
+                if (this->visitStatement(*c)) {
                     return true;
-                }
-                for (auto& st : c->statements()) {
-                    if (st && this->visitStatement(*st)) {
-                        return true;
-                    }
                 }
             }
             return false;

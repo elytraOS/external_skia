@@ -101,13 +101,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 		return rv
 	}
-	prefix := func(slice []string, pfx string) []string {
-		rv := make([]string, 0, len(slice))
-		for _, e := range slice {
-			rv = append(rv, pfx+e)
-		}
-		return rv
-	}
 	suffix := func(slice []string, sfx string) []string {
 		rv := make([]string, 0, len(slice))
 		for _, e := range slice {
@@ -434,6 +427,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = append(configs, "glestestprecompile")
 		}
 
+		if b.model(REDUCE_OPS_TASK_SPLITTING_MODELS...) {
+			args = append(args, "--reduceOpsTaskSplitting", "true")
+		}
+
 		// Test rendering to wrapped dsts on a few bots
 		// Also test "glenarrow", which hits F16 surfaces and F16 vertex colors.
 		if b.extraConfig("BonusConfigs") {
@@ -471,9 +468,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 		if b.extraConfig("DDL3") {
 			// This bot generates the real ddl images for the large skps and the gms
-			ddlConfigs := suffix(filter(configs, "gl", "vk", "mtl"), "ddl")
-			ddl2Configs := prefix(filter(configs, "gl", "vk", "mtl"), "ddl2-")
-			configs = append(ddlConfigs, ddl2Configs...)
+			configs = suffix(filter(configs, "gl", "vk", "mtl"), "ddl")
 			args = append(args, "--skpViewportSize", "2048")
 			args = append(args, "--gpuThreads", "0")
 		}
@@ -482,10 +477,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = suffix(filter(configs, "gl", "vk", "mtl"), "ooprddl")
 			args = append(args, "--skpViewportSize", "2048")
 			args = append(args, "--gpuThreads", "0")
-		}
-		if b.extraConfig("ReduceOpsTaskSplitting") {
-			configs = filter(configs, "gl", "vk", "mtl")
-			args = append(args, "--reduceOpsTaskSplitting", "true")
 		}
 	}
 
@@ -944,6 +935,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("Metal") && b.gpu("RadeonHD8870M") && b.matchOs("Mac") {
 		// skia:9255
 		match = append(match, "~WritePixelsNonTextureMSAA_Gpu")
+		// skbug.com/11366
+		match = append(match, "~SurfacePartialDraw_Gpu")
 	}
 
 	if b.extraConfig("Direct3D") {

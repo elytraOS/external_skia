@@ -19,7 +19,7 @@ class GrVkGpu;
 class GrVkImageView;
 struct GrVkImageInfo;
 
-class GrVkTexture : public GrTexture, public virtual GrVkImage {
+class GrVkTexture : public GrTexture, public GrVkImage {
 public:
     static sk_sp<GrVkTexture> MakeNewTexture(GrVkGpu*,
                                              SkBudgeted budgeted,
@@ -44,9 +44,6 @@ public:
     void textureParamsModified() override {}
 
     const GrVkImageView* textureView();
-
-    void addIdleProc(sk_sp<GrRefCntedCallback>) override;
-    void callIdleProcsOnBehalfOfResource() override;
 
     // For each GrVkTexture, there is a cache of GrVkDescriptorSets which only contain a single
     // texture/sampler descriptor. If there is a cached descriptor set that matches the passed in
@@ -75,8 +72,6 @@ protected:
         return false;
     }
 
-    void willRemoveLastRef() override;
-
 private:
     GrVkTexture(GrVkGpu*, SkBudgeted, SkISize, const GrVkImageInfo&,
                 sk_sp<GrBackendSurfaceMutableStateImpl>, sk_sp<const GrVkImageView> imageView,
@@ -91,8 +86,6 @@ private:
         // Forward the release proc on to GrVkImage
         this->setResourceRelease(std::move(releaseHelper));
     }
-
-    void removeFinishIdleProcs();
 
     sk_sp<const GrVkImageView> fTextureView;
 

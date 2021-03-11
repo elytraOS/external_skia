@@ -89,13 +89,11 @@ void Dehydrator::write(Layout l) {
         this->writeS8(l.fSet);
         this->writeS16(l.fBuiltin);
         this->writeS8(l.fInputAttachmentIndex);
-        this->writeS8((int) l.fFormat);
         this->writeS8(l.fPrimitive);
         this->writeS8(l.fMaxVertices);
         this->writeS8(l.fInvocations);
         this->write(l.fMarker);
         this->write(l.fWhen);
-        this->writeS8(l.fKey);
         this->writeS8((int) l.fCType);
     }
 }
@@ -264,7 +262,6 @@ void Dehydrator::write(const Expression* e) {
                 this->write(b.left().get());
                 this->writeU8((int) b.getOperator().kind());
                 this->write(b.right().get());
-                this->write(b.type());
                 break;
             }
             case Expression::Kind::kBoolLiteral: {
@@ -350,7 +347,6 @@ void Dehydrator::write(const Expression* e) {
                 const Setting& s = e->as<Setting>();
                 this->writeCommand(Rehydrator::kSetting_Command);
                 this->write(s.name());
-                this->write(s.type());
                 break;
             }
             case Expression::Kind::kSwizzle: {

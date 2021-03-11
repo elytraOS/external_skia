@@ -380,7 +380,7 @@ GL_SRCS_WASM = struct(
     include = [
         "src/gpu/gl/*",
         "src/gpu/gl/builders/*",
-        "src/gpu/gl/GrGLMakeNativeInterface_egl.cpp",
+        "src/gpu/gl/egl/GrGLMakeEGLInterface.cpp",
         "src/gpu/gl/egl/GrGLMakeNativeInterface_egl.cpp",
     ],
     exclude = [
@@ -634,6 +634,7 @@ DM_SRCS_ALL = struct(
         "gm/video_decoder.cpp",
         "tests/FontMgrAndroidParserTest.cpp",  # Android-only.
         "tests/FontMgrFontConfigTest.cpp",  # FontConfig-only.
+        "tests/TypefaceMacTest.cpp",  # CoreText-only.
         "tests/SkParagraphTest.cpp",  # Skipping tests for now.
         "tests/skia_test.cpp",  # Old main.
         "tools/gpu/d3d/*",
@@ -658,12 +659,12 @@ def dm_srcs(os_conditions):
     return skia_glob(DM_SRCS_ALL) + skia_select(
         os_conditions,
         [
-            ["tests/FontMgrFontConfigTest.cpp"],
-            ["tests/FontMgrAndroidParserTest.cpp"],
-            [],  # iOS
+            ["tests/FontMgrFontConfigTest.cpp"],  # Unix
+            ["tests/FontMgrAndroidParserTest.cpp"],  # Android
+            ["tests/TypefaceMacTest.cpp"],  # iOS
             [],  # WASM
             [],  # Fuchsia
-            [],  # macOS
+            ["tests/TypefaceMacTest.cpp"],  # macOS
         ],
     )
 

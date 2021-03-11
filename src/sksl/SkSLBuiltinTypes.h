@@ -108,9 +108,6 @@ public:
     const std::unique_ptr<Type> fISampler2D;
     const std::unique_ptr<Type> fSampler;
 
-    const std::unique_ptr<Type> fImage2D;
-    const std::unique_ptr<Type> fIImage2D;
-
     const std::unique_ptr<Type> fSubpassInput;
     const std::unique_ptr<Type> fSubpassInputMS;
 
@@ -157,7 +154,6 @@ private:
     static std::unique_ptr<Type> MakeSamplerType(const char* name, const Type& textureType);
     static std::unique_ptr<Type> MakeSeparateSamplerType(const char* name);
     static std::unique_ptr<Type> MakeOtherType(const char* name);
-    static std::unique_ptr<Type> MakeOtherStruct(const char* name, std::vector<Type::Field> fields);
 };
 
 }  // namespace SkSL

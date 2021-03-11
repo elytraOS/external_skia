@@ -15,9 +15,11 @@
 #include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/mtl/GrMtlBuffer.h"
 #include "src/gpu/mtl/GrMtlCommandBuffer.h"
 #include "src/gpu/mtl/GrMtlOpsRenderPass.h"
+#include "src/gpu/mtl/GrMtlPipelineStateBuilder.h"
 #include "src/gpu/mtl/GrMtlSemaphore.h"
 #include "src/gpu/mtl/GrMtlTexture.h"
 #include "src/gpu/mtl/GrMtlTextureRenderTarget.h"
@@ -165,6 +167,14 @@ void GrMtlGpu::disconnect(DisconnectType type) {
         this->destroyResources();
         fDisconnected = true;
     }
+}
+
+GrThreadSafePipelineBuilder* GrMtlGpu::pipelineBuilder() {
+    return nullptr;
+}
+
+sk_sp<GrThreadSafePipelineBuilder> GrMtlGpu::refPipelineBuilder() {
+    return nullptr;
 }
 
 void GrMtlGpu::destroyResources() {
@@ -1073,8 +1083,14 @@ void GrMtlGpu::deleteBackendTexture(const GrBackendTexture& tex) {
     // Nothing to do here, will get cleaned up when the GrBackendTexture object goes away
 }
 
-bool GrMtlGpu::compile(const GrProgramDesc&, const GrProgramInfo&) {
-    return false;
+bool GrMtlGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) {
+    auto pipelineState = this->resourceProvider().findOrCreateCompatiblePipelineState(
+                                 desc, programInfo);
+    return SkToBool(pipelineState);
+}
+
+bool GrMtlGpu::precompileShader(const SkData& key, const SkData& data) {
+    return GrMtlPipelineStateBuilder::PrecompileShaders(this, data);
 }
 
 #if GR_TEST_UTILS

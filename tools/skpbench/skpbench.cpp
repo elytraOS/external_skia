@@ -271,12 +271,13 @@ static void run_ddl_benchmark(sk_gpu_test::TestContext* testContext, GrDirectCon
 
     promiseImageHelper.uploadAllToGPU(nullptr, context);
 
-    DDLTileHelper tiles(context, dstCharacterization, viewport, FLAGS_ddlTilingWidthHeight,
+    DDLTileHelper tiles(context, dstCharacterization, viewport,
+                        FLAGS_ddlTilingWidthHeight, FLAGS_ddlTilingWidthHeight,
                         /* addRandomPaddingToDst */ false);
 
     tiles.createBackendTextures(nullptr, context);
 
-    tiles.createSKPPerTile(compressedPictureData.get(), promiseImageHelper);
+    tiles.createSKP(context->threadSafeProxy(), compressedPictureData.get(), promiseImageHelper);
 
     // In comparable modes, there is no GPU thread. The following pointers are all null.
     // Otherwise, we transfer testContext onto the GPU thread until after the bench.

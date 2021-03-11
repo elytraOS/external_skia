@@ -10,9 +10,9 @@
 
 #include "include/core/SkData.h"
 #include "include/private/GrTypesPriv.h"
+#include "include/private/SkSLString.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
-#include "src/sksl/SkSLString.h"
 #include "src/sksl/ir/SkSLProgram.h"
 
 // The GrPersistentCache stores opaque blobs, as far as clients are concerned. It's helpful to
@@ -28,7 +28,7 @@ struct ShaderMetadata {
 };
 
 // Increment this whenever the serialization format of cached shaders changes
-static constexpr int kCurrentVersion = 2;
+static constexpr int kCurrentVersion = 3;
 
 static inline sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
                                               const SkSL::String shaders[],
@@ -53,6 +53,7 @@ static inline sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
             writer.writeBool(meta->fSettings->fFlipY);
             writer.writeBool(meta->fSettings->fFragColorIsInOut);
             writer.writeBool(meta->fSettings->fForceHighPrecision);
+            writer.writeBool(meta->fSettings->fUsePushConstants);
         }
 
         writer.writeInt(meta->fAttributeNames.count());
@@ -66,7 +67,7 @@ static inline sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
     return writer.snapshotAsData();
 }
 
-static SkFourByteTag GetType(SkReadBuffer* reader) {
+static inline SkFourByteTag GetType(SkReadBuffer* reader) {
     constexpr SkFourByteTag kInvalidTag = ~0;
     int version           = reader->readInt();
     SkFourByteTag typeTag = reader->readUInt();
@@ -99,6 +100,7 @@ static inline bool UnpackCachedShaders(SkReadBuffer* reader,
             meta->fSettings->fFlipY              = reader->readBool();
             meta->fSettings->fFragColorIsInOut   = reader->readBool();
             meta->fSettings->fForceHighPrecision = reader->readBool();
+            meta->fSettings->fUsePushConstants   = reader->readBool();
         }
 
         meta->fAttributeNames.resize(reader->readInt());

@@ -106,7 +106,7 @@ public:
         return this->allocateBytes(size, alignof(T));
     }
 
-    char* alignedBytes(int unsafeSize, int unsafeAlignment);
+    void* alignedBytes(int unsafeSize, int unsafeAlignment);
 
 private:
     // 16 seems to be a good number for alignment. If a use case for larger alignments is found,
@@ -236,7 +236,7 @@ public:
         return std::unique_ptr<T[], ArrayDestroyer>{array, ArrayDestroyer{n}};
     }
 
-    char* alignedBytes(int size, int alignment);
+    void* alignedBytes(int size, int alignment);
 
 private:
     GrBagOfBytes fAlloc;
@@ -302,7 +302,7 @@ public:
 
     // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
     // position.
-    virtual bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) = 0;
+    virtual bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const = 0;
 
     // Return the underlying atlas SubRun if it exists. Otherwise, return nullptr.
     // * Don't use this API. It is only to support testing.
@@ -338,6 +338,8 @@ struct GrSubRunList {
     bool isEmpty() const { return fHead == nullptr; }
     Iterator begin() { return Iterator{ fHead.get()}; }
     Iterator end() { return Iterator{nullptr}; }
+    Iterator begin() const { return Iterator{ fHead.get()}; }
+    Iterator end() const { return Iterator{nullptr}; }
     GrSubRun& front() const {return *fHead; }
 
     std::unique_ptr<GrSubRun, GrSubRunAllocator::Destroyer> fHead{nullptr};
@@ -362,6 +364,7 @@ struct GrSubRunList {
 //
 class GrTextBlob final : public SkNVRefCnt<GrTextBlob>, public SkGlyphRunPainterInterface {
 public:
+    SK_BEGIN_REQUIRE_DENSE
     struct Key {
         Key();
         uint32_t fUniqueID;
@@ -370,17 +373,21 @@ public:
         // luminance. For each luminance bucket there is a "canonical color" that
         // represents the bucket.  This functionality is currently only supported for A8
         SkColor fCanonicalColor;
-        SkPaint::Style fStyle;
         SkScalar fFrameWidth;
         SkScalar fMiterLimit;
-        SkPaint::Join fJoin;
         SkPixelGeometry fPixelGeometry;
-        bool fHasBlur;
         SkMaskFilterBase::BlurRec fBlurRec;
         uint32_t fScalerContextFlags;
+        SkMatrix fDrawMatrix;
+        // Below here fields are of size 1 byte.
+        uint8_t fSetOfDrawingTypes;
+        bool fHasBlur;
+        SkPaint::Style fStyle;
+        SkPaint::Join fJoin;
 
         bool operator==(const Key& other) const;
     };
+    SK_END_REQUIRE_DENSE
 
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrTextBlob);
 
@@ -397,35 +404,40 @@ public:
     void* operator new(size_t);
     void* operator new(size_t, void* p);
 
-    static const Key& GetKey(const GrTextBlob& blob);
-    static uint32_t Hash(const Key& key);
+    void makeSubRuns(
+            SkGlyphRunListPainter* painter,
+            const SkGlyphRunList& glyphRunList,
+            const SkMatrix& drawMatrix,
+            const SkPaint& runPaint,
+            const GrSDFTControl& control);
+
+    const Key& key() { return fKey; }
 
     void addKey(const Key& key);
     bool hasPerspective() const;
     const SkMatrix& initialMatrix() const { return fInitialMatrix; }
 
-    void setMinAndMaxScale(SkScalar scaledMin, SkScalar scaledMax);
     std::tuple<SkScalar, SkScalar> scaleBounds() const {
         return {fMaxMinScale, fMinMaxScale};
     }
 
-    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix);
+    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const;
 
     const Key& key() const;
     size_t size() const;
+
+    const GrSubRunList& subRunList() const {
+        return fSubRunList;
+    }
+
+private:
+    GrTextBlob(int allocSize, const SkMatrix& drawMatrix, SkColor initialLuminance);
 
     template<typename AddSingleMaskFormat>
     void addMultiMaskFormat(
             AddSingleMaskFormat addSingle,
             const SkZip<SkGlyphVariant, SkPoint>& drawables,
             const SkStrikeSpec& strikeSpec);
-
-    GrSubRunList& subRunList() {
-        return fSubRunList;
-    }
-
-private:
-    GrTextBlob(int allocSize, const SkMatrix& drawMatrix, SkColor initialLuminance);
 
     // Methods to satisfy SkGlyphRunPainterInterface
     void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,

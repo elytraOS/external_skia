@@ -34,7 +34,6 @@
   * [infra](#recipes-infra)
   * [infra:examples/full](#recipes-infra_examples_full)
   * [perf](#recipes-perf)
-  * [perf_canvaskit](#recipes-perf_canvaskit)
   * [perf_pathkit](#recipes-perf_pathkit)
   * [perf_skottietrace](#recipes-perf_skottietrace)
   * [perf_skottiewasm_lottieweb](#recipes-perf_skottiewasm_lottieweb)
@@ -360,7 +359,9 @@ Prepare the variables.
 
 [DEPS](/infra/bots/recipes/infra.py#9): [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/step][recipe_engine/recipe_modules/step], [infra](#recipe_modules-infra), [vars](#recipe_modules-vars)
 
-&mdash; **def [RunSteps](/infra/bots/recipes/infra.py#19)(api):**
+&mdash; **def [RunSteps](/infra/bots/recipes/infra.py#27)(api):**
+
+&mdash; **def [git\_init](/infra/bots/recipes/infra.py#19)(api, repo_root, env):**
 ### *recipes* / [infra:examples/full](/infra/bots/recipe_modules/infra/examples/full.py)
 
 [DEPS](/infra/bots/recipe_modules/infra/examples/full.py#9): [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/step][recipe_engine/recipe_modules/step], [infra](#recipe_modules-infra), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
@@ -375,11 +376,6 @@ Prepare the variables.
 &mdash; **def [perf\_steps](/infra/bots/recipes/perf.py#30)(api):**
 
 Run Skia benchmarks.
-### *recipes* / [perf\_canvaskit](/infra/bots/recipes/perf_canvaskit.py)
-
-[DEPS](/infra/bots/recipes/perf_canvaskit.py#7): [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/step][recipe_engine/recipe_modules/step], [checkout](#recipe_modules-checkout), [docker](#recipe_modules-docker), [env](#recipe_modules-env), [infra](#recipe_modules-infra), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
-
-&mdash; **def [RunSteps](/infra/bots/recipes/perf_canvaskit.py#26)(api):**
 ### *recipes* / [perf\_pathkit](/infra/bots/recipes/perf_pathkit.py)
 
 [DEPS](/infra/bots/recipes/perf_pathkit.py#7): [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/step][recipe_engine/recipe_modules/step], [checkout](#recipe_modules-checkout), [docker](#recipe_modules-docker), [env](#recipe_modules-env), [infra](#recipe_modules-infra), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
@@ -448,7 +444,7 @@ Recipe for the Skia RecreateSKPs Bot.
 
 [DEPS](/infra/bots/recipes/skpbench.py#12): [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [recipe\_engine/time][recipe_engine/recipe_modules/time], [flavor](#recipe_modules-flavor), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
 
-&mdash; **def [RunSteps](/infra/bots/recipes/skpbench.py#154)(api):**
+&mdash; **def [RunSteps](/infra/bots/recipes/skpbench.py#153)(api):**
 
 &mdash; **def [skpbench\_steps](/infra/bots/recipes/skpbench.py#41)(api):**
 

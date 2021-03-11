@@ -17,8 +17,8 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "include/private/SkSLDefines.h"  // for kDefaultInlineThreshold
 #include "include/utils/SkRandom.h"
-#include "src/sksl/SkSLDefines.h"  // for kDefaultInlineThreshold
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -170,6 +170,7 @@ SKSL_TEST(SkSLOperatorsES2,                    "shared/OperatorsES2.sksl")
 SKSL_TEST(SkSLOutParams,                       "shared/OutParams.sksl")
 SKSL_TEST(SkSLOutParamsTricky,                 "shared/OutParamsTricky.sksl")
 SKSL_TEST(SkSLResizeMatrix,                    "shared/ResizeMatrix.sksl")
+SKSL_TEST(SkSLReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")
 SKSL_TEST(SkSLScalarConversionConstructorsES2, "shared/ScalarConversionConstructorsES2.sksl")
 SKSL_TEST(SkSLStackingVectorCasts,             "shared/StackingVectorCasts.sksl")
 SKSL_TEST(SkSLStaticIf,                        "shared/StaticIf.sksl")
@@ -182,6 +183,7 @@ SKSL_TEST(SkSLSwizzleOpt,                      "shared/SwizzleOpt.sksl")
 SKSL_TEST(SkSLSwizzleScalar,                   "shared/SwizzleScalar.sksl")
 SKSL_TEST(SkSLTernaryAsLValueEntirelyFoldable, "shared/TernaryAsLValueEntirelyFoldable.sksl")
 SKSL_TEST(SkSLTernaryAsLValueFoldableTest,     "shared/TernaryAsLValueFoldableTest.sksl")
+SKSL_TEST(SkSLTernaryExpression,               "shared/TernaryExpression.sksl")
 SKSL_TEST(SkSLUnaryPositiveNegative,           "shared/UnaryPositiveNegative.sksl")
 SKSL_TEST(SkSLUnusedVariables,                 "shared/UnusedVariables.sksl")
 SKSL_TEST(SkSLVectorConstructors,              "shared/VectorConstructors.sksl")
@@ -213,6 +215,7 @@ SKSL_TEST(SkSLHexUnsigned,                     "shared/HexUnsigned.sksl")
 SKSL_TEST(SkSLMatricesNonsquare,               "shared/MatricesNonsquare.sksl")
 SKSL_TEST(SkSLOperatorsES3,                    "shared/OperatorsES3.sksl")
 SKSL_TEST(SkSLResizeMatrixNonsquare,           "shared/ResizeMatrixNonsquare.sksl")
+SKSL_TEST(SkSLReturnsValueOnEveryPathES3,      "shared/ReturnsValueOnEveryPathES3.sksl")
 SKSL_TEST(SkSLScalarConversionConstructorsES3, "shared/ScalarConversionConstructorsES3.sksl")
 SKSL_TEST(SkSLSwizzleByIndex,                  "shared/SwizzleByIndex.sksl")
 SKSL_TEST(SkSLWhileLoopControlFlow,            "shared/WhileLoopControlFlow.sksl")

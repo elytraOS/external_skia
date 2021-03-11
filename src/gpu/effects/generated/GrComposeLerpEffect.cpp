@@ -26,14 +26,15 @@ public:
         (void)_outer;
         auto weight = _outer.weight;
         (void)weight;
-        weightVar = args.fUniformHandler->addUniform(&_outer, kFragment_GrShaderFlag,
-                                                     kFloat_GrSLType, "weight");
+        weightVar = args.fUniformHandler->addUniform(
+                &_outer, kFragment_GrShaderFlag, kFloat_GrSLType, "weight");
         SkString _sample0 = this->invokeChild(0, args);
         SkString _sample1 = this->invokeChild(1, args);
         fragBuilder->codeAppendf(
                 R"SkSL(return mix(%s, %s, half(%s));
 )SkSL",
-                _sample0.c_str(), _sample1.c_str(),
+                _sample0.c_str(),
+                _sample1.c_str(),
                 args.fUniformHandler->getUniformCStr(weightVar));
     }
 
@@ -45,8 +46,8 @@ private:
     }
     UniformHandle weightVar;
 };
-GrGLSLFragmentProcessor* GrComposeLerpEffect::onCreateGLSLInstance() const {
-    return new GrGLSLComposeLerpEffect();
+std::unique_ptr<GrGLSLFragmentProcessor> GrComposeLerpEffect::onMakeProgramImpl() const {
+    return std::make_unique<GrGLSLComposeLerpEffect>();
 }
 void GrComposeLerpEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                 GrProcessorKeyBuilder* b) const {}

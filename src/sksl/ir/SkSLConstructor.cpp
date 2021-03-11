@@ -15,10 +15,10 @@
 
 namespace SkSL {
 
-std::unique_ptr<Expression> Constructor::Make(const Context& context,
-                                              int offset,
-                                              const Type& type,
-                                              ExpressionArray args) {
+std::unique_ptr<Expression> Constructor::Convert(const Context& context,
+                                                 int offset,
+                                                 const Type& type,
+                                                 ExpressionArray args) {
     // FIXME: add support for structs
     if (args.size() == 1 && args[0]->type() == type && !type.componentType().isOpaque()) {
         // Don't generate redundant casts; if the expression is already of the correct type, just
@@ -26,7 +26,7 @@ std::unique_ptr<Expression> Constructor::Make(const Context& context,
         return std::move(args[0]);
     }
     if (type.isScalar()) {
-        return MakeScalarConstructor(context, offset, type, std::move(args));
+        return MakeScalarConstructor(context, offset, type.scalarTypeForLiteral(), std::move(args));
     }
     if (type.isVector() || type.isMatrix()) {
         return MakeCompoundConstructor(context, offset, type, std::move(args));
@@ -81,8 +81,9 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
         // matrices). In either event, it's legal regardless of the scalar's type. Synthesize an
         // explicit conversion to the proper type (this is a no-op if it's unnecessary).
         ExpressionArray castArgs;
-        castArgs.push_back(Constructor::Make(context, offset, type.componentType(),
-                                             std::move(args)));
+        castArgs.push_back(Constructor::Convert(context, offset, type.componentType(),
+                                                std::move(args)));
+        SkASSERT(castArgs.front());
         return std::make_unique<Constructor>(offset, type, std::move(castArgs));
     }
 
@@ -105,16 +106,16 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
             return nullptr;
         }
 
-        // Rely on Constructor::Make to force this subexpression to the proper type. If it's a
-        // literal, this will make sure it's the right type of literal. If an expression of
-        // matching type, the expression will be returned as-is. If it's an expression of
-        // mismatched type, this adds a cast.
+        // Rely on Constructor::Convert to force this subexpression to the proper type. If it's a
+        // literal, this will make sure it's the right type of literal. If an expression of matching
+        // type, the expression will be returned as-is. If it's an expression of mismatched type,
+        // this adds a cast.
         int offset = arg->fOffset;
         const Type& ctorType = type.componentType().toCompound(context, arg->type().columns(),
                                                                /*rows=*/1);
         ExpressionArray ctorArg;
         ctorArg.push_back(std::move(arg));
-        arg = Constructor::Make(context, offset, ctorType, std::move(ctorArg));
+        arg = Constructor::Convert(context, offset, ctorType, std::move(ctorArg));
         if (!arg) {
             return nullptr;
         }
@@ -126,6 +127,47 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
                                       "' constructor (expected " + to_string(expected) +
                                       " scalars, but found " + to_string(actual) + ")");
         return nullptr;
+    }
+
+    if (context.fConfig->fSettings.fOptimize) {
+        // Find constructors embedded inside constructors and flatten them out where possible.
+        //   -  float4(float2(1, 2), 3, 4)                -->  float4(1, 2, 3, 4)
+        //   -  float4(w, float3(sin(x), cos(y), tan(z))) -->  float4(w, sin(x), cos(y), tan(z))
+
+        // Inspect each constructor argument to see if it's a candidate for flattening.
+        // Remember matched arguments in a bitfield, "argsToOptimize".
+        int argsToOptimize = 0;
+        int currBit = 1;
+        for (const std::unique_ptr<Expression>& arg : args) {
+            if (arg->is<Constructor>()) {
+                Constructor& inner = arg->as<Constructor>();
+                if (inner.arguments().size() > 1 &&
+                    inner.type().componentType() == type.componentType()) {
+                    argsToOptimize |= currBit;
+                }
+            }
+            currBit <<= 1;
+        }
+
+        if (argsToOptimize) {
+            // We found at least one argument that could be flattened out. Re-walk the constructor
+            // args and flatten the candidates we found during our initial pass.
+            ExpressionArray flattened;
+            flattened.reserve_back(type.columns());
+            currBit = 1;
+            for (std::unique_ptr<Expression>& arg : args) {
+                if (argsToOptimize & currBit) {
+                    Constructor& inner = arg->as<Constructor>();
+                    for (std::unique_ptr<Expression>& innerArg : inner.arguments()) {
+                        flattened.push_back(std::move(innerArg));
+                    }
+                } else {
+                    flattened.push_back(std::move(arg));
+                }
+                currBit <<= 1;
+            }
+            args = std::move(flattened);
+        }
     }
 
     return std::make_unique<Constructor>(offset, type, std::move(args));

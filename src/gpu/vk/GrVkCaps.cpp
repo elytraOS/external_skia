@@ -443,12 +443,6 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         SkASSERT(fMaxDrawIndirectDrawCount == 1 || features.features.multiDrawIndirect);
     }
 
-    if (kARM_VkVendor == properties.vendorID) {
-        // ARM seems to do better with more fine triangles as opposed to using the sample mask.
-        // (At least in our current round rect op.)
-        fPreferTrianglesOverSampleMask = true;
-    }
-
 #ifdef SK_BUILD_FOR_UNIX
     if (kNvidia_VkVendor == properties.vendorID) {
         // On nvidia linux we see a big perf regression when not using dedicated image allocations.
@@ -1754,12 +1748,13 @@ void GrVkCaps::addExtraSamplerKey(GrProcessorKeyBuilder* b,
 
     GrVkSampler::Key key = GrVkSampler::GenerateKey(samplerState, *ycbcrInfo);
 
-    size_t numInts = (sizeof(key) + 3) / 4;
-
-    uint32_t* tmp = b->add32n(numInts);
-
-    tmp[numInts - 1] = 0;
+    constexpr size_t numInts = (sizeof(key) + 3) / 4;
+    uint32_t tmp[numInts];
     memcpy(tmp, &key, sizeof(key));
+
+    for (size_t i = 0; i < numInts; ++i) {
+        b->add32(tmp[i]);
+    }
 }
 
 /**
@@ -1779,12 +1774,9 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
                                  const GrProgramInfo& programInfo,
                                  ProgramDescOverrideFlags overrideFlags) const {
     GrProgramDesc desc;
-    if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
-        SkASSERT(!desc.isValid());
-        return desc;
-    }
+    GrProgramDesc::Build(&desc, rt, programInfo, *this);
 
-    GrProcessorKeyBuilder b(&desc.key());
+    GrProcessorKeyBuilder b(desc.key());
 
     // This will become part of the sheared off key used to persistently cache
     // the SPIRV code. It needs to be added right after the base key so that,
@@ -1816,8 +1808,8 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
     if (rt) {
         GrVkRenderTarget* vkRT = (GrVkRenderTarget*) rt;
 
-        SkASSERT(!needsResolve ||
-                 (vkRT->resolveAttachmentView() && vkRT->supportsInputAttachmentUsage()));
+        SkASSERT(!needsResolve || (vkRT->resolveAttachment() &&
+                                   vkRT->resolveAttachment()->supportsInputAttachmentUsage()));
 
         bool needsStencil = programInfo.numStencilSamples() || programInfo.isStencilEnabled();
         // TODO: support failure in getSimpleRenderPass
@@ -1868,6 +1860,7 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
         b.add32(!programInfo.isMixedSampled() ? 0 : programInfo.numRasterSamples());
     }
 
+    b.flush();
     return desc;
 }
 
