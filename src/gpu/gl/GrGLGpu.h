@@ -20,7 +20,6 @@
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/gl/GrGLAttachment.h"
 #include "src/gpu/gl/GrGLContext.h"
-#include "src/gpu/gl/GrGLPathRendering.h"
 #include "src/gpu/gl/GrGLProgram.h"
 #include "src/gpu/gl/GrGLRenderTarget.h"
 #include "src/gpu/gl/GrGLTexture.h"
@@ -49,11 +48,6 @@ public:
     GrGLVersion glVersion() const { return fGLContext->version(); }
     GrGLSLGeneration glslGeneration() const { return fGLContext->glslGeneration(); }
     const GrGLCaps& glCaps() const { return *fGLContext->caps(); }
-
-    GrGLPathRendering* glPathRendering() {
-        SkASSERT(glCaps().shaderCaps()->pathRenderingSupport());
-        return static_cast<GrGLPathRendering*>(pathRendering());
-    }
 
     // Used by GrGLProgram to configure OpenGL state.
     void bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwizzle&, GrGLTexture*);
@@ -366,20 +360,10 @@ private:
         sk_sp<GrGLProgram> findOrCreateProgram(GrDirectContext*,
                                                GrRenderTarget*,
                                                const GrProgramInfo&);
-        sk_sp<GrGLProgram> findOrCreateProgram(GrDirectContext* dContext,
-                                               const GrProgramDesc& desc,
-                                               const GrProgramInfo& programInfo,
-                                               Stats::ProgramCacheResult* stat) {
-            sk_sp<GrGLProgram> tmp = this->findOrCreateProgram(dContext, nullptr, desc,
-                                                               programInfo, stat);
-            if (!tmp) {
-                fStats.incNumPreCompilationFailures();
-            } else {
-                fStats.incNumPreProgramCacheResult(*stat);
-            }
-
-            return tmp;
-        }
+        sk_sp<GrGLProgram> findOrCreateProgram(GrDirectContext*,
+                                               const GrProgramDesc&,
+                                               const GrProgramInfo&,
+                                               Stats::ProgramCacheResult*);
         bool precompileShader(GrDirectContext*, const SkData& key, const SkData& data);
 
     private:

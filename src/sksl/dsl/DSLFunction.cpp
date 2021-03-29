@@ -19,11 +19,26 @@ namespace SkSL {
 namespace dsl {
 
 void DSLFunction::init(const DSLType& returnType, const char* name,
-                       std::vector<const DSLVar*> params) {
+                       std::vector<DSLVar*> params) {
     std::vector<const Variable*> paramVars;
     paramVars.reserve(params.size());
-    for (const DSLVar* param : params) {
+    for (DSLVar* param : params) {
+        // This counts as declaring the variable; make sure it hasn't been previously declared and
+        // then kill its pending declaration statement. Otherwise the statement will hang around
+        // until after the Var is destroyed, which is probably after the End() call and therefore
+        // after the Pool's destruction. Freeing a pooled object after the Pool's destruction is a
+        // Bad Thing.
+        if (param->fDeclared) {
+            DSLWriter::ReportError("error: using an already-declared variable as a function "
+                                   "parameter\n");
+        }
+        if (param->fInitialValue.release()) {
+            DSLWriter::ReportError("error: variables used as function parameters cannot have "
+                                   "initial values\n");
+        }
+        param->fDeclared = true;
         paramVars.push_back(&DSLWriter::Var(*param));
+        param->fDeclaration = nullptr;
     }
     SkSL::SymbolTable& symbols = *DSLWriter::SymbolTable();
     fDecl = symbols.add(std::make_unique<SkSL::FunctionDeclaration>(
@@ -37,10 +52,11 @@ void DSLFunction::init(const DSLType& returnType, const char* name,
 void DSLFunction::define(DSLBlock block) {
     SkASSERT(fDecl);
     const SkSL::FunctionDeclaration* decl = static_cast<const SkSL::FunctionDeclaration*>(fDecl);
-    SkASSERTF(!decl->definition(), "function already defined");
+    SkASSERTF(!decl->definition(), "function '%s' already defined", decl->description().c_str());
+    std::unique_ptr<Statement> body = block.release();
+    DSLWriter::IRGenerator().finalizeFunction(*decl, body.get());
     auto function = std::make_unique<SkSL::FunctionDefinition>(/*offset=*/-1, decl,
-                                                               /*builtin=*/false, block.release());
-    DSLWriter::IRGenerator().finalizeFunction(*function);
+                                                               /*builtin=*/false, std::move(body));
     if (DSLWriter::Compiler().errorCount()) {
         DSLWriter::ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str());
         DSLWriter::Compiler().setErrorCount(0);

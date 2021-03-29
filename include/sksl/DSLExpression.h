@@ -60,7 +60,9 @@ public:
     /**
      * Creates an expression representing a variable reference.
      */
-    DSLExpression(const DSLVar& var);
+    DSLExpression(DSLVar& var);
+
+    DSLExpression(DSLVar&& var);
 
     DSLExpression(DSLPossibleExpression expr, PositionInfo pos = PositionInfo());
 
@@ -123,8 +125,10 @@ private:
 };
 
 DSLPossibleExpression operator+(DSLExpression left, DSLExpression right);
+DSLPossibleExpression operator+(DSLExpression expr);
 DSLPossibleExpression operator+=(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator-(DSLExpression left, DSLExpression right);
+DSLPossibleExpression operator-(DSLExpression expr);
 DSLPossibleExpression operator-=(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator*(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator*=(DSLExpression left, DSLExpression right);
@@ -192,8 +196,6 @@ public:
     DSLExpression a(PositionInfo pos = PositionInfo());
 
     DSLExpression field(const char* name, PositionInfo pos = PositionInfo());
-
-    DSLPossibleExpression operator=(const DSLVar& var);
 
     DSLPossibleExpression operator=(DSLExpression expr);
 

@@ -384,7 +384,9 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt,
             SkASSERT(sampledProxies[i]->asTextureProxy());
             GrVkTexture* vkTex = static_cast<GrVkTexture*>(sampledProxies[i]->peekTexture());
             SkASSERT(vkTex);
-            vkTex->setImageLayout(
+            GrVkAttachment* texture = vkTex->textureAttachment();
+            SkASSERT(texture);
+            texture->setImageLayout(
                     fGpu, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, false);
         }
@@ -714,18 +716,18 @@ void GrVkOpsRenderPass::onSetScissorRect(const SkIRect& scissor) {
 #ifdef SK_DEBUG
 void check_sampled_texture(GrTexture* tex, GrRenderTarget* rt, GrVkGpu* gpu) {
     SkASSERT(!tex->isProtected() || (rt->isProtected() && gpu->protectedContext()));
-    GrVkTexture* vkTex = static_cast<GrVkTexture*>(tex);
+    auto vkTex = static_cast<GrVkTexture*>(tex)->textureAttachment();
     SkASSERT(vkTex->currentLayout() == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 #endif
 
-bool GrVkOpsRenderPass::onBindTextures(const GrPrimitiveProcessor& primProc,
-                                       const GrSurfaceProxy* const primProcTextures[],
+bool GrVkOpsRenderPass::onBindTextures(const GrGeometryProcessor& geomProc,
+                                       const GrSurfaceProxy* const geomProcTextures[],
                                        const GrPipeline& pipeline) {
 #ifdef SK_DEBUG
     SkASSERT(fCurrentPipelineState);
-    for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
-        check_sampled_texture(primProcTextures[i]->peekTexture(), fRenderTarget, fGpu);
+    for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
+        check_sampled_texture(geomProcTextures[i]->peekTexture(), fRenderTarget, fGpu);
     }
     pipeline.visitTextureEffects([&](const GrTextureEffect& te) {
         check_sampled_texture(te.texture(), fRenderTarget, fGpu);
@@ -734,7 +736,7 @@ bool GrVkOpsRenderPass::onBindTextures(const GrPrimitiveProcessor& primProc,
         check_sampled_texture(dstTexture, fRenderTarget, fGpu);
     }
 #endif
-    if (!fCurrentPipelineState->setAndBindTextures(fGpu, primProc, pipeline, primProcTextures,
+    if (!fCurrentPipelineState->setAndBindTextures(fGpu, geomProc, pipeline, geomProcTextures,
                                                    this->currentCommandBuffer())) {
         return false;
     }

@@ -87,8 +87,7 @@ void MetalCodeGenerator::write(const char* s) {
 
 void MetalCodeGenerator::writeLine(const char* s) {
     this->write(s);
-    fOut->writeText(fLineEnding);
-    fAtLineStart = true;
+    this->writeLine();
 }
 
 void MetalCodeGenerator::write(const String& s) {
@@ -100,7 +99,14 @@ void MetalCodeGenerator::writeLine(const String& s) {
 }
 
 void MetalCodeGenerator::writeLine() {
-    this->writeLine("");
+    fOut->writeText(fLineEnding);
+    fAtLineStart = true;
+}
+
+void MetalCodeGenerator::finishLine() {
+    if (!fAtLineStart) {
+        this->writeLine();
+    }
 }
 
 void MetalCodeGenerator::writeExtension(const Extension& ext) {
@@ -210,7 +216,8 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
     AutoOutputStream outputToExtraFunctions(this, &fExtraFunctions, &fIndentation);
     const FunctionDeclaration& function = call.function();
 
-    String name = "_skOutParamHelper" + to_string(fSwizzleHelperCount++) + "_" + function.name();
+    String name = "_skOutParamHelper" + to_string(fSwizzleHelperCount++) +
+                  "_" + function.mangledName();
     const char* separator = "";
 
     // Emit a prototype for the function we'll be calling through to in our helper.
@@ -293,7 +300,7 @@ String MetalCodeGenerator::getOutParamHelper(const FunctionCall& call,
         this->write(" _skResult = ");
     }
 
-    this->writeName(function.name());
+    this->writeName(function.mangledName());
     this->write("(");
     separator = "";
     this->writeFunctionRequirementArgs(function, separator);
@@ -378,7 +385,7 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         // array indices.)
         this->write(getOutParamHelper(c, arguments, outVars));
     } else {
-        this->write(function.name());
+        this->write(function.mangledName());
     }
 
     this->write("(");
@@ -1450,7 +1457,7 @@ int MetalCodeGenerator::getUniformSet(const Modifiers& m) {
 bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) {
     fRTHeightName = fProgram.fInputs.fRTHeight ? "_globals._anonInterface0->u_skRTHeight" : "";
     const char* separator = "";
-    if ("main" == f.name()) {
+    if (f.isMain()) {
         switch (fProgram.fConfig->fKind) {
             case ProgramKind::kFragment:
                 this->write("fragment Outputs fragmentMain");
@@ -1522,7 +1529,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
     } else {
         this->writeType(f.returnType());
         this->write(" ");
-        this->writeName(f.name());
+        this->writeName(f.mangledName());
         this->write("(");
         this->writeFunctionRequirementParams(f, separator);
     }
@@ -1580,7 +1587,7 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
 
     this->writeLine(" {");
 
-    if (f.declaration().name() == "main") {
+    if (f.declaration().isMain()) {
         this->writeGlobalInit();
         this->writeLine("    Outputs _out;");
         this->writeLine("    (void)_out;");
@@ -1594,14 +1601,14 @@ void MetalCodeGenerator::writeFunction(const FunctionDefinition& f) {
         for (const std::unique_ptr<Statement>& stmt : f.body()->as<Block>().children()) {
             if (!stmt->isEmpty()) {
                 this->writeStatement(*stmt);
-                this->writeLine();
+                this->finishLine();
             }
         }
-        if (f.declaration().name() == "main") {
+        if (f.declaration().isMain()) {
             // If the main function doesn't end with a return, we need to synthesize one here.
             if (!is_block_ending_with_return(f.body().get())) {
                 this->writeReturnStatementFromMain();
-                this->writeLine("");
+                this->finishLine();
             }
         }
         fIndentation--;
@@ -1789,7 +1796,7 @@ void MetalCodeGenerator::writeBlock(const Block& b) {
     for (const std::unique_ptr<Statement>& stmt : b.children()) {
         if (!stmt->isEmpty()) {
             this->writeStatement(*stmt);
-            this->writeLine();
+            this->finishLine();
         }
     }
     if (isScope) {
@@ -1849,20 +1856,21 @@ void MetalCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
     this->writeExpression(*s.value(), Precedence::kTopLevel);
     this->writeLine(") {");
     fIndentation++;
-    for (const std::unique_ptr<SwitchCase>& c : s.cases()) {
-        if (c->value()) {
+    for (const std::unique_ptr<Statement>& stmt : s.cases()) {
+        const SwitchCase& c = stmt->as<SwitchCase>();
+        if (c.value()) {
             this->write("case ");
-            this->writeExpression(*c->value(), Precedence::kTopLevel);
+            this->writeExpression(*c.value(), Precedence::kTopLevel);
             this->writeLine(":");
         } else {
             this->writeLine("default:");
         }
-        fIndentation++;
-        for (const auto& stmt : c->statements()) {
-            this->writeStatement(*stmt);
-            this->writeLine();
+        if (!c.statement()->isEmpty()) {
+            fIndentation++;
+            this->writeStatement(*c.statement());
+            this->finishLine();
+            fIndentation--;
         }
-        fIndentation--;
     }
     fIndentation--;
     this->write("}");
@@ -1883,7 +1891,7 @@ void MetalCodeGenerator::writeReturnStatementFromMain() {
 }
 
 void MetalCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
-    if (fCurrentFunction && fCurrentFunction->name() == "main") {
+    if (fCurrentFunction && fCurrentFunction->isMain()) {
         if (r.expression()) {
             if (r.expression()->type() == *fContext.fTypes.fHalf4) {
                 this->write("_out.sk_FragColor = ");
@@ -2174,7 +2182,7 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
             if (-1 == builtin) {
                 // normal var
                 this->writeVarDeclaration(decl, true);
-                this->writeLine();
+                this->finishLine();
             } else if (SK_FRAGCOLOR_BUILTIN == builtin) {
                 // ignore
             }
@@ -2321,10 +2329,8 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Statemen
         case Statement::Kind::kSwitch: {
             const SwitchStatement& sw = s->as<SwitchStatement>();
             Requirements result = this->requirements(sw.value().get());
-            for (const std::unique_ptr<SwitchCase>& sc : sw.cases()) {
-                for (const auto& st : sc->statements()) {
-                    result |= this->requirements(st.get());
-                }
+            for (const std::unique_ptr<Statement>& sc : sw.cases()) {
+                result |= this->requirements(sc->as<SwitchCase>().statement().get());
             }
             return result;
         }

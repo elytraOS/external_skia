@@ -51,8 +51,18 @@
 
 #define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(this->singleOwner())
 
+GrDirectContext::DirectContextID GrDirectContext::DirectContextID::Next() {
+    static std::atomic<uint32_t> nextID{1};
+    uint32_t id;
+    do {
+        id = nextID.fetch_add(1, std::memory_order_relaxed);
+    } while (id == SK_InvalidUniqueID);
+    return DirectContextID(id);
+}
+
 GrDirectContext::GrDirectContext(GrBackendApi backend, const GrContextOptions& options)
-        : INHERITED(GrContextThreadSafeProxyPriv::Make(backend, options)) {
+        : INHERITED(GrContextThreadSafeProxyPriv::Make(backend, options))
+        , fDirectContextID(DirectContextID::Next()) {
 }
 
 GrDirectContext::~GrDirectContext() {
@@ -199,12 +209,14 @@ bool GrDirectContext::init() {
     SkASSERT(this->threadSafeCache());
 
     fStrikeCache = std::make_unique<GrStrikeCache>();
-    fResourceCache = std::make_unique<GrResourceCache>(this->singleOwner(), this->contextID());
+    fResourceCache = std::make_unique<GrResourceCache>(this->singleOwner(),
+                                                       this->directContextID(),
+                                                       this->contextID());
     fResourceCache->setProxyProvider(this->proxyProvider());
     fResourceCache->setThreadSafeCache(this->threadSafeCache());
     fResourceProvider = std::make_unique<GrResourceProvider>(fGpu.get(), fResourceCache.get(),
                                                              this->singleOwner());
-    fMappedBufferManager = std::make_unique<GrClientMappedBufferManager>(this->contextID());
+    fMappedBufferManager = std::make_unique<GrClientMappedBufferManager>(this->directContextID());
 
     fDidTestPMConversions = false;
 
@@ -311,10 +323,6 @@ void GrDirectContext::performDeferredCleanup(std::chrono::milliseconds msNotUsed
 
     fResourceCache->purgeAsNeeded();
     fResourceCache->purgeResourcesNotUsedSince(purgeTime);
-
-    if (auto ccpr = this->drawingManager()->getCoverageCountingPathRenderer()) {
-        ccpr->purgeCacheEntriesOlderThan(this->proxyProvider(), purgeTime);
-    }
 
     // The textBlob Cache doesn't actually hold any GPU resource but this is a convenient
     // place to purge stale blobs

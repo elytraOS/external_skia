@@ -23,25 +23,34 @@ class GrMtlGpu;
 class GrMtlPipelineState;
 class SkReadBuffer;
 
+struct GrMtlPrecompiledLibraries {
+    // TODO: wrap this in sk_cfp<> or unique_ptr<> when we remove ARC
+    id<MTLRenderPipelineState> fPipelineState;
+    bool fRTHeight = false;
+};
+
 class GrMtlPipelineStateBuilder : public GrGLSLProgramBuilder {
 public:
     /** Generates a pipeline state.
      *
-     * The GrMtlPipelineState implements what is specified in the GrPipeline and
-     * GrPrimitiveProcessor as input. After successful generation, the builder result objects are
-     * available to be used.
+     * The returned GrMtlPipelineState implements the supplied GrProgramInfo.
+     *
      * @return the created pipeline if generation was successful; nullptr otherwise
      */
-    static GrMtlPipelineState* CreatePipelineState(GrMtlGpu*,
-                                                   const GrProgramDesc&,
-                                                   const GrProgramInfo&);
+    static GrMtlPipelineState* CreatePipelineState(
+                                       GrMtlGpu*,
+                                       const GrProgramDesc&,
+                                       const GrProgramInfo&,
+                                       const GrMtlPrecompiledLibraries* precompiledLibs = nullptr);
 
-    static bool PrecompileShaders(GrMtlGpu*, const SkData&);
+    static bool PrecompileShaders(GrMtlGpu*, const SkData&,
+                                  GrMtlPrecompiledLibraries* precompiledLibs);
 
 private:
     GrMtlPipelineStateBuilder(GrMtlGpu*, const GrProgramDesc&, const GrProgramInfo&);
 
-    GrMtlPipelineState* finalize(const GrProgramDesc&, const GrProgramInfo&);
+    GrMtlPipelineState* finalize(const GrProgramDesc&, const GrProgramInfo&,
+                                 const GrMtlPrecompiledLibraries* precompiledLibraries);
 
     const GrCaps* caps() const override;
 
@@ -55,7 +64,7 @@ private:
                                            SkSL::Program::Inputs inputs,
                                            GrContextOptions::ShaderErrorHandler* errorHandler);
     void storeShadersInCache(const SkSL::String shaders[], const SkSL::Program::Inputs inputs[],
-                             SkSL::Program::Settings*, bool isSkSL);
+                             SkSL::Program::Settings*, sk_sp<SkData>, bool isSkSL);
 
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
     const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }

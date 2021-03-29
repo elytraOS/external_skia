@@ -556,18 +556,18 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // GrCaps workarounds
     ////////////////////////////////////////////////////////////////////////////
 
-    // The GTX660 bot experiences crashes and incorrect rendering with MSAA CCPR. Block this path
-    // renderer on non-mixed-sampled NVIDIA.
+    // The GTX660 bot was experiencing crashes and incorrect rendering with MSAA CCPR. Block this
+    // path renderer on non-mixed-sampled NVIDIA.
     // NOTE: We may lose mixed samples support later if the context options suppress dual source
     // blending, but that shouldn't be an issue because MSAA CCPR seems to work fine (even without
     // mixed samples) on later NVIDIA hardware where mixed samples would be supported.
     if ((kNvidia_VkVendor == properties.vendorID) && !fMixedSamplesSupport) {
-        fDriverDisableMSAACCPR = true;
+        fDriverDisableMSAAClipAtlas = true;
     }
 
 #ifdef SK_BUILD_FOR_ANDROID
-    // MSAA CCPR is slow on Android. http://skbug.com/9676
-    fDriverDisableMSAACCPR = true;
+    // MSAA CCPR was slow on Android. http://skbug.com/9676
+    fDriverDisableMSAAClipAtlas = true;
 #endif
 
     if (kARM_VkVendor == properties.vendorID) {
@@ -597,12 +597,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
 
     if (kImagination_VkVendor == properties.vendorID) {
         fShaderCaps->fAtan2ImplementedAsAtanYOverX = true;
-    }
-
-    if (kQualcomm_VkVendor == properties.vendorID) {
-        // The sample mask round rect op draws nothing on Adreno for the srcmode gm.
-        // http://skbug.com/8921
-        fShaderCaps->fCanOnlyUseSampleMaskWithStencil = true;
     }
 }
 
@@ -724,6 +718,10 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
     shaderCaps->fSampleMaskSupport = true;
 
     shaderCaps->fShaderDerivativeSupport = true;
+
+    // ARM GPUs calculate `matrix * vector` in SPIR-V at full precision, even when the inputs are
+    // RelaxedPrecision. Rewriting the multiply as a sum of vector*scalar fixes this. (skia:11769)
+    shaderCaps->fRewriteMatrixVectorMultiply = (kARM_VkVendor == properties.vendorID);
 
     // FIXME: http://skbug.com/7733: Disable geometry shaders until Intel/Radeon GMs draw correctly.
     // shaderCaps->fGeometryShaderSupport =
@@ -1546,12 +1544,13 @@ GrCaps::SurfaceReadPixelsSupport GrVkCaps::surfaceSupportsReadPixels(
         return SurfaceReadPixelsSupport::kUnsupported;
     }
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
+        auto texAttachment = tex->textureAttachment();
         // We can't directly read from a VkImage that has a ycbcr sampler.
-        if (tex->ycbcrConversionInfo().isValid()) {
+        if (texAttachment->ycbcrConversionInfo().isValid()) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         // We can't directly read from a compressed format
-        if (GrVkFormatIsCompressed(tex->imageFormat())) {
+        if (GrVkFormatIsCompressed(texAttachment->imageFormat())) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         return SurfaceReadPixelsSupport::kSupported;
@@ -1571,7 +1570,7 @@ bool GrVkCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     // We can't write to a texture that has a ycbcr sampler.
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
         // We can't directly read from a VkImage that has a ycbcr sampler.
-        if (tex->ycbcrConversionInfo().isValid()) {
+        if (tex->textureAttachment()->ycbcrConversionInfo().isValid()) {
             return false;
         }
     }
@@ -1774,7 +1773,7 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
                                  const GrProgramInfo& programInfo,
                                  ProgramDescOverrideFlags overrideFlags) const {
     GrProgramDesc desc;
-    GrProgramDesc::Build(&desc, rt, programInfo, *this);
+    GrProgramDesc::Build(&desc, programInfo, *this);
 
     GrProcessorKeyBuilder b(desc.key());
 

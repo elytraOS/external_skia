@@ -10,6 +10,7 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkMutex.h"
+#include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrSurface.h"
 #include "src/gpu/mtl/GrMtlGpu.h"
@@ -92,17 +93,23 @@ bool GrSkSLToMSL(const GrMtlGpu* gpu,
 id<MTLLibrary> GrCompileMtlShaderLibrary(const GrMtlGpu* gpu,
                                          const SkSL::String& msl,
                                          GrContextOptions::ShaderErrorHandler* errorHandler) {
+    TRACE_EVENT0("skia.shaders", "driver_compile_shader");
     auto nsSource = [[NSString alloc] initWithBytesNoCopy:const_cast<char*>(msl.c_str())
                                                    length:msl.size()
                                                  encoding:NSUTF8StringEncoding
                                              freeWhenDone:NO];
+    MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
+    if (gpu->caps()->shaderCaps()->canUseFastMath()) {
+        options.fastMathEnabled = true;
+    }
+
     NSError* error = nil;
 #if defined(SK_BUILD_FOR_MAC)
     id<MTLLibrary> compiledLibrary = GrMtlNewLibraryWithSource(gpu->device(), nsSource,
-                                                               nil, &error);
+                                                               options, &error);
 #else
     id<MTLLibrary> compiledLibrary = [gpu->device() newLibraryWithSource:nsSource
-                                                                 options:nil
+                                                                 options:options
                                                                    error:&error];
 #endif
     if (!compiledLibrary) {

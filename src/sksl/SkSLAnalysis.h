@@ -95,9 +95,10 @@ struct Analysis {
     // - myStruct.myArrayField[7].xyz
     static bool IsTrivialExpression(const Expression& expr);
 
-    // Returns true if both expression trees are the same. The left side is expected to be an
-    // lvalue. Intended for use by the optimizer; won't necessarily catch complex cases.
-    static bool IsSelfAssignment(const Expression& left, const Expression& right);
+    // Returns true if both expression trees are the same. Used by the optimizer to look for self-
+    // assignment or self-comparison; won't necessarily catch complex cases. Rejects expressions
+    // that may cause side effects.
+    static bool IsSameExpressionTree(const Expression& left, const Expression& right);
 
     // Is 'expr' a constant-expression, as defined by GLSL 1.0, section 5.10? A constant expression
     // is one of:
@@ -136,7 +137,8 @@ struct Analysis {
     static void ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors);
 
     // Detects functions that fail to return a value on at least one path.
-    static bool CanExitWithoutReturningValue(const FunctionDefinition& funcDef);
+    static bool CanExitWithoutReturningValue(const FunctionDeclaration& funcDecl,
+                                             const Statement& body);
 };
 
 /**
@@ -153,16 +155,37 @@ struct Analysis {
  * any visit call returns true, the default behavior stops recursing and propagates true up the
  * stack.
  */
-
-template <typename PROG, typename EXPR, typename STMT, typename ELEM>
+template <typename T>
 class TProgramVisitor {
 public:
     virtual ~TProgramVisitor() = default;
 
 protected:
-    virtual bool visitExpression(EXPR expression);
-    virtual bool visitStatement(STMT statement);
-    virtual bool visitProgramElement(ELEM programElement);
+    virtual bool visitExpression(typename T::Expression& expression);
+    virtual bool visitStatement(typename T::Statement& statement);
+    virtual bool visitProgramElement(typename T::ProgramElement& programElement);
+
+    virtual bool visitExpressionPtr(typename T::UniquePtrExpression& expr) = 0;
+    virtual bool visitStatementPtr(typename T::UniquePtrStatement& stmt) = 0;
+};
+
+// ProgramVisitors take const types; ProgramWriters do not.
+struct ProgramVisitorTypes {
+    using Program = const SkSL::Program;
+    using Expression = const SkSL::Expression;
+    using Statement = const SkSL::Statement;
+    using ProgramElement = const SkSL::ProgramElement;
+    using UniquePtrExpression = const std::unique_ptr<SkSL::Expression>;
+    using UniquePtrStatement = const std::unique_ptr<SkSL::Statement>;
+};
+
+struct ProgramWriterTypes {
+    using Program = SkSL::Program;
+    using Expression = SkSL::Expression;
+    using Statement = SkSL::Statement;
+    using ProgramElement = SkSL::ProgramElement;
+    using UniquePtrExpression = std::unique_ptr<SkSL::Expression>;
+    using UniquePtrStatement = std::unique_ptr<SkSL::Statement>;
 };
 
 // Squelch bogus Clang warning about template vtables: https://bugs.llvm.org/show_bug.cgi?id=18733
@@ -170,22 +193,38 @@ protected:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wweak-template-vtables"
 #endif
-extern template class TProgramVisitor<const Program&, const Expression&,
-                                      const Statement&, const ProgramElement&>;
-extern template class TProgramVisitor<Program&, Expression&, Statement&, ProgramElement&>;
+extern template class TProgramVisitor<ProgramVisitorTypes>;
+extern template class TProgramVisitor<ProgramWriterTypes>;
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
-class ProgramVisitor : public TProgramVisitor<const Program&,
-                                              const Expression&,
-                                              const Statement&,
-                                              const ProgramElement&> {
+class ProgramVisitor : public TProgramVisitor<ProgramVisitorTypes> {
 public:
     bool visit(const Program& program);
+
+private:
+    // ProgramVisitors shouldn't need access to unique_ptrs, and marking these as final should help
+    // these accessors inline away. Use ProgramWriter if you need the unique_ptrs.
+    bool visitExpressionPtr(const std::unique_ptr<Expression>& e) final {
+        return this->visitExpression(*e);
+    }
+    bool visitStatementPtr(const std::unique_ptr<Statement>& s) final {
+        return this->visitStatement(*s);
+    }
 };
 
-using ProgramWriter = TProgramVisitor<Program&, Expression&, Statement&, ProgramElement&>;
+class ProgramWriter : public TProgramVisitor<ProgramWriterTypes> {
+public:
+    // Subclass these methods if you want access to the unique_ptrs of IRNodes in a program.
+    // This will allow statements or expressions to be replaced during a visit.
+    bool visitExpressionPtr(std::unique_ptr<Expression>& e) override {
+        return this->visitExpression(*e);
+    }
+    bool visitStatementPtr(std::unique_ptr<Statement>& s) override {
+        return this->visitStatement(*s);
+    }
+};
 
 }  // namespace SkSL
 

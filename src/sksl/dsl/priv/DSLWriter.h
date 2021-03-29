@@ -9,13 +9,13 @@
 #define SKSL_DSLWRITER
 
 #include "include/private/SkSLModifiers.h"
+#include "include/private/SkSLStatement.h"
 #include "include/sksl/DSLExpression.h"
 #include "include/sksl/DSLStatement.h"
 #include "src/sksl/SkSLMangler.h"
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLProgram.h"
-#include "src/sksl/ir/SkSLStatement.h"
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
@@ -87,7 +87,18 @@ public:
     /**
      * Returns the SkSL variable corresponding to a DSLVar.
      */
-    static const SkSL::Variable& Var(const DSLVar& var);
+    static const SkSL::Variable& Var(DSLVar& var);
+
+    /**
+     * Returns the SkSL declaration corresponding to a DSLVar.
+     */
+    static std::unique_ptr<SkSL::Statement> Declaration(DSLVar& var);
+
+    /**
+     * For use in testing only: marks the variable as having been declared, so that it can be
+     * destroyed without generating errors.
+     */
+    static void MarkDeclared(DSLVar& var);
 
     /**
      * Returns the (possibly mangled) final name that should be used for an entity with the given
@@ -191,11 +202,13 @@ public:
 private:
     SkSL::ProgramConfig fConfig;
     SkSL::Compiler* fCompiler;
+    std::unique_ptr<Pool> fPool;
     std::shared_ptr<SkSL::SymbolTable> fOldSymbolTable;
     SkSL::ProgramConfig* fOldConfig;
     std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
     ErrorHandler* fErrorHandler = nullptr;
     bool fMangle = true;
+    bool fMarkVarsDeclared = false;
     Mangler fMangler;
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     struct StackFrame {
@@ -206,6 +219,7 @@ private:
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     friend class DSLCore;
+    friend class DSLVar;
     friend class ::AutoDSLContext;
 };
 

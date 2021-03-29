@@ -229,6 +229,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		} else if b.matchGpu("Intel") {
 			// MSAA doesn't work well on Intel GPUs chromium:527565, chromium:983926
 			sampleCount = 0
+		} else if b.matchGpu("GTX", "Quadro") && b.extraConfig("ANGLE") {
+			// 8x MSAA is nondeterministic (by design) on NVIDIA hardware.
+			// The problem is especially bad on ANGLE, so use 4x instead.
+			// skia:6813 skia:6545
+			sampleCount = 4
 		} else if b.os("ChromeOS") {
 			glPrefix = "gles"
 		}
@@ -295,13 +300,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			if sampleCount > 0 {
 				configs = append(configs, fmt.Sprintf("angle_d3d11_es2_msaa%d", sampleCount))
 				configs = append(configs, fmt.Sprintf("angle_d3d11_es3_msaa%d", sampleCount))
-			}
-			if b.model("LenovoYogaC630") {
-				// LenovoYogaC630 only supports D3D11, and to save time, we only test ES3
-				configs = []string{
-					"angle_d3d11_es3",
-					fmt.Sprintf("angle_d3d11_es3_msaa%d", sampleCount),
-				}
 			}
 			if b.matchGpu("GTX", "Quadro") {
 				// See skia:7823 and chromium:693090.
@@ -427,6 +425,25 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = append(configs, "glestestprecompile")
 		}
 
+		// Test SkSL precompile on iPhone 8 as representative iOS device
+		if b.model("iPhone8") && b.extraConfig("Metal") {
+			configs = append(configs, "mtltestprecompile")
+			// avoid tests that can generate slightly different pixels per run
+			skip("mtltestprecompile gm _ atlastext")
+			skip("mtltestprecompile gm _ circular_arcs_hairline")
+			skip("mtltestprecompile gm _ dftext")
+			skip("mtltestprecompile gm _ fontmgr_bounds_1_-0.25")
+			skip("mtltestprecompile gm _ glyph_pos_h_b")
+			skip("mtltestprecompile gm _ glyph_pos_h_f")
+			skip("mtltestprecompile gm _ glyph_pos_n_f")
+			skip("mtltestprecompile gm _ strokes3")
+			skip("mtltestprecompile gm _ texel_subset_linear_mipmap_nearest_down")
+			skip("mtltestprecompile gm _ texel_subset_linear_mipmap_linear_down")
+			skip("mtltestprecompile svg _ A_large_blank_world_map_with_oceans_marked_in_blue.svg")
+			skip("mtltestprecompile svg _ Chalkboard.svg")
+			skip("mtltestprecompile svg _ Ghostscript_Tiger.svg")
+		}
+
 		if b.model(REDUCE_OPS_TASK_SPLITTING_MODELS...) {
 			args = append(args, "--reduceOpsTaskSplitting", "true")
 		}
@@ -442,22 +459,16 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = []string{"gles"}
 		}
 
-		// Test coverage counting path renderer.
-		if b.extraConfig("CCPR") {
-			configs = filter(configs, "gl", "gles")
-			args = append(args, "--pr", "ccpr", "--cc", "true", "--cachePathMasks", "false")
-		}
-
 		// Test GPU tessellation path renderer.
 		if b.extraConfig("GpuTess") {
 			configs = []string{glPrefix + "msaa4"}
 			args = append(args, "--hwtess", "--pr", "tess")
 		}
 
-		// Test non-nvpr on NVIDIA.
-		if b.extraConfig("NonNVPR") {
-			configs = []string{"gl", "glmsaa4"}
-			args = append(args, "--pr", "~nvpr")
+		// Test dynamic MSAA.
+		if b.extraConfig("DMSAA") {
+			configs = []string{glPrefix + "dmsaa"}
+			args = append(args, "--hwtess")
 		}
 
 		// DDL is a GPU-only feature
@@ -986,15 +997,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("Vulkan") && b.model("GalaxyS20") {
 		// skia:10247
 		match = append(match, "~VkPrepareForExternalIOQueueTransitionTest")
-	}
-
-	if b.model("LenovoYogaC630") && b.extraConfig("ANGLE") {
-		// skia:9275
-		skip("_", "tests", "_", "Programs")
-		// skia:8976
-		skip("_", "tests", "_", "GrDefaultPathRendererTest")
-		// https://bugs.chromium.org/p/angleproject/issues/detail?id=3414
-		skip("_", "tests", "_", "PinnedImageTest")
 	}
 
 	if len(skipped) > 0 {

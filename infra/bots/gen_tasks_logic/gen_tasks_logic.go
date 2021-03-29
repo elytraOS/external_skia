@@ -620,10 +620,10 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			ec = strings.Split(val, "_")
 			ignore := []string{
 				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind",
-				"ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
+				"ReleaseAndAbandonGpuContext", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "OOPRDDL", "T8888",
 				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
-				"GpuTess", "NonNVPR", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
+				"GpuTess", "DMSAA", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
 				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
@@ -720,6 +720,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac10.14":   "Mac-10.14.3",
 			"Mac10.15.1": "Mac-10.15.1",
 			"Mac10.15.7": "Mac-10.15.7", // Same as 'Mac', but explicit.
+			"Mac11":      "Mac-11.1",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-18363",
@@ -742,10 +743,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 		if os == "Mac10.15" && b.parts["model"] == "VMware7.1" {
 			// ChOps VMs are at a newer version of MacOS.
 			d["os"] = "Mac-10.15.7"
-		}
-		if b.parts["model"] == "LenovoYogaC630" {
-			// This is currently a unique snowflake.
-			d["os"] = "Windows-10"
 		}
 		if b.parts["model"] == "iPhone6" {
 			// This is the latest iOS that supports iPhone6.
@@ -821,6 +818,9 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			d["docker_installed"] = "true"
 		} else if b.cpu() || b.extraConfig("CanvasKit", "Docker", "SwiftShader") {
 			modelMapping, ok := map[string]map[string]string{
+				"AppleM1": {
+					"MacMini9.1": "arm64-64-Apple_M1",
+				},
 				"AVX": {
 					"VMware7.1": "x86-64-E5-2697_v2",
 				},
@@ -836,9 +836,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				},
 				"Rome": {
 					"GCE": "x86-64-AMD_Rome_GCE",
-				},
-				"Snapdragon850": {
-					"LenovoYogaC630": "arm64-64-Snapdragon850",
 				},
 				"SwiftShader": {
 					"GCE": "x86-64-Haswell_GCE",
@@ -1449,6 +1446,13 @@ func (b *taskBuilder) commonTestPerfAssets() {
 	}
 }
 
+// directUpload adds prerequisites for uploading to GCS.
+func (b *taskBuilder) directUpload(gsBucket, serviceAccount string) {
+	b.recipeProp("gs_bucket", gsBucket)
+	b.serviceAccount(serviceAccount)
+	b.cipd(specs.CIPD_PKGS_GSUTIL...)
+}
+
 // dm generates a Test task using dm.
 func (b *jobBuilder) dm() {
 	compileTaskName := ""
@@ -1456,6 +1460,7 @@ func (b *jobBuilder) dm() {
 	if !b.extraConfig("LottieWeb") {
 		compileTaskName = b.compile()
 	}
+	directUpload := false
 	b.addTask(b.Name, func(b *taskBuilder) {
 		cas := CAS_TEST
 		recipe := "test"
@@ -1476,6 +1481,10 @@ func (b *jobBuilder) dm() {
 		} else if b.extraConfig("CanvasKit") {
 			cas = CAS_CANVASKIT
 			recipe = "test_canvaskit"
+			if b.doUpload() {
+				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
+				directUpload = true
+			}
 		} else if b.extraConfig("LottieWeb") {
 			// CAS_LOTTIE_CI differs from CAS_LOTTIE_WEB in that it includes
 			// more of the files, especially those brought in via DEPS in the
@@ -1485,6 +1494,14 @@ func (b *jobBuilder) dm() {
 			// ToT.
 			cas = CAS_LOTTIE_CI
 			recipe = "test_lottie_web"
+		} else {
+			// Default recipe supports direct upload.
+			// TODO(http://skbug.com/11785): Windows jobs are unable to extract gsutil.
+			// https://bugs.chromium.org/p/chromium/issues/detail?id=1192611
+			if b.doUpload() && !b.matchOs("Win") {
+				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
+				directUpload = true
+			}
 		}
 		b.recipeProp("gold_hashes_url", b.cfg.GoldHashesURL)
 		b.recipeProps(EXTRA_PROPS)
@@ -1538,7 +1555,7 @@ func (b *jobBuilder) dm() {
 
 	// Upload results if necessary. TODO(kjlubick): If we do coverage analysis at the same
 	// time as normal tests (which would be nice), cfg.json needs to have Coverage removed.
-	if b.doUpload() {
+	if b.doUpload() && !directUpload {
 		uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, b.jobNameSchema.Sep, b.Name)
 		depName := b.Name
 		b.addTask(uploadName, func(b *taskBuilder) {

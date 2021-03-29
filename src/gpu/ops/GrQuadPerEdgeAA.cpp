@@ -13,7 +13,6 @@
 #include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
-#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
@@ -596,12 +595,12 @@ public:
         b->add32(GrColorSpaceXform::XformKey(fTextureColorSpaceXform.get()), "colorSpaceXform");
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps& caps) const override {
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps& caps) const override {
         class GLSLProcessor : public GrGLSLGeometryProcessor {
         public:
             void setData(const GrGLSLProgramDataManager& pdman,
-                         const GrPrimitiveProcessor& proc) override {
-                const auto& gp = proc.cast<QuadPerEdgeAAGeometryProcessor>();
+                         const GrGeometryProcessor& geomProc) override {
+                const auto& gp = geomProc.cast<QuadPerEdgeAAGeometryProcessor>();
                 fTextureColorSpaceXformHelper.setData(pdman, gp.fTextureColorSpaceXform.get());
             }
 
@@ -609,7 +608,7 @@ public:
             void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
                 using Interpolation = GrGLSLVaryingHandler::Interpolation;
 
-                const auto& gp = args.fGP.cast<QuadPerEdgeAAGeometryProcessor>();
+                const auto& gp = args.fGeomProc.cast<QuadPerEdgeAAGeometryProcessor>();
                 fTextureColorSpaceXformHelper.emitCode(args.fUniformHandler,
                                                        gp.fTextureColorSpaceXform.get());
 
@@ -640,15 +639,19 @@ public:
                 gpArgs->fLocalCoordVar = gp.fLocalCoord.asShaderVar();
 
                 // Solid color before any texturing gets modulated in
+                const char* blendDst;
                 if (gp.fColor.isInitialized()) {
                     SkASSERT(gp.fCoverageMode != CoverageMode::kWithColor || !gp.fNeedsPerspective);
                     // The color cannot be flat if the varying coverage has been modulated into it
+                    args.fFragBuilder->codeAppendf("half4 %s;", args.fOutputColor);
                     args.fVaryingHandler->addPassThroughAttribute(gp.fColor, args.fOutputColor,
                             gp.fCoverageMode == CoverageMode::kWithColor ?
                             Interpolation::kInterpolated : Interpolation::kCanBeFlat);
+                    blendDst = args.fOutputColor;
                 } else {
                     // Output color must be initialized to something
-                    args.fFragBuilder->codeAppendf("%s = half4(1);", args.fOutputColor);
+                    args.fFragBuilder->codeAppendf("half4 %s = half4(1);", args.fOutputColor);
+                    blendDst = nullptr;
                 }
 
                 // If there is a texture, must also handle texture coordinates and reading from
@@ -675,19 +678,18 @@ public:
                         args.fVaryingHandler->addPassThroughAttribute(gp.fTexSubset, "subset",
                                                                       Interpolation::kCanBeFlat);
                         args.fFragBuilder->codeAppend(
-                                "texCoord = clamp(texCoord, subset.xy, subset.zw);");
+                                "texCoord = clamp(texCoord, subset.LT, subset.RB);");
                     }
 
                     // Now modulate the starting output color by the texture lookup
-                    args.fFragBuilder->codeAppendf("%s = ", args.fOutputColor);
+                    args.fFragBuilder->codeAppendf(
+                            "%s = %s(",
+                            args.fOutputColor,
+                            (gp.fSaturate == Saturate::kYes) ? "saturate" : "");
                     args.fFragBuilder->appendTextureLookupAndBlend(
-                            args.fOutputColor, SkBlendMode::kModulate, args.fTexSamplers[0],
+                            blendDst, SkBlendMode::kModulate, args.fTexSamplers[0],
                             "texCoord", &fTextureColorSpaceXformHelper);
-                    args.fFragBuilder->codeAppend(";");
-                    if (gp.fSaturate == Saturate::kYes) {
-                        args.fFragBuilder->codeAppendf("%s = saturate(%s);",
-                                                       args.fOutputColor, args.fOutputColor);
-                    }
+                    args.fFragBuilder->codeAppend(");");
                 } else {
                     // Saturate is only intended for use with a proxy to account for the fact
                     // that GrTextureOp skips SkPaint conversion, which normally handles this.
@@ -740,13 +742,14 @@ public:
 #endif
                     }
 
-                    args.fFragBuilder->codeAppendf("%s = half4(half(coverage));",
+                    args.fFragBuilder->codeAppendf("half4 %s = half4(half(coverage));",
                                                    args.fOutputCoverage);
                 } else {
                     // Set coverage to 1, since it's either non-AA or the coverage was already
                     // folded into the output color
                     SkASSERT(!gp.fGeomSubset.isInitialized());
-                    args.fFragBuilder->codeAppendf("%s = half4(1);", args.fOutputCoverage);
+                    args.fFragBuilder->codeAppendf("const half4 %s = half4(1);",
+                                                   args.fOutputCoverage);
                 }
             }
             GrGLSLColorSpaceXformHelper fTextureColorSpaceXformHelper;

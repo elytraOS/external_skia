@@ -35,7 +35,8 @@ public:
                             GrPaint&&,
                             const SkMatrix& viewMatrix,
                             const SkRRect&,
-                            GrAAType);
+                            const SkRect& localRect,
+                            GrAA);
 
     const char* name() const final { return "GrFillRRectOp"; }
 
@@ -79,6 +80,7 @@ private:
                 const SkPMColor4f& paintColor,
                 const SkMatrix& totalShapeMatrix,
                 const SkRRect&,
+                const SkRect& localRect,
                 ProcessorFlags,
                 const SkRect& devBounds);
 
@@ -142,12 +144,19 @@ GrOp::Owner FillRRectOp::Make(GrRecordingContext* ctx,
                               GrPaint&& paint,
                               const SkMatrix& viewMatrix,
                               const SkRRect& rrect,
-                              GrAAType aaType) {
+                              const SkRect& localRect,
+                              GrAA aa) {
     using Helper = GrSimpleMeshDrawOpHelper;
 
     const GrCaps* caps = ctx->priv().caps();
 
     if (!caps->drawInstancedSupport()) {
+        return nullptr;
+    }
+
+    // We transform into a normalized -1..+1 space to draw the round rect. If the boundaries are too
+    // large, the math can overflow. The caller can fall back on path rendering if this is the case.
+    if (std::max(rrect.height(), rrect.width()) >= 1e6f) {
         return nullptr;
     }
 
@@ -163,7 +172,7 @@ GrOp::Owner FillRRectOp::Make(GrRecordingContext* ctx,
         // coverage mode. We use them as long as the approximation will be accurate enough.
         flags |= ProcessorFlags::kUseHWDerivatives;
     }
-    if (aaType == GrAAType::kNone) {
+    if (aa == GrAA::kNo) {
         flags |= ProcessorFlags::kFakeNonAA;
     }
 
@@ -183,13 +192,15 @@ GrOp::Owner FillRRectOp::Make(GrRecordingContext* ctx,
     devBounds.outset(SkScalarAbs(m.getScaleX()) + SkScalarAbs(m.getSkewX()),
                      SkScalarAbs(m.getSkewY()) + SkScalarAbs(m.getScaleY()));
 
-    return Helper::FactoryHelper<FillRRectOp>(ctx, std::move(paint), m, rrect, flags, devBounds);
+    return Helper::FactoryHelper<FillRRectOp>(ctx, std::move(paint), m, rrect, localRect, flags,
+                                              devBounds);
 }
 
 FillRRectOp::FillRRectOp(GrProcessorSet* processorSet,
                          const SkPMColor4f& paintColor,
                          const SkMatrix& totalShapeMatrix,
                          const SkRRect& rrect,
+                         const SkRect& localRect,
                          ProcessorFlags processorFlags,
                          const SkRect& devBounds)
         : INHERITED(ClassID())
@@ -198,13 +209,14 @@ FillRRectOp::FillRRectOp(GrProcessorSet* processorSet,
                           ? GrAAType::kNone
                           : GrAAType::kCoverage)  // Use analytic AA even if the RT is MSAA.
         , fColor(paintColor)
-        , fLocalRect(rrect.rect())
+        , fLocalRect(localRect)
         , fProcessorFlags(processorFlags & ~(ProcessorFlags::kHasLocalCoords |
                                              ProcessorFlags::kWideColor |
                                              ProcessorFlags::kMSAAEnabled)) {
     // FillRRectOp::Make fails if there is perspective.
     SkASSERT(!totalShapeMatrix.hasPerspective());
-    this->setBounds(devBounds, GrOp::HasAABloat::kYes, GrOp::IsHairline::kNo);
+    this->setBounds(devBounds, GrOp::HasAABloat(!(processorFlags & ProcessorFlags::kFakeNonAA)),
+                    GrOp::IsHairline::kNo);
 
     // Write the matrix attribs.
     const SkMatrix& m = totalShapeMatrix;
@@ -280,7 +292,7 @@ public:
         b->addBits(kNumProcessorFlags, (uint32_t)fFlags,  "flags");
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const final;
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
 
 private:
     Processor(GrAAType aaType, ProcessorFlags flags)
@@ -317,7 +329,7 @@ private:
     using INHERITED = GrGeometryProcessor;
 };
 
-constexpr GrPrimitiveProcessor::Attribute FillRRectOp::Processor::kVertexAttribs[];
+constexpr GrGeometryProcessor::Attribute FillRRectOp::Processor::kVertexAttribs[];
 
 // Our coverage geometry consists of an inset octagon with solid coverage, surrounded by linear
 // coverage ramps on the horizontal and vertical edges, and "arc coverage" pieces on the diagonal
@@ -475,19 +487,21 @@ void FillRRectOp::onPrepareDraws(Target* target) {
 
 class FillRRectOp::Processor::Impl : public GrGLSLGeometryProcessor {
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-        const auto& proc = args.fGP.cast<Processor>();
+        GrGLSLVertexBuilder* v = args.fVertBuilder;
+        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
+
+        const auto& proc = args.fGeomProc.cast<Processor>();
         bool useHWDerivatives = (proc.fFlags & ProcessorFlags::kUseHWDerivatives);
 
         SkASSERT(proc.vertexStride() == sizeof(CoverageVertex));
 
         GrGLSLVaryingHandler* varyings = args.fVaryingHandler;
         varyings->emitAttributes(proc);
+        f->codeAppendf("half4 %s;", args.fOutputColor);
         varyings->addPassThroughAttribute(*proc.fColorAttrib, args.fOutputColor,
                                           GrGLSLVaryingHandler::Interpolation::kCanBeFlat);
 
         // Emit the vertex shader.
-        GrGLSLVertexBuilder* v = args.fVertBuilder;
-
         // When MSAA is enabled, we need to make sure every sample gets lit up on pixels that have
         // fractional coverage. We do this by making the ramp wider.
         v->codeAppendf("float aa_bloat_multiplier = %i;",
@@ -627,8 +641,6 @@ class FillRRectOp::Processor::Impl : public GrGLSLGeometryProcessor {
         v->codeAppend("}");
 
         // Emit the fragment shader.
-        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
-
         f->codeAppendf("float x_plus_1=%s.x, y=%s.y;", arcCoord.fsIn(), arcCoord.fsIn());
         f->codeAppendf("half coverage;");
         f->codeAppendf("if (0 == x_plus_1) {");
@@ -656,15 +668,14 @@ class FillRRectOp::Processor::Impl : public GrGLSLGeometryProcessor {
         if (proc.fFlags & ProcessorFlags::kFakeNonAA) {
             f->codeAppendf("coverage = (coverage >= .5) ? 1 : 0;");
         }
-        f->codeAppendf("%s = half4(coverage);", args.fOutputCoverage);
+        f->codeAppendf("half4 %s = half4(coverage);", args.fOutputCoverage);
     }
 
-    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor&) override {}
+    void setData(const GrGLSLProgramDataManager&, const GrGeometryProcessor&) override {}
 };
 
 
-GrGLSLPrimitiveProcessor* FillRRectOp::Processor::createGLSLInstance(
-        const GrShaderCaps&) const {
+GrGLSLGeometryProcessor* FillRRectOp::Processor::createGLSLInstance(const GrShaderCaps&) const {
     return new Impl();
 }
 
@@ -693,7 +704,7 @@ void FillRRectOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBound
     }
 
     flushState->bindPipelineAndScissorClip(*fProgramInfo, this->bounds());
-    flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
+    flushState->bindTextures(fProgramInfo->geomProc(), nullptr, fProgramInfo->pipeline());
     flushState->bindBuffers(std::move(fIndexBuffer), std::move(fInstanceBuffer),
                             std::move(fVertexBuffer));
     flushState->drawIndexedInstanced(SK_ARRAY_COUNT(kIndexData), 0, fInstanceCount, fBaseInstance,
@@ -765,9 +776,11 @@ GrOp::Owner GrFillRRectOp::Make(GrRecordingContext* ctx,
                                 GrPaint&& paint,
                                 const SkMatrix& viewMatrix,
                                 const SkRRect& rrect,
-                                GrAAType aaType) {
-    return FillRRectOp::Make(ctx, std::move(paint), viewMatrix, rrect, aaType);
+                                const SkRect& localRect,
+                                GrAA aa) {
+    return FillRRectOp::Make(ctx, std::move(paint), viewMatrix, rrect, localRect, aa);
 }
+
 
 #if GR_TEST_UTILS
 
@@ -775,10 +788,7 @@ GrOp::Owner GrFillRRectOp::Make(GrRecordingContext* ctx,
 
 GR_DRAW_OP_TEST_DEFINE(FillRRectOp) {
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
-    GrAAType aaType = GrAAType::kNone;
-    if (random->nextBool()) {
-        aaType = (numSamples > 1) ? GrAAType::kMSAA : GrAAType::kCoverage;
-    }
+    GrAA aa = GrAA(random->nextBool());
 
     SkRect rect = GrTest::TestRect(random);
     float w = rect.width();
@@ -792,7 +802,8 @@ GR_DRAW_OP_TEST_DEFINE(FillRRectOp) {
                                std::move(paint),
                                viewMatrix,
                                rrect,
-                               aaType);
+                               rrect.rect(),
+                               aa);
 }
 
 #endif

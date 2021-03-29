@@ -8,27 +8,23 @@
 #ifndef GrGLSLShaderBuilder_DEFINED
 #define GrGLSLShaderBuilder_DEFINED
 
+#include "include/private/SkSLStatement.h"
 #include "include/private/SkSLString.h"
 #include "include/private/SkTDArray.h"
 #include "src/core/SkSpan.h"
 #include "src/gpu/GrShaderVar.h"
 #include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
-#include "src/sksl/ir/SkSLStatement.h"
 
 #include <stdarg.h>
 
 class GrGLSLColorSpaceXformHelper;
 
 namespace SkSL {
-
-class Statement;
-
-namespace dsl {
-class DSLStatement;
-} // namespace dsl
-
-} // namespace SkSL
+    namespace dsl {
+        class DSLWriter;
+    }
+}
 
 /**
   base class for all shaders builders
@@ -145,15 +141,13 @@ public:
     /** Emits a prototype for a helper function outside of main() in the fragment shader. */
     void emitFunctionPrototype(GrSLType returnType,
                                const char* mangledName,
-                               SkSpan<const GrShaderVar> args,
-                               bool forceInline = false);
+                               SkSpan<const GrShaderVar> args);
 
     /** Emits a helper function outside of main() in the fragment shader. */
     void emitFunction(GrSLType returnType,
                       const char* mangledName,
                       SkSpan<const GrShaderVar> args,
-                      const char* body,
-                      bool forceInline = false);
+                      const char* body);
 
     void emitFunction(const char* declaration, const char* body);
 
@@ -190,8 +184,7 @@ protected:
 
     void appendFunctionDecl(GrSLType returnType,
                             const char* mangledName,
-                            SkSpan<const GrShaderVar> args,
-                            bool forceInline);
+                            SkSpan<const GrShaderVar> args);
 
     /**
      * Features that should only be enabled internally by the builders.
@@ -296,5 +289,6 @@ protected:
     friend class GrGLPathProgramBuilder; // to access fInputs.
     friend class GrVkPipelineStateBuilder;
     friend class GrMtlPipelineStateBuilder;
+    friend class SkSL::dsl::DSLWriter;
 };
 #endif

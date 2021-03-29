@@ -31,7 +31,7 @@ public:
         return context.fTypes.fBool.get();
     }
     std::unique_ptr<Expression> value(const Context& context) const override {
-        return std::make_unique<BoolLiteral>(context, /*offset=*/-1, (context.fCaps.*fGetCap)());
+        return BoolLiteral::Make(context, /*offset=*/-1, (context.fCaps.*fGetCap)());
     }
 
 private:
@@ -48,7 +48,7 @@ public:
         return context.fTypes.fInt.get();
     }
     std::unique_ptr<Expression> value(const Context& context) const override {
-        return std::make_unique<IntLiteral>(context, /*offset=*/-1, (context.fCaps.*fGetCap)());
+        return IntLiteral::Make(context, /*offset=*/-1, (context.fCaps.*fGetCap)());
     }
 
 private:
@@ -94,6 +94,7 @@ static const CapsLookupTable& caps_lookup_table() {
         CAP(Bool, integerSupport),
         CAP(Bool, builtinFMASupport),
         CAP(Bool, builtinDeterminantSupport),
+        CAP(Bool, rewriteMatrixVectorMultiply),
     #undef CAP
     });
     return *sCapsLookupTable;

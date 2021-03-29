@@ -97,7 +97,11 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     canvas.drawAtlas(img, [1, 2, 3, 4, 5, 6, 7, 8], [8, 7, 6, 5, 4, 3, 2, 1], paint,
                      CK.BlendMode.Darken,
                      [CK.ColorAsInt(100, 110, 120), CK.ColorAsInt(130, 140, 150)]);
-    canvas.drawCircle(20, 20, 20, paint);
+    canvas.drawAtlas(img, [1, 2, 3, 4, 5, 6, 7, 8], [8, 7, 6, 5, 4, 3, 2, 1], paint,
+                     null, null, {B: 0, C: 0.5});
+    canvas.drawAtlas(img, [1, 2, 3, 4, 5, 6, 7, 8], [8, 7, 6, 5, 4, 3, 2, 1], paint,
+                     null, null, {filter: CK.FilterMode.Linear, mipmap: CK.MipmapMode.Nearest});
+       canvas.drawCircle(20, 20, 20, paint);
     canvas.drawColor(someColor);
     canvas.drawColor(someColor, CK.BlendMode.ColorDodge);
     canvas.drawColorComponents(0.2, 1.0, -0.02, 0.5);
@@ -685,8 +689,13 @@ function skottieTests(CK: CanvasKit, canvas?: Canvas) {
     mAnim.setColor('slider', CK.WHITE);
     mAnim.setOpacity('slider', 0.8);
     const e = mAnim.getMarkers();  // $ExpectType object[]
-    const f = mAnim.getColorProps();  // $ExpectType object[]
-    const g = mAnim.getOpacityProps();  // $ExpectType object[]
+    const f = mAnim.getColorProps();  // $ExpectType ColorProperty[]
+    const g = mAnim.getOpacityProps();  // $ExpectType OpacityProperty[]
+    const h = mAnim.getTextProps();  // $ExpectType TextProperty[]
+
+    const i = mAnim.setColor('foo', CK.RED);  // $ExpectType boolean
+    const j = mAnim.setOpacity('foo', 0.5);  // $ExpectType boolean
+    const k = mAnim.setText('foo', 'bar', 12);  // $ExpectType boolean
 }
 
 function shaderTests(CK: CanvasKit) {

@@ -13,7 +13,6 @@
 #include <vector>
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLAnalysis.h"
-#include "src/sksl/SkSLCFGGenerator.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLInliner.h"
@@ -33,7 +32,6 @@
 #define SK_HEIGHT_BUILTIN              10012
 #define SK_FRAGCOORD_BUILTIN              15
 #define SK_CLOCKWISE_BUILTIN              17
-#define SK_SAMPLEMASK_BUILTIN             20
 #define SK_VERTEXID_BUILTIN               42
 #define SK_INSTANCEID_BUILTIN             43
 #define SK_INVOCATIONID_BUILTIN            8
@@ -75,8 +73,9 @@ struct ParsedModule {
  */
 class SK_API Compiler : public ErrorReporter {
 public:
-    static constexpr const char* RTADJUST_NAME  = "sk_RTAdjust";
-    static constexpr const char* PERVERTEX_NAME = "sk_PerVertex";
+    static constexpr const char FRAGCOLOR_NAME[]  = "sk_FragColor";
+    static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
+    static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
 
     struct OptimizationContext {
         // nodes we have already reported errors for and should not error on again
@@ -179,41 +178,21 @@ private:
     const ParsedModule& loadPublicModule();
     const ParsedModule& loadRuntimeEffectModule();
 
-    void scanCFG(CFG* cfg, BlockId block, SkBitSet* processedSet);
-    void computeDataFlow(CFG* cfg);
-
     /** Verifies that @if and @switch statements were actually optimized away. */
     void verifyStaticTests(const Program& program);
 
-    /**
-     * Simplifies the expression pointed to by iter (in both the IR and CFG structures), if
-     * possible.
-     */
-    void simplifyExpression(DefinitionMap& definitions,
-                            BasicBlock& b,
-                            std::vector<BasicBlock::Node>::iterator* iter,
-                            OptimizationContext* context);
-
-    /**
-     * Simplifies the statement pointed to by iter (in both the IR and CFG structures), if
-     * possible.
-     */
-    void simplifyStatement(DefinitionMap& definitions,
-                           BasicBlock& b,
-                           std::vector<BasicBlock::Node>::iterator* iter,
-                           OptimizationContext* context);
-
-    /**
-     * Optimizes a function based on control flow analysis. Returns true if changes were made.
-     */
-    bool scanCFG(FunctionDefinition& f, ProgramUsage* usage);
-
-    /**
-     * Optimize every function in the program.
-     */
+    /** Optimize every function in the program. */
     bool optimize(Program& program);
 
+    /** Optimize the module. */
     bool optimize(LoadedModule& module);
+
+    /** Eliminates unused functions from a Program, according to the stats in ProgramUsage. */
+    bool removeDeadFunctions(Program& program, ProgramUsage* usage);
+
+    /** Eliminates unreferenced variables from a Program, according to the stats in ProgramUsage. */
+    bool removeDeadGlobalVariables(Program& program, ProgramUsage* usage);
+    bool removeDeadLocalVariables(Program& program, ProgramUsage* usage);
 
     Position position(int offset);
 

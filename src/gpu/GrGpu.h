@@ -18,7 +18,6 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrPixmap.h"
-#include "src/gpu/GrSamplePatternDictionary.h"
 #include "src/gpu/GrSwizzle.h"
 #include "src/gpu/GrTextureProducer.h"
 #include "src/gpu/GrXferProcessor.h"
@@ -33,9 +32,8 @@ class GrGLContext;
 class GrPath;
 class GrPathRenderer;
 class GrPathRendererChain;
-class GrPathRendering;
 class GrPipeline;
-class GrPrimitiveProcessor;
+class GrGeometryProcessor;
 class GrRenderTarget;
 class GrRingBuffer;
 class GrSemaphore;
@@ -63,8 +61,6 @@ public:
      */
     const GrCaps* caps() const { return fCaps.get(); }
     sk_sp<const GrCaps> refCaps() const { return fCaps; }
-
-    GrPathRendering* pathRendering() { return fPathRendering.get();  }
 
     virtual GrStagingBufferManager* stagingBufferManager() { return nullptr; }
 
@@ -342,19 +338,6 @@ public:
     bool copySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                      const SkIPoint& dstPoint);
 
-    // Queries the per-pixel HW sample locations for the given render target, and then finds or
-    // assigns a key that uniquely identifies the sample pattern. The actual sample locations can be
-    // retrieved with retrieveSampleLocations().
-    int findOrAssignSamplePatternKey(GrRenderTarget*);
-
-    // Retrieves the per-pixel HW sample locations for the given sample pattern key, and, as a
-    // by-product, the actual number of samples in use. (This may differ from the number of samples
-    // requested by the render target.) Sample locations are returned as 0..1 offsets relative to
-    // the top-left corner of the pixel.
-    const SkTArray<SkPoint>& retrieveSampleLocations(int samplePatternKey) const {
-        return fSamplePatternDictionary.retrieveSampleLocations(samplePatternKey);
-    }
-
     // Returns a GrOpsRenderPass which GrOpsTasks send draw commands to instead of directly
     // to the Gpu object. The 'bounds' rect is the content rect of the renderTarget.
     // If a 'stencil' is provided it will be the one bound to 'renderTarget'. If one is not
@@ -423,9 +406,6 @@ public:
 
         void reset() { *this = {}; }
 
-        int renderTargetBinds() const { return fRenderTargetBinds; }
-        void incRenderTargetBinds() { fRenderTargetBinds++; }
-
         int textureCreates() const { return fTextureCreates; }
         void incTextureCreates() { fTextureCreates++; }
 
@@ -459,12 +439,14 @@ public:
         int numScratchMSAAAttachmentsReused() const { return fNumScratchMSAAAttachmentsReused; }
         void incNumScratchMSAAAttachmentsReused() { ++fNumScratchMSAAAttachmentsReused; }
 
+        int renderPasses() const { return fRenderPasses; }
+        void incRenderPasses() { fRenderPasses++; }
+
 #if GR_TEST_UTILS
         void dump(SkString*);
         void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
 #endif
     private:
-        int fRenderTargetBinds = 0;
         int fTextureCreates = 0;
         int fTextureUploads = 0;
         int fTransfersToTexture = 0;
@@ -476,14 +458,14 @@ public:
         int fNumSubmitToGpus = 0;
         int fNumScratchTexturesReused = 0;
         int fNumScratchMSAAAttachmentsReused = 0;
+        int fRenderPasses = 0;
 
-#else
+#else  // !GR_GPU_STATS
 
 #if GR_TEST_UTILS
         void dump(SkString*) {}
         void dumpKeyValuePairs(SkTArray<SkString>*, SkTArray<double>*) {}
 #endif
-        void incRenderTargetBinds() {}
         void incTextureCreates() {}
         void incTextureUploads() {}
         void incTransfersToTexture() {}
@@ -495,6 +477,7 @@ public:
         void incNumSubmitToGpus() {}
         void incNumScratchTexturesReused() {}
         void incNumScratchMSAAAttachmentsReused() {}
+        void incRenderPasses() {}
 #endif
     };
 
@@ -700,7 +683,6 @@ protected:
     void setOOMed() { fOOMed = true; }
 
     Stats                            fStats;
-    std::unique_ptr<GrPathRendering> fPathRendering;
 
     // Subclass must call this to initialize caps & compiler in its constructor.
     void initCapsAndCompiler(sk_sp<const GrCaps> caps);
@@ -852,7 +834,6 @@ private:
     uint32_t fResetBits;
     // The context owns us, not vice-versa, so this ptr is not ref'ed by Gpu.
     GrDirectContext* fContext;
-    GrSamplePatternDictionary fSamplePatternDictionary;
 
     struct SubmittedProc {
         SubmittedProc(GrGpuSubmittedProc proc, GrGpuSubmittedContext context)

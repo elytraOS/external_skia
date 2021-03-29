@@ -11,7 +11,6 @@
 #include "include/private/SkSLString.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrShaderVar.h"
-#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
@@ -99,16 +98,14 @@ public:
                  const GrFragmentProcessor& fp,
                  const char* inputColor,
                  const char* sampleCoord,
-                 const TransformedCoordVars& transformedCoordVars,
-                 bool forceInline)
+                 const TransformedCoordVars& transformedCoordVars)
                 : fFragBuilder(fragBuilder)
                 , fUniformHandler(uniformHandler)
                 , fShaderCaps(caps)
                 , fFp(fp)
                 , fInputColor(inputColor ? inputColor : "half4(1.0)")
                 , fSampleCoord(sampleCoord)
-                , fTransformedCoords(transformedCoordVars)
-                , fForceInline(forceInline) {}
+                , fTransformedCoords(transformedCoordVars) {}
         GrGLSLFPFragmentBuilder* fFragBuilder;
         GrGLSLUniformHandler* fUniformHandler;
         const GrShaderCaps* fShaderCaps;
@@ -116,7 +113,6 @@ public:
         const char* fInputColor;
         const char* fSampleCoord;
         const TransformedCoordVars& fTransformedCoords;
-        bool fForceInline;
     };
 
     virtual void emitCode(EmitArgs&) = 0;

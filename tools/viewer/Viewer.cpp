@@ -68,7 +68,6 @@
 namespace SkSL {
 extern bool gSkSLOptimizer;
 extern bool gSkSLInliner;
-extern bool gSkSLControlFlowAnalysis;
 }
 
 class CapturingShaderErrorHandler : public GrContextOptions::ShaderErrorHandler {
@@ -134,6 +133,7 @@ static DEFINE_bool(list, false, "List samples?");
 static DEFINE_string2(backend, b, "sw", "Backend to use. Allowed values are " BACKENDS_STR ".");
 
 static DEFINE_int(msaa, 1, "Number of subpixel samples. 0 for no HW antialiasing.");
+static DEFINE_bool(dmsaa, false, "Use internal MSAA to render to non-MSAA surfaces?");
 
 static DEFINE_string(bisect, "", "Path to a .skp or .svg file to bisect.");
 
@@ -341,7 +341,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 
     gPathRendererNames[GpuPathRenderers::kDefault] = "Default Path Renderers";
     gPathRendererNames[GpuPathRenderers::kTessellation] = "Tessellation";
-    gPathRendererNames[GpuPathRenderers::kStencilAndCover] = "NV_path_rendering";
     gPathRendererNames[GpuPathRenderers::kSmall] = "Small paths (cached sdf or alpha masks)";
     gPathRendererNames[GpuPathRenderers::kCoverageCounting] = "CCPR";
     gPathRendererNames[GpuPathRenderers::kTriangulating] = "Triangulating";
@@ -379,6 +378,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
             GrContextOptions::ShaderCacheStrategy::kBackendSource;
     displayParams.fGrContextOptions.fShaderErrorHandler = &gShaderErrorHandler;
     displayParams.fGrContextOptions.fSuppressPrints = true;
+    displayParams.fGrContextOptions.fAlwaysAntialias = FLAGS_dmsaa;
     fWindow->setRequestedDisplayParams(displayParams);
     fDisplay = fWindow->getRequestedDisplayParams();
     fRefresh = FLAGS_redraw;
@@ -1912,9 +1912,6 @@ void Viewer::drawImGui() {
                             if (GrTessellationPathRenderer::IsSupported(*caps)) {
                                 prButton(GpuPathRenderers::kTessellation);
                             }
-                            if (caps->shaderCaps()->pathRenderingSupport()) {
-                                prButton(GpuPathRenderers::kStencilAndCover);
-                            }
                         }
                         if (1 == fWindow->sampleCount()) {
                             if (GrCoverageCountingPathRenderer::IsSupported(*caps)) {
@@ -2346,7 +2343,6 @@ void Viewer::drawImGui() {
                             GrContextOptions::ShaderCacheStrategy::kSkSL;
 
                 int optLevel =                           sksl ? kShaderOptLevel_Source :
-                               SkSL::gSkSLControlFlowAnalysis ? kShaderOptLevel_ControlFlow :
                                            SkSL::gSkSLInliner ? kShaderOptLevel_Inline :
                                          SkSL::gSkSLOptimizer ? kShaderOptLevel_Optimize :
                                                                 kShaderOptLevel_Compile;
@@ -2413,8 +2409,6 @@ void Viewer::drawImGui() {
                 ImGui::RadioButton("Optimize", &newOptLevel, kShaderOptLevel_Optimize);
                 ImGui::SameLine();
                 ImGui::RadioButton("Inline", &newOptLevel, kShaderOptLevel_Inline);
-                ImGui::SameLine();
-                ImGui::RadioButton("Control-Flow", &newOptLevel, kShaderOptLevel_ControlFlow);
 
                 // If we are changing the compile mode, we want to reset the cache and redo
                 // everything.
@@ -2422,7 +2416,6 @@ void Viewer::drawImGui() {
                     sksl = doDump || (newOptLevel == kShaderOptLevel_Source);
                     SkSL::gSkSLOptimizer           = (newOptLevel >= kShaderOptLevel_Optimize);
                     SkSL::gSkSLInliner             = (newOptLevel >= kShaderOptLevel_Inline);
-                    SkSL::gSkSLControlFlowAnalysis = (newOptLevel >= kShaderOptLevel_ControlFlow);
 
                     params.fGrContextOptions.fShaderCacheStrategy =
                             sksl ? GrContextOptions::ShaderCacheStrategy::kSkSL
@@ -2740,10 +2733,6 @@ void Viewer::updateUIState() {
                     if (GrTessellationPathRenderer::IsSupported(*caps)) {
                         writer.appendString(
                                 gPathRendererNames[GpuPathRenderers::kTessellation].c_str());
-                    }
-                    if (caps->shaderCaps()->pathRenderingSupport()) {
-                        writer.appendString(
-                                gPathRendererNames[GpuPathRenderers::kStencilAndCover].c_str());
                     }
                 }
                 if (1 == fWindow->sampleCount()) {

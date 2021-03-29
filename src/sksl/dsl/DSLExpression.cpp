@@ -41,9 +41,9 @@ DSLExpression::DSLExpression(std::unique_ptr<SkSL::Expression> expression)
 }
 
 DSLExpression::DSLExpression(float value)
-    : fExpression(std::make_unique<SkSL::FloatLiteral>(DSLWriter::Context(),
-                                                       /*offset=*/-1,
-                                                       value)) {
+    : fExpression(SkSL::FloatLiteral::Make(DSLWriter::Context(),
+                                           /*offset=*/-1,
+                                           value)) {
     if (!isfinite(value)) {
         if (isinf(value)) {
             DSLWriter::ReportError("error: floating point value is infinite\n");
@@ -54,19 +54,25 @@ DSLExpression::DSLExpression(float value)
 }
 
 DSLExpression::DSLExpression(int value)
-    : fExpression(std::make_unique<SkSL::IntLiteral>(DSLWriter::Context(),
-                                                     /*offset=*/-1,
-                                                     value)) {}
+        : fExpression(SkSL::IntLiteral::Make(DSLWriter::Context(),
+                                             /*offset=*/-1,
+                                             value)) {}
 
 DSLExpression::DSLExpression(bool value)
-    : fExpression(std::make_unique<SkSL::BoolLiteral>(DSLWriter::Context(),
-                                                     /*offset=*/-1,
-                                                     value)) {}
+    : fExpression(SkSL::BoolLiteral::Make(DSLWriter::Context(),
+                                          /*offset=*/-1,
+                                          value)) {}
 
-DSLExpression::DSLExpression(const DSLVar& var)
+DSLExpression::DSLExpression(DSLVar& var)
     : fExpression(std::make_unique<SkSL::VariableReference>(
                                                         /*offset=*/-1,
-                                                        var.fVar,
+                                                        &DSLWriter::Var(var),
+                                                        SkSL::VariableReference::RefKind::kRead)) {}
+
+DSLExpression::DSLExpression(DSLVar&& var)
+    : fExpression(std::make_unique<SkSL::VariableReference>(
+                                                        /*offset=*/-1,
+                                                        &DSLWriter::Var(var),
                                                         SkSL::VariableReference::RefKind::kRead)) {}
 
 DSLExpression::DSLExpression(DSLPossibleExpression expr, PositionInfo pos) {
@@ -181,6 +187,8 @@ OP(<, TK_LT)
 OP(>=, TK_GTEQ)
 OP(<=, TK_LTEQ)
 
+PREFIXOP(+, TK_PLUS)
+PREFIXOP(-, TK_MINUS)
 PREFIXOP(!, TK_LOGICALNOT)
 PREFIXOP(~, TK_BITWISENOT)
 PREFIXOP(++, TK_PLUSPLUS)
@@ -248,10 +256,6 @@ DSLExpression DSLPossibleExpression::a(PositionInfo pos) {
 
 DSLExpression DSLPossibleExpression::field(const char* name, PositionInfo pos) {
     return DSLExpression(this->release()).field(name, pos);
-}
-
-DSLPossibleExpression DSLPossibleExpression::operator=(const DSLVar& var) {
-    return this->operator=(DSLExpression(var));
 }
 
 DSLPossibleExpression DSLPossibleExpression::operator=(DSLExpression expr) {

@@ -50,15 +50,13 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fPerformColorClearsAsDraws = false;
     fAvoidLargeIndexBufferDraws = false;
     fPerformStencilClearsAsDraws = false;
-    fAllowCoverageCounting = false;
     fTransferFromBufferToTextureSupport = false;
     fTransferFromSurfaceToBufferSupport = false;
     fWritePixelsRowBytesSupport = false;
     fReadPixelsRowBytesSupport = false;
     fShouldCollapseSrcOverToSrcWhenAble = false;
     fMustSyncGpuDuringAbandon = true;
-    fDriverDisableCCPR = false;
-    fDriverDisableMSAACCPR = false;
+    fDriverDisableMSAAClipAtlas = false;
     fDisableTessellationPathRenderer = false;
 
     fBlendEquationSupport = kBasic_BlendEquationSupport;
@@ -114,8 +112,7 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
     fShaderCaps->applyOptionsOverrides(options);
     this->onApplyOptionsOverrides(options);
     if (options.fDisableDriverCorrectnessWorkarounds) {
-        SkASSERT(!fDriverDisableCCPR);
-        SkASSERT(!fDriverDisableMSAACCPR);
+        SkASSERT(!fDriverDisableMSAAClipAtlas);
         SkASSERT(!fDisableTessellationPathRenderer);
         SkASSERT(!fAvoidStencilBuffers);
         SkASSERT(!fAvoidWritePixelsFastPath);
@@ -134,8 +131,6 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
         fPerformColorClearsAsDraws = true;
         fPerformStencilClearsAsDraws = true;
     }
-
-    fAllowCoverageCounting = !options.fDisableCoverageCountingPaths;
 
     fMaxTextureSize = std::min(fMaxTextureSize, options.fMaxTextureSizeOverride);
 #if GR_TEST_UTILS
@@ -235,16 +230,14 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Use draws for color clears", fPerformColorClearsAsDraws);
     writer->appendBool("Avoid Large IndexBuffer Draws", fAvoidLargeIndexBufferDraws);
     writer->appendBool("Use draws for stencil clip clears", fPerformStencilClearsAsDraws);
-    writer->appendBool("Allow coverage counting shortcuts", fAllowCoverageCounting);
     writer->appendBool("Supports transfers from buffers to textures",
                        fTransferFromBufferToTextureSupport);
     writer->appendBool("Supports transfers from textures to buffers",
                        fTransferFromSurfaceToBufferSupport);
     writer->appendBool("Write pixels row bytes support", fWritePixelsRowBytesSupport);
     writer->appendBool("Read pixels row bytes support", fReadPixelsRowBytesSupport);
-    writer->appendBool("Disable CCPR on current driver [workaround]", fDriverDisableCCPR);
-    writer->appendBool("Disable MSAA version of CCPR on current driver [workaround]",
-                       fDriverDisableMSAACCPR);
+    writer->appendBool("Disable msaa clip mask atlas on current driver [workaround]",
+                       fDriverDisableMSAAClipAtlas);
     writer->appendBool("Disable GrTessellationPathRenderer current driver [workaround]",
                        fDisableTessellationPathRenderer);
     writer->appendBool("Clamp-to-border", fClampToBorderSupport);
@@ -383,6 +376,11 @@ GrCaps::SupportedRead GrCaps::supportedReadPixelsColorType(GrColorType srcColorT
 
 GrBackendFormat GrCaps::getDefaultBackendFormat(GrColorType colorType,
                                                 GrRenderable renderable) const {
+    // Unknown color types are always an invalid format, so early out before calling virtual.
+    if (colorType == GrColorType::kUnknown) {
+        return {};
+    }
+
     auto format = this->onGetDefaultBackendFormat(colorType);
     if (!this->isFormatTexturable(format)) {
         return {};

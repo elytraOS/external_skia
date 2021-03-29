@@ -1,8 +1,7 @@
 
 out vec4 sk_FragColor;
-uniform float val;
-void main() {
-    float _0_x = val;
+vec4 main() {
+    float _0_x = 12345.0;
     ++_0_x;
     ++_0_x;
     ++_0_x;
@@ -37,8 +36,8 @@ void main() {
     --_0_x;
     --_0_x;
     --_0_x;
-    _0_x = 456.0;
-    float _1_x = 456.0;
+    _0_x = 0.0;
+    float _1_x = _0_x;
     ++_1_x;
     ++_1_x;
     ++_1_x;
@@ -73,8 +72,6 @@ void main() {
     --_1_x;
     --_1_x;
     --_1_x;
-    _1_x = 123.0;
-    sk_FragColor = vec4(123.0);
-
-
+    _1_x = 1.0;
+    return vec3(vec2(_1_x), 0.0).zxzy;
 }

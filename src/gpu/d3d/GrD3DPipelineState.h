@@ -32,7 +32,7 @@ public:
                        const UniformInfoArray& uniforms,
                        uint32_t uniformSize,
                        uint32_t numSamplers,
-                       std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
+                       std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
                        std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
                        std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls,
                        size_t vertexStride,
@@ -55,9 +55,10 @@ public:
 
     void setAndBindConstants(GrD3DGpu*, const GrRenderTarget*, const GrProgramInfo&);
 
-    void setAndBindTextures(GrD3DGpu*, const GrPrimitiveProcessor& primProc,
-                            const GrSurfaceProxy* const primProcTextures[],
-                            const GrPipeline& pipeline);
+    void setAndBindTextures(GrD3DGpu*,
+                            const GrGeometryProcessor&,
+                            const GrSurfaceProxy* const geomProcTextures[],
+                            const GrPipeline&);
 
     void bindBuffers(GrD3DGpu*, sk_sp<const GrBuffer> indexBuffer,
                      sk_sp<const GrBuffer> instanceBuffer, sk_sp<const GrBuffer> vertexBuffer,
@@ -117,7 +118,7 @@ private:
     GrGLSLBuiltinUniformHandles fBuiltinUniformHandles;
 
     // Processors in the GrD3DPipelineState
-    std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
+    std::unique_ptr<GrGLSLGeometryProcessor> fGeometryProcessor;
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
     std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fFPImpls;
 

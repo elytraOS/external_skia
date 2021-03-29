@@ -372,10 +372,6 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* dContext)
     }
     static_assert(kGrGpuBufferTypeCount == SK_ARRAY_COUNT(fHWBufferState));
 
-    if (this->glCaps().shaderCaps()->pathRenderingSupport()) {
-        fPathRendering = std::make_unique<GrGLPathRendering>(this);
-    }
-
     if (this->glCaps().useSamplerObjects()) {
         fSamplerObjectCache = std::make_unique<SamplerObjectCache>(this);
     }
@@ -384,7 +380,6 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* dContext)
 GrGLGpu::~GrGLGpu() {
     // Ensure any GrGpuResource objects get deleted first, since they may require a working GrGLGpu
     // to release the resources held by the objects themselves.
-    fPathRendering.reset();
     fCopyProgramArrayBuffer.reset();
     fMipmapProgramArrayBuffer.reset();
     if (fProgramCache) {
@@ -480,9 +475,6 @@ void GrGLGpu::disconnect(DisconnectType type) {
         fMipmapPrograms[i].fProgram = 0;
     }
 
-    if (this->glCaps().shaderCaps()->pathRenderingSupport()) {
-        this->glPathRendering()->disconnect(type);
-    }
     fFinishCallbacks.callAll(/* doDelete */ DisconnectType::kCleanup == type);
 }
 
@@ -604,12 +596,6 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
         fHWBoundRenderTargetUniqueID.makeInvalid();
         fHWSRGBFramebuffer = kUnknown_TriState;
         fBoundDrawFramebuffer = 0;
-    }
-
-    if (resetBits & kPathRendering_GrGLBackendState) {
-        if (this->caps()->shaderCaps()->pathRenderingSupport()) {
-            this->glPathRendering()->resetContext();
-        }
     }
 
     // we assume these values
@@ -2928,7 +2914,6 @@ void GrGLGpu::onFBOChanged() {
 }
 
 void GrGLGpu::bindFramebuffer(GrGLenum target, GrGLuint fboid) {
-    fStats.incRenderTargetBinds();
     GL_CALL(BindFramebuffer(target, fboid));
     if (target == GR_GL_FRAMEBUFFER || target == GR_GL_DRAW_FRAMEBUFFER) {
         fBoundDrawFramebuffer = fboid;
@@ -3688,8 +3673,6 @@ void GrGLGpu::deleteBackendTexture(const GrBackendTexture& tex) {
 }
 
 bool GrGLGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) {
-    SkASSERT(!(GrProcessor::CustomFeatures::kSampleLocations & programInfo.requestedFeatures()));
-
     GrThreadSafePipelineBuilder::Stats::ProgramCacheResult stat;
 
     sk_sp<GrGLProgram> tmp = fProgramCache->findOrCreateProgram(this->getContext(),

@@ -31,7 +31,33 @@
 #include "src/gpu/GrDrawOpTest.h"
 #endif
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+#include <new>
+#include <utility>
+
+// If we have thread local, then cache memory for a single GrAtlasTextOp.
+#if defined(GR_HAS_THREAD_LOCAL)
+static thread_local void* gCache = nullptr;
+void* GrAtlasTextOp::operator new(size_t s) {
+    if (gCache != nullptr) {
+        return std::exchange(gCache, nullptr);
+    }
+
+    return ::operator new(s);
+}
+
+void GrAtlasTextOp::operator delete(void* bytes) noexcept {
+    if (gCache == nullptr) {
+        gCache = bytes;
+        return;
+    }
+    ::operator delete(bytes);
+}
+
+void GrAtlasTextOp::ClearCache() {
+    ::operator delete(gCache);
+    gCache = nullptr;
+}
+#endif
 
 GrAtlasTextOp::GrAtlasTextOp(MaskType maskType,
                              bool needsTransform,
@@ -81,13 +107,13 @@ GrAtlasTextOp::GrAtlasTextOp(MaskType maskType,
     this->setBounds(deviceRect, HasAABloat::kNo, IsHairline::kNo);
 }
 
-auto GrAtlasTextOp::Geometry::Make(GrRecordingContext* rc,
-                                   const GrAtlasSubRun& subRun,
-                                   const SkMatrix& drawMatrix,
-                                   SkPoint drawOrigin,
-                                   SkIRect clipRect,
-                                   sk_sp<GrTextBlob> blob,
-                                   const SkPMColor4f& color) -> Geometry* {
+auto GrAtlasTextOp::Geometry::MakeForBlob(GrRecordingContext* rc,
+                                          const GrAtlasSubRun& subRun,
+                                          const SkMatrix& drawMatrix,
+                                          SkPoint drawOrigin,
+                                          SkIRect clipRect,
+                                          sk_sp<GrTextBlob> blob,
+                                          const SkPMColor4f& color) -> Geometry* {
     auto arena = rc->priv().recordTimeAllocator();
     // Bypass the automatic dtor behavior in SkArenaAlloc. I'm leaving this up to the Op to run
     // all geometry dtors for now.
@@ -97,10 +123,9 @@ auto GrAtlasTextOp::Geometry::Make(GrRecordingContext* rc,
                               drawOrigin,
                               clipRect,
                               std::move(blob),
+                              nullptr,
                               color};
 }
-
-
 
 void GrAtlasTextOp::Geometry::fillVertexData(void *dst, int offset, int count) const {
     SkMatrix positionMatrix = fDrawMatrix;
@@ -261,7 +286,9 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
 
     for (const Geometry* geo = fHead; geo != nullptr; geo = geo->fNext) {
         const GrAtlasSubRun& subRun = geo->fSubRun;
-        SkASSERT((int) subRun.vertexStride(geo->fDrawMatrix) == vertexStride);
+        SkASSERTF((int) subRun.vertexStride(geo->fDrawMatrix) == vertexStride,
+                  "subRun stride: %d vertex buffer stride: %d\n",
+                  (int)subRun.vertexStride(geo->fDrawMatrix), vertexStride);
 
         const int subRunEnd = subRun.glyphCount();
         for (int subRunCursor = 0; subRunCursor < subRunEnd;) {
@@ -475,7 +502,7 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
     drawMatrix.preTranslate(x, y);
     auto drawOrigin = SkPoint::Make(x, y);
     SkGlyphRunBuilder builder;
-    builder.drawTextUTF8(skPaint, font, text, textLen, drawOrigin);
+    builder.drawTextUTF8(font, text, textLen, drawOrigin);
 
     auto glyphRunList = builder.useGlyphRunList();
     if (glyphRunList.empty()) {
@@ -486,14 +513,9 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
     GrSDFTControl control =
             rContext->priv().getSDFTControl(rtc->surfaceProps().isUseDeviceIndependentFonts());
 
-    sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, drawMatrix);
     SkGlyphRunListPainter* painter = rtc->glyphRunPainter();
-    painter->processGlyphRun(
-            *glyphRunList.begin(),
-            drawMatrix,
-            glyphRunList.paint(),
-            control,
-            blob.get());
+    sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, skPaint, drawMatrix, control, painter);
+
     if (blob->subRunList().isEmpty()) {
         return nullptr;
     }
@@ -501,7 +523,8 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
     GrAtlasSubRun* subRun = blob->subRunList().front().testingOnly_atlasSubRun();
     SkASSERT(subRun);
     GrOp::Owner op;
-    std::tie(std::ignore, op) = subRun->makeAtlasTextOp(nullptr, mtxProvider, glyphRunList, rtc);
+    std::tie(std::ignore, op) = subRun->makeAtlasTextOp(
+            nullptr, mtxProvider, glyphRunList, skPaint, rtc, nullptr);
     return op;
 }
 

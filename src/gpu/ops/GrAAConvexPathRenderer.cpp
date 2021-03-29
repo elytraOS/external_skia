@@ -566,8 +566,9 @@ public:
         GLSLProcessor() {}
 
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-            const QuadEdgeEffect& qe = args.fGP.cast<QuadEdgeEffect>();
+            const QuadEdgeEffect& qe = args.fGeomProc.cast<QuadEdgeEffect>();
             GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
+            GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
             GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
             GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
 
@@ -581,9 +582,8 @@ public:
             vertBuilder->codeAppendf("%s = %s;", v.vsOut(), qe.fInQuadEdge.name());
 
             // Setup pass through color
+            fragBuilder->codeAppendf("half4 %s;", args.fOutputColor);
             varyingHandler->addPassThroughAttribute(qe.fInColor, args.fOutputColor);
-
-            GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
 
             // Setup position
             this->writeOutputPosition(vertBuilder, gpArgs, qe.fInPosition.name());
@@ -611,7 +611,7 @@ public:
             fragBuilder->codeAppendf("edgeAlpha = "
                                      "saturate(0.5 - edgeAlpha / length(gF));}");
 
-            fragBuilder->codeAppendf("%s = half4(edgeAlpha);", args.fOutputCoverage);
+            fragBuilder->codeAppendf("half4 %s = half4(edgeAlpha);", args.fOutputCoverage);
         }
 
         static inline void GenKey(const GrGeometryProcessor& gp,
@@ -623,8 +623,8 @@ public:
         }
 
         void setData(const GrGLSLProgramDataManager& pdman,
-                     const GrPrimitiveProcessor& gp) override {
-            const QuadEdgeEffect& qe = gp.cast<QuadEdgeEffect>();
+                     const GrGeometryProcessor& geomProc) override {
+            const QuadEdgeEffect& qe = geomProc.cast<QuadEdgeEffect>();
             this->setTransform(pdman, fLocalMatrixUniform, qe.fLocalMatrix, &fLocalMatrix);
         }
 
@@ -639,7 +639,7 @@ public:
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor();
     }
 
@@ -777,7 +777,7 @@ private:
             }
         }
 
-        const size_t kVertexStride = fProgramInfo->primProc().vertexStride();
+        const size_t kVertexStride = fProgramInfo->geomProc().vertexStride();
 
         fDraws.reserve(instanceCount);
 
@@ -859,7 +859,7 @@ private:
         }
 
         flushState->bindPipelineAndScissorClip(*fProgramInfo, chainBounds);
-        flushState->bindTextures(fProgramInfo->primProc(), nullptr, fProgramInfo->pipeline());
+        flushState->bindTextures(fProgramInfo->geomProc(), nullptr, fProgramInfo->pipeline());
         for (int i = 0; i < fDraws.count(); ++i) {
             for (int j = 0; j < fDraws[i].fMeshCount; ++j) {
                 flushState->drawMesh(fDraws[i].fMeshes[j]);
