@@ -10,6 +10,8 @@
 #include <memory>
 
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -197,7 +199,14 @@ void GLSLCodeGenerator::writeExpression(const Expression& expr, Precedence paren
             this->writeBoolLiteral(expr.as<BoolLiteral>());
             break;
         case Expression::Kind::kConstructor:
-            this->writeConstructor(expr.as<Constructor>(), parentPrecedence);
+        case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorSplat:
+            this->writeAnyConstructor(expr.asAnyConstructor(), parentPrecedence);
+            break;
+        case Expression::Kind::kConstructorScalarCast:
+        case Expression::Kind::kConstructorVectorCast:
+            this->writeCastConstructor(expr.asAnyConstructor(), parentPrecedence);
             break;
         case Expression::Kind::kIntLiteral:
             this->writeIntLiteral(expr.as<IntLiteral>());
@@ -718,21 +727,29 @@ void GLSLCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     this->write(")");
 }
 
-void GLSLCodeGenerator::writeConstructor(const Constructor& c, Precedence parentPrecedence) {
-    if (c.arguments().size() == 1 &&
-        (this->getTypeName(c.type()) == this->getTypeName(c.arguments()[0]->type()) ||
-        (c.type().isScalar() &&
-         c.arguments()[0]->type() == *fContext.fTypes.fFloatLiteral))) {
-        // in cases like half(float), they're different types as far as SkSL is concerned but the
-        // same type as far as GLSL is concerned. We avoid a redundant float(float) by just writing
-        // out the inner expression here.
-        this->writeExpression(*c.arguments()[0], parentPrecedence);
+void GLSLCodeGenerator::writeCastConstructor(const AnyConstructor& c, Precedence parentPrecedence) {
+    const auto arguments = c.argumentSpan();
+    SkASSERT(arguments.size() == 1);
+
+    const Expression& argument = *arguments.front();
+    if ((this->getTypeName(c.type()) == this->getTypeName(argument.type()) ||
+         (argument.type() == *fContext.fTypes.fFloatLiteral))) {
+        // In cases like half(float), they're different types as far as SkSL is concerned but
+        // the same type as far as GLSL is concerned. We avoid a redundant float(float) by just
+        // writing out the inner expression here.
+        this->writeExpression(argument, parentPrecedence);
         return;
     }
+
+    // This cast should be emitted as-is.
+    return this->writeAnyConstructor(c, parentPrecedence);
+}
+
+void GLSLCodeGenerator::writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence) {
     this->writeType(c.type());
     this->write("(");
     const char* separator = "";
-    for (const auto& arg : c.arguments()) {
+    for (const auto& arg : c.argumentSpan()) {
         this->write(separator);
         separator = ", ";
         this->writeExpression(*arg, Precedence::kSequence);

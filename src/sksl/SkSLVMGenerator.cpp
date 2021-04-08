@@ -18,6 +18,9 @@
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
@@ -243,6 +246,10 @@ private:
     Value writeExpression(const Expression& expr);
     Value writeBinaryExpression(const BinaryExpression& b);
     Value writeConstructor(const Constructor& c);
+    Value writeMultiArgumentConstructor(const MultiArgumentConstructor& c);
+    Value writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
+    Value writeConstructorCast(const AnyConstructor& c);
+    Value writeConstructorSplat(const ConstructorSplat& c);
     Value writeFunctionCall(const FunctionCall& c);
     Value writeExternalFunctionCall(const ExternalFunctionCall& c);
     Value writeFieldAccess(const FieldAccess& expr);
@@ -253,6 +260,8 @@ private:
     Value writeSwizzle(const Swizzle& swizzle);
     Value writeTernaryExpression(const TernaryExpression& t);
     Value writeVariableExpression(const VariableReference& expr);
+
+    Value writeTypeConversion(const Value& src, Type::NumberKind srcKind, Type::NumberKind dstKind);
 
     void writeStatement(const Statement& s);
     void writeBlock(const Block& b);
@@ -330,7 +339,10 @@ static inline bool is_uniform(const SkSL::Variable& var) {
 
 static size_t slot_count(const Type& type) {
     switch (type.typeKind()) {
+        case Type::TypeKind::kColorFilter:
+        case Type::TypeKind::kFragmentProcessor:
         case Type::TypeKind::kOther:
+        case Type::TypeKind::kShader:
         case Type::TypeKind::kVoid:
             return 0;
         case Type::TypeKind::kStruct: {
@@ -371,9 +383,9 @@ SkVMGenerator::SkVMGenerator(const Program& program,
             const Variable& var = decl.var();
             SkASSERT(fVariableMap.find(&var) == fVariableMap.end());
 
-            // For most variables, fVariableMap stores an index into fSlots, but for fragment
-            // processors (child shaders), fVariableMap stores the index to pass to fSampleChild().
-            if (var.type() == *fProgram.fContext->fTypes.fFragmentProcessor) {
+            // For most variables, fVariableMap stores an index into fSlots, but for children,
+            // fVariableMap stores the index to pass to fSampleChild().
+            if (var.type().isEffectChild()) {
                 fVariableMap[&var] = fpCount++;
                 continue;
             }
@@ -642,19 +654,25 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
     }
 }
 
+Value SkVMGenerator::writeMultiArgumentConstructor(const MultiArgumentConstructor& c) {
+    // Multi-argument constructors just aggregate their arguments, with no conversion
+    // NOTE: This (SkSL rule) is actually more restrictive than GLSL.
+    Value result(slot_count(c.type()));
+    size_t resultIdx = 0;
+    for (const auto &arg : c.arguments()) {
+        Value tmp = this->writeExpression(*arg);
+        for (size_t tmpSlot = 0; tmpSlot < tmp.slots(); ++tmpSlot) {
+            result[resultIdx++] = tmp[tmpSlot];
+        }
+    }
+    return result;
+}
+
 Value SkVMGenerator::writeConstructor(const Constructor& c) {
     if (c.arguments().size() > 1) {
         // Multi-argument constructors just aggregate their arguments, with no conversion
         // NOTE: This (SkSL rule) is actually more restrictive than GLSL.
-        Value result(slot_count(c.type()));
-        size_t resultIdx = 0;
-        for (const auto &arg : c.arguments()) {
-            Value tmp = this->writeExpression(*arg);
-            for (size_t tmpSlot = 0; tmpSlot < tmp.slots(); ++tmpSlot) {
-                result[resultIdx++] = tmp[tmpSlot];
-            }
-        }
-        return result;
+        return this->writeMultiArgumentConstructor(c);
     }
 
     const Type& srcType = c.arguments()[0]->type();
@@ -672,62 +690,7 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
     // TODO: Handle signed vs. unsigned. GLSL ES 1.0 only has 'int', so no problem yet.
     if (srcKind != dstKind) {
         // One argument constructors can do type conversion
-        Value dst(src.slots());
-        switch (dstKind) {
-            case Type::NumberKind::kFloat:
-                if (srcKind == Type::NumberKind::kSigned) {
-                    // int -> float
-                    for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = skvm::to_F32(i32(src[i]));
-                    }
-                    return dst;
-                } else if (srcKind == Type::NumberKind::kBoolean) {
-                    // bool -> float
-                    for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = skvm::select(i32(src[i]), 1.0f, 0.0f);
-                    }
-                    return dst;
-                }
-                break;
-
-            case Type::NumberKind::kSigned:
-                if (srcKind == Type::NumberKind::kFloat) {
-                    // float -> int
-                    for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = skvm::trunc(f32(src[i]));
-                    }
-                    return dst;
-                } else if (srcKind == Type::NumberKind::kBoolean) {
-                    // bool -> int
-                    for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = skvm::select(i32(src[i]), 1, 0);
-                    }
-                    return dst;
-                }
-                break;
-
-            case Type::NumberKind::kBoolean:
-                if (srcKind == Type::NumberKind::kSigned) {
-                    // int -> bool
-                    for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = i32(src[i]) != 0;
-                    }
-                    return dst;
-                } else if (srcKind == Type::NumberKind::kFloat) {
-                    // float -> bool
-                    for (size_t i = 0; i < src.slots(); ++i) {
-                        dst[i] = f32(src[i]) != 0.0;
-                    }
-                    return dst;
-                }
-                break;
-
-            default:
-                break;
-        }
-        SkDEBUGFAILF("Unsupported type conversion: %s -> %s", srcType.displayName().c_str(),
-                                                              dstType.displayName().c_str());
-        return {};
+        return this->writeTypeConversion(src, srcKind, dstKind);
     }
 
     // Matrices can be constructed from scalars or other matrices
@@ -757,17 +720,124 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
         return dst;
     }
 
-    // We can splat scalars to all components of a vector
-    if (dstType.isVector() && srcType.isScalar()) {
-        Value dst(dstType.columns());
-        for (int i = 0; i < dstType.columns(); ++i) {
-            dst[i] = src[0];
-        }
-        return dst;
-    }
-
     SkDEBUGFAIL("Invalid constructor");
     return {};
+}
+
+Value SkVMGenerator::writeTypeConversion(const Value& src,
+                                         Type::NumberKind srcKind,
+                                         Type::NumberKind dstKind) {
+    // Conversion among "similar" types (floatN <-> halfN), (shortN <-> intN), etc. is a no-op.
+    if (srcKind == dstKind) {
+        return src;
+    }
+
+    // TODO: Handle signed vs. unsigned. GLSL ES 1.0 only has 'int', so no problem yet.
+    Value dst(src.slots());
+    switch (dstKind) {
+        case Type::NumberKind::kFloat:
+            if (srcKind == Type::NumberKind::kSigned) {
+                // int -> float
+                for (size_t i = 0; i < src.slots(); ++i) {
+                    dst[i] = skvm::to_F32(i32(src[i]));
+                }
+                return dst;
+            }
+            if (srcKind == Type::NumberKind::kBoolean) {
+                // bool -> float
+                for (size_t i = 0; i < src.slots(); ++i) {
+                    dst[i] = skvm::select(i32(src[i]), 1.0f, 0.0f);
+                }
+                return dst;
+            }
+            break;
+
+        case Type::NumberKind::kSigned:
+            if (srcKind == Type::NumberKind::kFloat) {
+                // float -> int
+                for (size_t i = 0; i < src.slots(); ++i) {
+                    dst[i] = skvm::trunc(f32(src[i]));
+                }
+                return dst;
+            }
+            if (srcKind == Type::NumberKind::kBoolean) {
+                // bool -> int
+                for (size_t i = 0; i < src.slots(); ++i) {
+                    dst[i] = skvm::select(i32(src[i]), 1, 0);
+                }
+                return dst;
+            }
+            break;
+
+        case Type::NumberKind::kBoolean:
+            if (srcKind == Type::NumberKind::kSigned) {
+                // int -> bool
+                for (size_t i = 0; i < src.slots(); ++i) {
+                    dst[i] = i32(src[i]) != 0;
+                }
+                return dst;
+            }
+            if (srcKind == Type::NumberKind::kFloat) {
+                // float -> bool
+                for (size_t i = 0; i < src.slots(); ++i) {
+                    dst[i] = f32(src[i]) != 0.0;
+                }
+                return dst;
+            }
+            break;
+
+        default:
+            break;
+    }
+    SkDEBUGFAILF("Unsupported type conversion: %d -> %d", srcKind, dstKind);
+    return {};
+}
+
+Value SkVMGenerator::writeConstructorCast(const AnyConstructor& c) {
+    auto arguments = c.argumentSpan();
+    SkASSERT(arguments.size() == 1);
+    const Expression& argument = *arguments.front();
+
+    const Type& srcType = argument.type();
+    const Type& dstType = c.type();
+    Type::NumberKind srcKind = base_number_kind(srcType);
+    Type::NumberKind dstKind = base_number_kind(dstType);
+    Value src = this->writeExpression(argument);
+    return this->writeTypeConversion(src, srcKind, dstKind);
+}
+
+Value SkVMGenerator::writeConstructorSplat(const ConstructorSplat& c) {
+    SkASSERT(c.type().isVector());
+    SkASSERT(c.argument()->type().isScalar());
+    int columns = c.type().columns();
+
+    // Splat the argument across all components of a vector.
+    Value src = this->writeExpression(*c.argument());
+    Value dst(columns);
+    for (int i = 0; i < columns; ++i) {
+        dst[i] = src[0];
+    }
+    return dst;
+}
+
+Value SkVMGenerator::writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c) {
+    const Type& dstType = c.type();
+    SkASSERT(dstType.isMatrix());
+    SkASSERT(c.argument()->type() == dstType.componentType());
+
+    Value src = this->writeExpression(*c.argument());
+    Value dst(dstType.rows() * dstType.columns());
+    size_t dstIndex = 0;
+
+    // Matrix-from-scalar builds a diagonal scale matrix
+    for (int c = 0; c < dstType.columns(); ++c) {
+        for (int r = 0; r < dstType.rows(); ++r) {
+            dst[dstIndex++] = (c == r ? f32(src) : fBuilder->splat(0.0f));
+        }
+    }
+
+    SkASSERT(dstIndex == dst.slots());
+    return dst;
 }
 
 size_t SkVMGenerator::fieldSlotOffset(const FieldAccess& expr) {
@@ -981,9 +1051,10 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
     const size_t nargs = c.arguments().size();
 
     if (found->second == Intrinsic::kSample) {
-        // Sample is very special, the first argument is an FP, which can't be evaluated
+        // Sample is very special, the first argument is a child (shader/colorFilter), which can't
+        // be evaluated
         const Context& ctx = *fProgram.fContext;
-        if (nargs > 2 || c.arguments()[0]->type() != *ctx.fTypes.fFragmentProcessor ||
+        if (nargs > 2 || !c.arguments()[0]->type().isEffectChild() ||
             (nargs == 2 && (c.arguments()[1]->type() != *ctx.fTypes.fFloat2 &&
                             c.arguments()[1]->type() != *ctx.fTypes.fFloat3x3))) {
             SkDEBUGFAIL("Invalid call to sample");
@@ -1422,6 +1493,15 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return fBuilder->splat(e.as<BoolLiteral>().value() ? ~0 : 0);
         case Expression::Kind::kConstructor:
             return this->writeConstructor(e.as<Constructor>());
+        case Expression::Kind::kConstructorArray:
+            return this->writeMultiArgumentConstructor(e.as<ConstructorArray>());
+        case Expression::Kind::kConstructorDiagonalMatrix:
+            return this->writeConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
+        case Expression::Kind::kConstructorScalarCast:
+        case Expression::Kind::kConstructorVectorCast:
+            return this->writeConstructorCast(e.asAnyConstructor());
+        case Expression::Kind::kConstructorSplat:
+            return this->writeConstructorSplat(e.as<ConstructorSplat>());
         case Expression::Kind::kFieldAccess:
             return this->writeFieldAccess(e.as<FieldAccess>());
         case Expression::Kind::kIndex:
@@ -1791,7 +1871,7 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
         if (e->is<GlobalVarDeclaration>()) {
             const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
             const Variable& var = decl.declaration()->as<VarDeclaration>().var();
-            if (var.type() == *program.fContext->fTypes.fFragmentProcessor) {
+            if (var.type().isEffectChild()) {
                 childSlots++;
             } else if (is_uniform(var)) {
                 uniformSlots += slot_count(var.type());

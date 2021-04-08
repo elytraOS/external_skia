@@ -16,6 +16,7 @@
 
 namespace SkSL {
 
+class AnyConstructor;
 class Expression;
 class IRGenerator;
 class Variable;
@@ -30,6 +31,11 @@ public:
         kBoolLiteral,
         kCodeString,
         kConstructor,
+        kConstructorArray,
+        kConstructorDiagonalMatrix,
+        kConstructorScalarCast,
+        kConstructorSplat,
+        kConstructorVectorCast,
         kDefined,
         kExternalFunctionCall,
         kExternalFunctionReference,
@@ -79,6 +85,11 @@ public:
         return this->kind() == T::kExpressionKind;
     }
 
+    bool isAnyConstructor() const {
+        static_assert((int)Kind::kConstructorVectorCast + 1 == (int)Kind::kDefined);
+        return this->kind() >= Kind::kConstructor && this->kind() <= Kind::kConstructorVectorCast;
+    }
+
     /**
      *  Use as<T> to downcast expressions: e.g. replace `(IntLiteral&) i` with `i.as<IntLiteral>()`.
      */
@@ -93,6 +104,9 @@ public:
         SkASSERT(this->is<T>());
         return static_cast<T&>(*this);
     }
+
+    AnyConstructor& asAnyConstructor();
+    const AnyConstructor& asAnyConstructor() const;
 
     /**
      * Returns true if this expression is constant. compareConstant must be implemented for all

@@ -8,6 +8,11 @@
 #include "src/sksl/ir/SkSLConstructor.h"
 
 #include "src/sksl/ir/SkSLBoolLiteral.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorScalarCast.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
+#include "src/sksl/ir/SkSLConstructorVectorCast.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
@@ -26,44 +31,17 @@ std::unique_ptr<Expression> Constructor::Convert(const Context& context,
         return std::move(args[0]);
     }
     if (type.isScalar()) {
-        return MakeScalarConstructor(context, offset, type.scalarTypeForLiteral(), std::move(args));
+        return ConstructorScalarCast::Convert(context, offset, type, std::move(args));
     }
     if (type.isVector() || type.isMatrix()) {
         return MakeCompoundConstructor(context, offset, type, std::move(args));
     }
     if (type.isArray() && type.columns() > 0) {
-        return MakeArrayConstructor(context, offset, type, std::move(args));
+        return ConstructorArray::Convert(context, offset, type, std::move(args));
     }
 
     context.fErrors.error(offset, "cannot construct '" + type.displayName() + "'");
     return nullptr;
-}
-
-std::unique_ptr<Expression> Constructor::MakeScalarConstructor(const Context& context,
-                                                               int offset,
-                                                               const Type& type,
-                                                               ExpressionArray args) {
-    SkASSERT(type.isScalar());
-    if (args.size() != 1) {
-        context.fErrors.error(offset, "invalid arguments to '" + type.displayName() +
-                                      "' constructor, (expected exactly 1 argument, but found " +
-                                      to_string((uint64_t)args.size()) + ")");
-        return nullptr;
-    }
-
-    const Type& argType = args[0]->type();
-    if (!argType.isScalar()) {
-        context.fErrors.error(offset, "invalid argument to '" + type.displayName() +
-                                      "' constructor (expected a number or bool, but found '" +
-                                      argType.displayName() + "')");
-        return nullptr;
-    }
-
-    if (std::unique_ptr<Expression> converted = SimplifyConversion(type, *args[0])) {
-        return converted;
-    }
-
-    return std::make_unique<Constructor>(offset, type, std::move(args));
 }
 
 std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& context,
@@ -80,23 +58,28 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
         // A constructor containing a single scalar is a splat (for vectors) or diagonal matrix (for
         // matrices). In either event, it's legal regardless of the scalar's type. Synthesize an
         // explicit conversion to the proper type (this is a no-op if it's unnecessary).
-        ExpressionArray castArgs;
-        castArgs.push_back(Constructor::Convert(context, offset, type.componentType(),
-                                                std::move(args)));
-        SkASSERT(castArgs.front());
-        return std::make_unique<Constructor>(offset, type, std::move(castArgs));
+        std::unique_ptr<Expression> typecast = ConstructorScalarCast::Make(context, offset,
+                                                                           type.componentType(),
+                                                                           std::move(args[0]));
+        SkASSERT(typecast);
+
+        // Matrix-from-scalar creates a diagonal matrix; vector-from-scalar creates a splat.
+        return type.isMatrix()
+                       ? ConstructorDiagonalMatrix::Make(context, offset, type, std::move(typecast))
+                       : ConstructorSplat::Make(context, offset, type, std::move(typecast));
     }
 
-    int expected = type.rows() * type.columns();
-
-    if (type.isVector() && args.size() == 1 && args[0]->type().isVector() &&
-        args[0]->type().columns() == expected) {
+    if (type.isVector() &&
+        args.size() == 1 &&
+        args[0]->type().isVector() &&
+        args[0]->type().columns() == type.columns()) {
         // A vector constructor containing a single vector with the same number of columns is a
         // cast (e.g. float3 -> int3).
-        return std::make_unique<Constructor>(offset, type, std::move(args));
+        return ConstructorVectorCast::Make(context, offset, type, std::move(args[0]));
     }
 
     // For more complex cases, we walk the argument list and fix up the arguments as needed.
+    int expected = type.rows() * type.columns();
     int actual = 0;
     for (std::unique_ptr<Expression>& arg : args) {
         if (!arg->type().isScalar() && !arg->type().isVector()) {
@@ -139,9 +122,9 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
         int argsToOptimize = 0;
         int currBit = 1;
         for (const std::unique_ptr<Expression>& arg : args) {
-            if (arg->is<Constructor>()) {
-                Constructor& inner = arg->as<Constructor>();
-                if (inner.arguments().size() > 1 &&
+            if (arg->isAnyConstructor()) {
+                AnyConstructor& inner = arg->asAnyConstructor();
+                if (inner.argumentSpan().size() > 1 &&
                     inner.type().componentType() == type.componentType()) {
                     argsToOptimize |= currBit;
                 }
@@ -157,8 +140,8 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
             currBit = 1;
             for (std::unique_ptr<Expression>& arg : args) {
                 if (argsToOptimize & currBit) {
-                    Constructor& inner = arg->as<Constructor>();
-                    for (std::unique_ptr<Expression>& innerArg : inner.arguments()) {
+                    AnyConstructor& inner = arg->asAnyConstructor();
+                    for (std::unique_ptr<Expression>& innerArg : inner.argumentSpan()) {
                         flattened.push_back(std::move(innerArg));
                     }
                 } else {
@@ -173,82 +156,13 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
     return std::make_unique<Constructor>(offset, type, std::move(args));
 }
 
-std::unique_ptr<Expression> Constructor::MakeArrayConstructor(const Context& context,
-                                                              int offset,
-                                                              const Type& type,
-                                                              ExpressionArray args) {
-    SkASSERTF(type.isArray() && type.columns() > 0, "%s", type.description().c_str());
-
-    // ES2 doesn't support first-class array types.
-    if (context.fConfig->strictES2Mode()) {
-        context.fErrors.error(offset, "construction of array type '" + type.displayName() +
-                                      "' is not supported");
-        return nullptr;
-    }
-
-    // Check that the number of constructor arguments matches the array size.
-    if (type.columns() != args.count()) {
-        context.fErrors.error(offset, String::printf("invalid arguments to '%s' constructor "
-                                                     "(expected %d elements, but found %d)",
-                                                     type.displayName().c_str(), type.columns(),
-                                                     args.count()));
-        return nullptr;
-    }
-
-    // Convert each constructor argument to the array's component type.
-    const Type& baseType = type.componentType();
-    for (std::unique_ptr<Expression>& argument : args) {
-        argument = baseType.coerceExpression(std::move(argument), context);
-        if (!argument) {
-            return nullptr;
-        }
-    }
-    return std::make_unique<Constructor>(offset, type, std::move(args));
-}
-
-std::unique_ptr<Expression> Constructor::SimplifyConversion(const Type& constructorType,
-                                                            const Expression& expr) {
-    if (expr.is<IntLiteral>()) {
-        SKSL_INT value = expr.as<IntLiteral>().value();
-        if (constructorType.isFloat()) {
-            // promote float(1) to 1.0
-            return FloatLiteral::Make(expr.fOffset, (SKSL_FLOAT)value, &constructorType);
-        } else if (constructorType.isInteger()) {
-            // promote uint(1) to 1u
-            return IntLiteral::Make(expr.fOffset, value, &constructorType);
-        } else if (constructorType.isBoolean()) {
-            // promote bool(1) to true/false
-            return BoolLiteral::Make(expr.fOffset, value != 0, &constructorType);
-        }
-    } else if (expr.is<FloatLiteral>()) {
-        float value = expr.as<FloatLiteral>().value();
-        if (constructorType.isFloat()) {
-            // promote float(1.23) to 1.23
-            return FloatLiteral::Make(expr.fOffset, value, &constructorType);
-        } else if (constructorType.isInteger()) {
-            // promote uint(1.23) to 1u
-            return IntLiteral::Make(expr.fOffset, (SKSL_INT)value, &constructorType);
-        } else if (constructorType.isBoolean()) {
-            // promote bool(1.23) to true/false
-            return BoolLiteral::Make(expr.fOffset, value != 0.0f, &constructorType);
-        }
-    } else if (expr.is<BoolLiteral>()) {
-        bool value = expr.as<BoolLiteral>().value();
-        if (constructorType.isFloat()) {
-            // promote float(true) to 1.0
-            return FloatLiteral::Make(expr.fOffset, value ? 1.0f : 0.0f, &constructorType);
-        } else if (constructorType.isInteger()) {
-            // promote uint(true) to 1u
-            return IntLiteral::Make(expr.fOffset, value ? 1 : 0, &constructorType);
-        } else if (constructorType.isBoolean()) {
-            // promote bool(true) to true/false
-            return BoolLiteral::Make(expr.fOffset, value, &constructorType);
-        }
-    }
-    return nullptr;
-}
-
 Expression::ComparisonResult Constructor::compareConstant(const Expression& other) const {
+    if (other.is<ConstructorDiagonalMatrix>()) {
+        return other.compareConstant(*this);
+    }
+    if (other.is<ConstructorSplat>()) {
+        return other.compareConstant(*this);
+    }
     if (!other.is<Constructor>()) {
         return ComparisonResult::kUnknown;
     }
@@ -393,11 +307,11 @@ SKSL_FLOAT Constructor::getMatComponent(int col, int row) const {
             return col == row ? this->getConstantValue<SKSL_FLOAT>(*this->arguments()[0]) : 0.0;
         }
         if (argType.isMatrix()) {
-            SkASSERT(this->arguments()[0]->is<Constructor>());
+            SkASSERT(this->arguments()[0]->isAnyConstructor());
             // single matrix argument. make sure we're within the argument's bounds.
             if (col < argType.columns() && row < argType.rows()) {
                 // within bounds, defer to argument
-                return this->arguments()[0]->as<Constructor>().getMatComponent(col, row);
+                return this->arguments()[0]->getMatComponent(col, row);
             }
             // out of bounds
             return 0.0;
@@ -461,6 +375,16 @@ bool Constructor::getConstantBool() const {
     return expr.type().isBoolean() ? expr.getConstantBool() :
            expr.type().isInteger() ? (bool)expr.getConstantInt() :
                                      (bool)expr.getConstantFloat();
+}
+
+AnyConstructor& Expression::asAnyConstructor() {
+    SkASSERT(this->isAnyConstructor());
+    return static_cast<AnyConstructor&>(*this);
+}
+
+const AnyConstructor& Expression::asAnyConstructor() const {
+    SkASSERT(this->isAnyConstructor());
+    return static_cast<const AnyConstructor&>(*this);
 }
 
 }  // namespace SkSL

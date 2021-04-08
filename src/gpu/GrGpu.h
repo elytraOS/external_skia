@@ -278,7 +278,7 @@ public:
     bool writePixels(GrSurface* surface, int left, int top, int width, int height,
                      GrColorType surfaceColorType, GrColorType srcColorType, const void* buffer,
                      size_t rowBytes, bool prepForTexSampling = false) {
-        GrMipLevel mipLevel = {buffer, rowBytes};
+        GrMipLevel mipLevel = {buffer, rowBytes, nullptr};
         return this->writePixels(surface, left, top, width, height, surfaceColorType, srcColorType,
                                  &mipLevel, 1, prepForTexSampling);
     }
@@ -395,6 +395,14 @@ public:
      *  semaphore before using this texture.
      */
     virtual std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) = 0;
+
+    /**
+     * Frees any backend specific objects that are not currently in use by the GPU. This is called
+     * when the client is trying to free up as much GPU memory as possible. We will not release
+     * resources connected to programs/pipelines since the cost to recreate those is significantly
+     * higher that other resources.
+     */
+    virtual void releaseUnlockedBackendObjects() {}
 
     ///////////////////////////////////////////////////////////////////////////
     // Debugging and Stats

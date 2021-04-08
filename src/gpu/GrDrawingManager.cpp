@@ -665,8 +665,7 @@ sk_sp<GrOpsTask> GrDrawingManager::newOpsTask(GrSurfaceProxyView surfaceView,
 
     this->closeActiveOpsTask();
 
-    sk_sp<GrOpsTask> opsTask(new GrOpsTask(this, fContext->priv().arenas(),
-                                           std::move(surfaceView),
+    sk_sp<GrOpsTask> opsTask(new GrOpsTask(this, std::move(surfaceView),
                                            fContext->priv().auditTrail()));
     SkASSERT(this->getLastRenderTask(opsTask->target(0)) == opsTask.get());
 
@@ -822,7 +821,7 @@ bool GrDrawingManager::newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
                                           GrColorType dstColorType,
                                           const GrMipLevel levels[],
                                           int levelCount,
-                                          sk_sp<SkData> owner) {
+                                          bool prepForSampling) {
     SkDEBUGCODE(this->validate());
     SkASSERT(fContext);
 
@@ -845,7 +844,7 @@ bool GrDrawingManager::newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
                                                                   dstColorType,
                                                                   levels,
                                                                   levelCount,
-                                                                  std::move(owner)));
+                                                                  prepForSampling));
     if (!task) {
         return false;
     }

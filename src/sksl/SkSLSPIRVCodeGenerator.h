@@ -22,6 +22,11 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorScalarCast.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
+#include "src/sksl/ir/SkSLConstructorVectorCast.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -239,27 +244,30 @@ private:
 
     SpvId writeSpecialIntrinsic(const FunctionCall& c, SpecialIntrinsic kind, OutputStream& out);
 
-    SpvId writeConstantVector(const Constructor& c);
+    SpvId writeConstantVector(const AnyConstructor& c);
 
-    SpvId writeFloatConstructor(const Constructor& c, OutputStream& out);
+    SpvId writeFloatConstructor(const AnyConstructor& c, OutputStream& out);
 
     SpvId castScalarToFloat(SpvId inputId, const Type& inputType, const Type& outputType,
                             OutputStream& out);
 
-    SpvId writeIntConstructor(const Constructor& c, OutputStream& out);
+    SpvId writeIntConstructor(const AnyConstructor& c, OutputStream& out);
 
     SpvId castScalarToSignedInt(SpvId inputId, const Type& inputType, const Type& outputType,
                                 OutputStream& out);
 
-    SpvId writeUIntConstructor(const Constructor& c, OutputStream& out);
+    SpvId writeUIntConstructor(const AnyConstructor& c, OutputStream& out);
 
     SpvId castScalarToUnsignedInt(SpvId inputId, const Type& inputType, const Type& outputType,
                                   OutputStream& out);
 
-    SpvId writeBooleanConstructor(const Constructor& c, OutputStream& out);
+    SpvId writeBooleanConstructor(const AnyConstructor& c, OutputStream& out);
 
     SpvId castScalarToBoolean(SpvId inputId, const Type& inputType, const Type& outputType,
                               OutputStream& out);
+
+    SpvId castScalarToType(SpvId inputExprId, const Type& inputType, const Type& outputType,
+                           OutputStream& out);
 
     /**
      * Writes a matrix with the diagonal entries all equal to the provided expression, and all other
@@ -283,9 +291,19 @@ private:
 
     SpvId writeVectorConstructor(const Constructor& c, OutputStream& out);
 
-    SpvId writeArrayConstructor(const Constructor& c, OutputStream& out);
+    SpvId writeArrayConstructor(const ConstructorArray& c, OutputStream& out);
 
     SpvId writeConstructor(const Constructor& c, OutputStream& out);
+
+    SpvId writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c, OutputStream& out);
+
+    SpvId writeConstructorScalarCast(const ConstructorScalarCast& c, OutputStream& out);
+
+    SpvId writeConstructorSplat(const ConstructorSplat& c, OutputStream& out);
+
+    SpvId writeConstructorVectorCast(const ConstructorVectorCast& c, OutputStream& out);
+
+    SpvId writeComposite(const std::vector<SpvId>& arguments, const Type& type, OutputStream& out);
 
     SpvId writeFieldAccess(const FieldAccess& f, OutputStream& out);
 
