@@ -42,6 +42,7 @@
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorMatrixResize.h"
 #include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLExternalFunctionReference.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
@@ -100,9 +101,7 @@ protected:
                 } else if (lastArg->type() == *fContext.fTypes.fFloat3x3) {
                     // Determine the type of matrix for this call site
                     if (lastArg->isConstantOrUniform()) {
-                        if (lastArg->is<VariableReference>() ||
-                            lastArg->is<Constructor>() ||
-                            lastArg->is<ConstructorDiagonalMatrix>()) {
+                        if (lastArg->is<VariableReference>() || lastArg->isAnyConstructor()) {
                             // FIXME if this is a constant, we should parse the float3x3 constructor
                             // and determine if the resulting matrix introduces perspective.
                             fUsage.merge(SampleUsage::UniformMatrix(lastArg->description()));
@@ -747,12 +746,14 @@ bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& ri
         case Expression::Kind::kBoolLiteral:
             return left.as<BoolLiteral>().value() == right.as<BoolLiteral>().value();
 
-        case Expression::Kind::kConstructor:
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorCompound:
+        case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorMatrixResize:
         case Expression::Kind::kConstructorScalarCast:
-        case Expression::Kind::kConstructorSplat:
-        case Expression::Kind::kConstructorVectorCast: {
+        case Expression::Kind::kConstructorStruct:
+        case Expression::Kind::kConstructorSplat: {
             if (left.kind() != right.kind()) {
                 return false;
             }
@@ -795,17 +796,20 @@ bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& ri
 }
 
 static bool get_constant_value(const Expression& expr, double* val) {
-    if (!expr.isCompileTimeConstant()) {
+    const Expression* valExpr = expr.getConstantSubexpression(0);
+    if (!valExpr) {
         return false;
     }
-    if (!expr.type().isNumber()) {
-        SkDEBUGFAILF("unexpected constant type (%s)", expr.type().description().c_str());
-        return false;
+    if (valExpr->is<IntLiteral>()) {
+        *val = static_cast<double>(valExpr->as<IntLiteral>().value());
+        return true;
     }
-
-    *val = expr.type().isInteger() ? static_cast<double>(expr.getConstantInt())
-                                   : static_cast<double>(expr.getConstantFloat());
-    return true;
+    if (valExpr->is<FloatLiteral>()) {
+        *val = static_cast<double>(valExpr->as<FloatLiteral>().value());
+        return true;
+    }
+    SkDEBUGFAILF("unexpected constant type (%s)", expr.type().description().c_str());
+    return false;
 }
 
 static const char* invalid_for_ES2(int offset,
@@ -1022,12 +1026,14 @@ public:
 
             // ... expressions composed of both of the above
             case Expression::Kind::kBinary:
-            case Expression::Kind::kConstructor:
             case Expression::Kind::kConstructorArray:
+            case Expression::Kind::kConstructorCompound:
+            case Expression::Kind::kConstructorCompoundCast:
             case Expression::Kind::kConstructorDiagonalMatrix:
+            case Expression::Kind::kConstructorMatrixResize:
             case Expression::Kind::kConstructorScalarCast:
             case Expression::Kind::kConstructorSplat:
-            case Expression::Kind::kConstructorVectorCast:
+            case Expression::Kind::kConstructorStruct:
             case Expression::Kind::kFieldAccess:
             case Expression::Kind::kIndex:
             case Expression::Kind::kPrefix:
@@ -1149,12 +1155,14 @@ template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expre
             return (b.left() && this->visitExpressionPtr(b.left())) ||
                    (b.right() && this->visitExpressionPtr(b.right()));
         }
-        case Expression::Kind::kConstructor:
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorCompound:
+        case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorMatrixResize:
         case Expression::Kind::kConstructorScalarCast:
         case Expression::Kind::kConstructorSplat:
-        case Expression::Kind::kConstructorVectorCast: {
+        case Expression::Kind::kConstructorStruct: {
             auto& c = e.asAnyConstructor();
             for (auto& arg : c.argumentSpan()) {
                 if (this->visitExpressionPtr(arg)) { return true; }

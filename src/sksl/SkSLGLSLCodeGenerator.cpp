@@ -10,8 +10,6 @@
 #include <memory>
 
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/ir/SkSLConstructorArray.h"
-#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -198,14 +196,16 @@ void GLSLCodeGenerator::writeExpression(const Expression& expr, Precedence paren
         case Expression::Kind::kBoolLiteral:
             this->writeBoolLiteral(expr.as<BoolLiteral>());
             break;
-        case Expression::Kind::kConstructor:
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorCompound:
         case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorMatrixResize:
         case Expression::Kind::kConstructorSplat:
+        case Expression::Kind::kConstructorStruct:
             this->writeAnyConstructor(expr.asAnyConstructor(), parentPrecedence);
             break;
         case Expression::Kind::kConstructorScalarCast:
-        case Expression::Kind::kConstructorVectorCast:
+        case Expression::Kind::kConstructorCompoundCast:
             this->writeCastConstructor(expr.asAnyConstructor(), parentPrecedence);
             break;
         case Expression::Kind::kIntLiteral:
@@ -811,12 +811,6 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             break;
         case SK_FRAGCOORD_BUILTIN:
             this->writeFragCoord();
-            break;
-        case SK_WIDTH_BUILTIN:
-            this->write("u_skRTWidth");
-            break;
-        case SK_HEIGHT_BUILTIN:
-            this->write("u_skRTHeight");
             break;
         case SK_CLOCKWISE_BUILTIN:
             this->write(fProgram.fConfig->fSettings.fFlipY ? "(!gl_FrontFacing)" : "gl_FrontFacing");

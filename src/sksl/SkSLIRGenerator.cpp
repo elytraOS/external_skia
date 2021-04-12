@@ -294,10 +294,13 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
         }
     }
     if (this->programKind() == ProgramKind::kRuntimeEffect) {
-        // TODO(skbug.com/11374): Remove this special case, 'in' should be prohibited in all cases
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) && !baseType->isEffectChild()) {
+        if (modifiers.fFlags & Modifiers::kIn_Flag) {
             this->errorReporter().error(offset, "'in' variables not permitted in runtime effects");
         }
+    }
+    if (baseType->isEffectChild() && !(modifiers.fFlags & Modifiers::kUniform_Flag)) {
+        this->errorReporter().error(
+                offset, "variables of type '" + baseType->displayName() + "' must be uniform");
     }
     if ((modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
         (modifiers.fFlags & Modifiers::kUniform_Flag)) {
@@ -1503,12 +1506,6 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
             const Variable* var = &result->as<Variable>();
             const Modifiers& modifiers = var->modifiers();
             switch (modifiers.fLayout.fBuiltin) {
-                case SK_WIDTH_BUILTIN:
-                    fInputs.fRTWidth = true;
-                    break;
-                case SK_HEIGHT_BUILTIN:
-                    fInputs.fRTHeight = true;
-                    break;
 #ifndef SKSL_STANDALONE
                 case SK_FRAGCOORD_BUILTIN:
                     fInputs.fFlipY = true;

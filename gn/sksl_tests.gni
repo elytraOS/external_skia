@@ -108,6 +108,7 @@ sksl_error_tests = [
   "/sksl/errors/DuplicateFunction.sksl",
   "/sksl/errors/DuplicateOutput.sksl",
   "/sksl/errors/DuplicateSymbol.sksl",
+  "/sksl/errors/EmptyArray.sksl",
   "/sksl/errors/EmptyStruct.sksl",
   "/sksl/errors/EnumValueMustBeConstInt.sksl",
   "/sksl/errors/ErrorsInDeadCode.sksl",
@@ -317,6 +318,7 @@ sksl_shared_tests = [
   "/sksl/intrinsics/Trunc.sksl",
   "/sksl/intrinsics/UintBitsToFloat.sksl",
   "/sksl/intrinsics/Unpack.sksl",
+  "/sksl/shared/ArrayComparison.sksl",
   "/sksl/shared/ArrayConstructors.sksl",
   "/sksl/shared/ArrayIndexTypes.sksl",
   "/sksl/shared/ArrayTypes.sksl",
@@ -357,7 +359,6 @@ sksl_shared_tests = [
   "/sksl/shared/GeometryGSInvocations.geom",
   "/sksl/shared/GeometryNoGSInvocations.geom",
   "/sksl/shared/GeometryNoGSInvocationsReorder.geom",
-  "/sksl/shared/Height.sksl",
   "/sksl/shared/HelloWorld.sksl",
   "/sksl/shared/Hex.sksl",
   "/sksl/shared/HexUnsigned.sksl",
@@ -441,7 +442,6 @@ sksl_shared_tests = [
   "/sksl/shared/VertexEarlyReturn.vert",
   "/sksl/shared/VertexID.vert",
   "/sksl/shared/WhileLoopControlFlow.sksl",
-  "/sksl/shared/Width.sksl",
 ]
 
 sksl_folding_tests = [
@@ -572,6 +572,7 @@ sksl_rte_error_tests = [
   "/sksl/runtime_errors/IllegalArrayOps.rte",
   "/sksl/runtime_errors/IllegalIndexing.rte",
   "/sksl/runtime_errors/IllegalOperators.rte",
+  "/sksl/runtime_errors/IllegalShaderUse.rte",
   "/sksl/runtime_errors/IllegalStatements.rte",
   "/sksl/runtime_errors/LoopConditionErrors.rte",
   "/sksl/runtime_errors/LoopExpressionErrors.rte",

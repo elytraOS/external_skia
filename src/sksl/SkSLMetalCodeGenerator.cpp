@@ -11,9 +11,11 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorCompoundCast.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorMatrixResize.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
-#include "src/sksl/ir/SkSLConstructorVectorCast.h"
+#include "src/sksl/ir/SkSLConstructorStruct.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -172,18 +174,23 @@ void MetalCodeGenerator::writeExpression(const Expression& expr, Precedence pare
         case Expression::Kind::kBoolLiteral:
             this->writeBoolLiteral(expr.as<BoolLiteral>());
             break;
-        case Expression::Kind::kConstructor:
-            this->writeConstructor(expr.as<Constructor>(), parentPrecedence);
-            break;
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorStruct:
             this->writeAnyConstructor(expr.asAnyConstructor(), "{", "}", parentPrecedence);
+            break;
+        case Expression::Kind::kConstructorCompound:
+            this->writeConstructorCompound(expr.as<ConstructorCompound>(), parentPrecedence);
             break;
         case Expression::Kind::kConstructorDiagonalMatrix:
         case Expression::Kind::kConstructorSplat:
             this->writeAnyConstructor(expr.asAnyConstructor(), "(", ")", parentPrecedence);
             break;
+        case Expression::Kind::kConstructorMatrixResize:
+            this->writeConstructorMatrixResize(expr.as<ConstructorMatrixResize>(),
+                                               parentPrecedence);
+            break;
         case Expression::Kind::kConstructorScalarCast:
-        case Expression::Kind::kConstructorVectorCast:
+        case Expression::Kind::kConstructorCompoundCast:
             this->writeCastConstructor(expr.asAnyConstructor(), "(", ")", parentPrecedence);
             break;
         case Expression::Kind::kIntLiteral:
@@ -886,10 +893,11 @@ void MetalCodeGenerator::assembleMatrixFromMatrix(const Type& sourceMatrix, int 
 
 // Assembles a matrix of type floatRxC by concatenating an arbitrary mix of values, named `x0`,
 // `x1`, etc. An error is written if the expression list don't contain exactly R*C scalars.
-void MetalCodeGenerator::assembleMatrixFromExpressions(const ExpressionArray& args,
+void MetalCodeGenerator::assembleMatrixFromExpressions(const AnyConstructor& ctor,
                                                        int rows, int columns) {
     size_t argIndex = 0;
     int argPosition = 0;
+    auto args = ctor.argumentSpan();
 
     const char* columnSeparator = "";
     for (int c = 0; c < columns; ++c) {
@@ -949,11 +957,11 @@ void MetalCodeGenerator::assembleMatrixFromExpressions(const ExpressionArray& ar
 // Keeps track of previously generated constructors so that we won't generate more than one
 // constructor for any given permutation of input argument types. Returns the name of the
 // generated constructor method.
-String MetalCodeGenerator::getMatrixConstructHelper(const Constructor& c) {
+String MetalCodeGenerator::getMatrixConstructHelper(const AnyConstructor& c) {
     const Type& matrix = c.type();
     int columns = matrix.columns();
     int rows = matrix.rows();
-    const ExpressionArray& args = c.arguments();
+    auto args = c.argumentSpan();
 
     // Create the helper-method name and use it as our lookup key.
     String name;
@@ -986,7 +994,7 @@ String MetalCodeGenerator::getMatrixConstructHelper(const Constructor& c) {
     if (args.size() == 1 && args.front()->type().isMatrix()) {
         this->assembleMatrixFromMatrix(args.front()->type(), rows, columns);
     } else {
-        this->assembleMatrixFromExpressions(args, rows, columns);
+        this->assembleMatrixFromExpressions(c, rows, columns);
     }
 
     fExtraFunctions.writeText(");\n}\n");
@@ -1003,11 +1011,8 @@ bool MetalCodeGenerator::canCoerce(const Type& t1, const Type& t2) {
     return t1.isFloat() && t2.isFloat();
 }
 
-bool MetalCodeGenerator::matrixConstructHelperIsNeeded(const Constructor& c) {
-    // A matrix construct helper is only necessary if we are, in fact, constructing a matrix.
-    if (!c.type().isMatrix()) {
-        return false;
-    }
+bool MetalCodeGenerator::matrixConstructHelperIsNeeded(const ConstructorCompound& c) {
+    SkASSERT(c.type().isMatrix());
 
     // GLSL is fairly free-form about inputs to its matrix constructors, but Metal is not; it
     // expects exactly R vectors of C components apiece. (Metal 2.0 also allows a list of R*C
@@ -1050,10 +1055,27 @@ bool MetalCodeGenerator::matrixConstructHelperIsNeeded(const Constructor& c) {
     return false;
 }
 
-void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence parentPrecedence) {
-    const Type& constructorType = c.type();
-    SkASSERT(!constructorType.isArray());
+void MetalCodeGenerator::writeConstructorMatrixResize(const ConstructorMatrixResize& c,
+                                                      Precedence parentPrecedence) {
+    // Matrix-resize via casting doesn't natively exist in Metal at all, so we always need to use a
+    // matrix-construct helper here.
+    this->write(this->getMatrixConstructHelper(c));
+    this->write("(");
+    this->writeExpression(*c.argument(), Precedence::kSequence);
+    this->write(")");
+}
 
+void MetalCodeGenerator::writeConstructorCompound(const ConstructorCompound& c,
+                                                  Precedence parentPrecedence) {
+    if (c.type().isMatrix()) {
+        this->writeConstructorCompoundMatrix(c, parentPrecedence);
+    } else {
+        this->writeAnyConstructor(c, "(", ")", parentPrecedence);
+    }
+}
+
+void MetalCodeGenerator::writeConstructorCompoundMatrix(const ConstructorCompound& c,
+                                                        Precedence parentPrecedence) {
     // Emit and invoke a matrix-constructor helper method if one is necessary.
     if (this->matrixConstructHelperIsNeeded(c)) {
         this->write(this->getMatrixConstructHelper(c));
@@ -1068,27 +1090,32 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
         return;
     }
 
-    // Explicitly invoke the constructor, passing in the necessary arguments.
-    this->writeType(constructorType);
+    // Metal doesn't allow creating matrices by passing in scalars and vectors in a jumble; it
+    // requires your scalars to be grouped up into columns. Because `matrixConstructHelperIsNeeded`
+    // returned false, we know that none of our scalars/vectors "wrap" across across a column, so we
+    // can group our inputs up and synthesize a constructor for each column.
+    const Type& matrixType = c.type();
+    const Type& columnType = matrixType.componentType().toCompound(
+            fContext, /*columns=*/matrixType.rows(), /*rows=*/1);
+
+    this->writeType(matrixType);
     this->write("(");
     const char* separator = "";
     int scalarCount = 0;
     for (const std::unique_ptr<Expression>& arg : c.arguments()) {
-        const Type& argType = arg->type();
         this->write(separator);
         separator = ", ";
-        if (constructorType.isMatrix() &&
-            argType.columns() < constructorType.rows()) {
-            // Merge scalars and smaller vectors together.
+        if (arg->type().columns() < matrixType.rows()) {
+            // Write a `floatN(` constructor to group scalars and smaller vectors together.
             if (!scalarCount) {
-                this->writeType(constructorType.componentType());
-                this->write(to_string(constructorType.rows()));
+                this->writeType(columnType);
                 this->write("(");
             }
-            scalarCount += argType.columns();
+            scalarCount += arg->type().columns();
         }
         this->writeExpression(*arg, Precedence::kSequence);
-        if (scalarCount && scalarCount == constructorType.rows()) {
+        if (scalarCount && scalarCount == matrixType.rows()) {
+            // Close our `floatN(...` constructor block from above.
             this->write(")");
             scalarCount = 0;
         }
@@ -2249,12 +2276,13 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Expressi
             }
             return result;
         }
-        case Expression::Kind::kConstructor:
+        case Expression::Kind::kConstructorCompound:
+        case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorArray:
         case Expression::Kind::kConstructorDiagonalMatrix:
         case Expression::Kind::kConstructorScalarCast:
         case Expression::Kind::kConstructorSplat:
-        case Expression::Kind::kConstructorVectorCast: {
+        case Expression::Kind::kConstructorStruct: {
             const AnyConstructor& c = e->asAnyConstructor();
             Requirements result = kNo_Requirements;
             for (const auto& arg : c.argumentSpan()) {

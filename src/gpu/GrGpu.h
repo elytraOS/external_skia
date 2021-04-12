@@ -450,6 +450,9 @@ public:
         int renderPasses() const { return fRenderPasses; }
         void incRenderPasses() { fRenderPasses++; }
 
+        int numReorderedDAGsOverBudget() const { return fNumReorderedDAGsOverBudget; }
+        void incNumReorderedDAGsOverBudget() { fNumReorderedDAGsOverBudget++; }
+
 #if GR_TEST_UTILS
         void dump(SkString*);
         void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
@@ -467,6 +470,7 @@ public:
         int fNumScratchTexturesReused = 0;
         int fNumScratchMSAAAttachmentsReused = 0;
         int fRenderPasses = 0;
+        int fNumReorderedDAGsOverBudget = 0;
 
 #else  // !GR_GPU_STATS
 
@@ -486,6 +490,7 @@ public:
         void incNumScratchTexturesReused() {}
         void incNumScratchMSAAAttachmentsReused() {}
         void incRenderPasses() {}
+        void incNumReorderedDAGsOverBudget() {}
 #endif
     };
 
@@ -719,10 +724,6 @@ private:
 
     // Implementation of resetTextureBindings.
     virtual void onResetTextureBindings() {}
-
-    // Queries the effective number of samples in use by the hardware for the given render target,
-    // and queries the individual sample locations.
-    virtual void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) = 0;
 
     // overridden by backend-specific derived class to create objects.
     // Texture size, renderablility, format support, sample count will have already been validated

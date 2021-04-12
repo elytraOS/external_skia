@@ -14,6 +14,7 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -98,12 +99,11 @@ static std::unique_ptr<Expression> simplify_vector(const Context& context,
         ExpressionArray args;
         args.reserve_back(type.columns());
         for (int i = 0; i < type.columns(); i++) {
-            U value = foldFn(left.getVecComponent<T>(i), right.getVecComponent<T>(i));
+            U value = foldFn(left.getConstantSubexpression(i)->as<Literal<T>>().value(),
+                             right.getConstantSubexpression(i)->as<Literal<T>>().value());
             args.push_back(Literal<T>::Make(left.fOffset, value, &componentType));
         }
-        auto foldedCtor = Constructor::Convert(context, left.fOffset, type, std::move(args));
-        SkASSERT(foldedCtor);
-        return foldedCtor;
+        return ConstructorCompound::Make(context, left.fOffset, type, std::move(args));
     };
 
     switch (op.kind()) {

@@ -2283,9 +2283,9 @@ void SkCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
         return;
     }
 
+    auto glyphRunList = fScratchGlyphRunBuilder->blobToGlyphRunList(*blob, {x, y});
     AutoLayerForImageFilter layer(this, paint, &bounds);
-    // We can't hoist building the glyph run list because some of the text blob runs may be RSXform.
-    fScratchGlyphRunBuilder->drawTextBlob(layer.paint(), *blob, {x, y}, this->topDevice());
+    this->topDevice()->drawGlyphRunList(glyphRunList, layer.paint());
 }
 
 // These call the (virtual) onDraw... method
@@ -2296,6 +2296,29 @@ void SkCanvas::drawSimpleText(const void* text, size_t byteLength, SkTextEncodin
         sk_msan_assert_initialized(text, SkTAddOffset<const void>(text, byteLength));
         this->drawTextBlob(SkTextBlob::MakeFromText(text, byteLength, font, encoding), x, y, paint);
     }
+}
+
+void SkCanvas::drawGlyphs(int count, const SkGlyphID glyphs[], const SkPoint positions[],
+                          SkPoint origin, const SkFont& font, const SkPaint& paint) {
+    if (count <= 0) { return; }
+    SkTextBlobBuilder builder;
+    auto buffer = builder.allocRunPos(font, count);
+    memcpy(buffer.glyphs, glyphs, count * sizeof(SkGlyphID));
+    memcpy(buffer.points(), positions, count * sizeof(SkPoint));
+    this->drawTextBlob(builder.make(), origin.x(), origin.y(), paint);
+}
+
+void SkCanvas::drawGlyphs(int count, const SkGlyphID* glyphs, const SkPoint* positions,
+                          const uint32_t* clusters, int textByteCount, const char* utf8text,
+                          SkPoint origin, const SkFont& font, const SkPaint& paint) {
+    if (count <= 0) { return; }
+    SkTextBlobBuilder builder;
+    auto buffer = builder.allocRunTextPos(font, count, textByteCount);
+    memcpy(buffer.glyphs, glyphs, count * sizeof(SkGlyphID));
+    memcpy(buffer.points(), positions, count * sizeof(SkPoint));
+    memcpy(buffer.clusters, clusters, count * sizeof(uint32_t));
+    memcpy(buffer.utf8text, utf8text, textByteCount);
+    this->drawTextBlob(builder.make(), origin.x(), origin.y(), paint);
 }
 
 void SkCanvas::drawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
