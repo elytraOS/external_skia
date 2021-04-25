@@ -43,15 +43,13 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
-            GrClampType clampType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrClampType clampType) override {
         static constexpr GrProcessorAnalysisColor kUnknownColor;
         SkPMColor4f overrideColor;
         return fProcessors.finalize(
                 kUnknownColor, GrProcessorAnalysisCoverage::kNone, clip,
-                &GrUserStencilSettings::kUnused, hasMixedSampledCoverage, caps, clampType,
-                &overrideColor);
+                &GrUserStencilSettings::kUnused, caps, clampType, &overrideColor);
     }
 
 private:
@@ -158,7 +156,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     for (bool makeClone : {false, true}) {
         for (int parentCnt = 0; parentCnt < 2; parentCnt++) {
             auto surfaceDrawContext = GrSurfaceDrawContext::Make(
-                    context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1});
+                    context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1},
+                    SkSurfaceProps());
             {
                 sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
                         format, kDims, GrRenderable::kNo, 1, GrMipmapped::kNo, SkBackingFit::kExact,
@@ -547,7 +546,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
     static constexpr int kRenderSize = 256;
     auto rtc = GrSurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
-            {kRenderSize, kRenderSize});
+            {kRenderSize, kRenderSize}, SkSurfaceProps());
 
     // Coverage optimization uses three frames with a linearly transformed input texture.  The first
     // frame has no offset, second frames add .2 and .4, which should then be present as a fixed
@@ -912,7 +911,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
     static constexpr int kRenderSize = 1024;
     auto rtc = GrSurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
-            {kRenderSize, kRenderSize});
+            {kRenderSize, kRenderSize}, SkSurfaceProps());
 
     std::vector<GrColor> inputPixels = make_input_pixels(kRenderSize, kRenderSize, 0.0f);
     GrSurfaceProxyView inputTexture =

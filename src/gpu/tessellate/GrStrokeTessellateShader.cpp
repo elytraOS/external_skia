@@ -47,8 +47,8 @@ float length_pow2(float2 v) {
 })";
 
 static const char* kNumRadialSegmentsPerRadian = R"(
-float num_radial_segments_per_radian(float parametricIntolerance, float strokeRadius) {
-    return .5 / acos(max(1.0 - 1.0/(parametricIntolerance * strokeRadius), -1.0));
+float num_radial_segments_per_radian(float parametricPrecision, float strokeRadius) {
+    return .5 / acos(max(1.0 - 1.0/(parametricPrecision * strokeRadius), -1.0));
 })";
 
 // Unlike mix(), this does not return b when t==1. But it otherwise seems to get better
@@ -70,7 +70,7 @@ float4 unchecked_mix(float4 a, float4 b, float4 T) {
 // will be a composition of these parametric segments as well as radial segments.
 static void append_wangs_formula_fn(SkString* code, bool hasConics) {
     code->appendf(R"(
-    float wangs_formula(in float4x2 P, in float w, in float parametricIntolerance) {
+    float wangs_formula(in float4x2 P, in float w, in float parametricPrecision) {
         const float CUBIC_TERM_POW2 = %f;
         float l0 = length_pow2(fma(float2(-2), P[1], P[2]) + P[0]);
         float l1 = length_pow2(fma(float2(-2), P[2], P[3]) + P[1]);
@@ -81,7 +81,7 @@ static void append_wangs_formula_fn(SkString* code, bool hasConics) {
         m = (w > 0.0) ? QUAD_TERM_POW2 * l0 : m;)", GrWangsFormula::length_term_pow2<2>(1));
     }
     code->append(R"(
-        return max(ceil(sqrt(parametricIntolerance * sqrt(m))), 1.0);
+        return max(ceil(sqrt(parametricPrecision * sqrt(m))), 1.0);
     })");
 }
 
@@ -150,7 +150,7 @@ private:
         }
 
         if (!shader.hasDynamicStroke()) {
-            // [PARAMETRIC_INTOLERANCE, NUM_RADIAL_SEGMENTS_PER_RADIAN, JOIN_TYPE, STROKE_RADIUS]
+            // [PARAMETRIC_PRECISION, NUM_RADIAL_SEGMENTS_PER_RADIAN, JOIN_TYPE, STROKE_RADIUS]
             const char* tessArgsName;
             fTessArgsUniform = uniHandler->addUniform(nullptr,
                                                       kVertex_GrShaderFlag |
@@ -161,17 +161,17 @@ private:
             float NUM_RADIAL_SEGMENTS_PER_RADIAN = %s.y;
             float JOIN_TYPE = %s.z;)", tessArgsName, tessArgsName);
         } else {
-            const char* parametricIntoleranceName;
+            const char* parametricPrecisionName;
             fTessArgsUniform = uniHandler->addUniform(nullptr,
                                                       kVertex_GrShaderFlag |
                                                       kTessControl_GrShaderFlag |
                                                       kTessEvaluation_GrShaderFlag,
-                                                      kFloat_GrSLType, "parametricIntolerance",
-                                                      &parametricIntoleranceName);
+                                                      kFloat_GrSLType, "parametricPrecision",
+                                                      &parametricPrecisionName);
             v->codeAppendf(R"(
             float STROKE_RADIUS = dynamicStrokeAttr.x;
             float NUM_RADIAL_SEGMENTS_PER_RADIAN = num_radial_segments_per_radian(%s,STROKE_RADIUS);
-            float JOIN_TYPE = dynamicStrokeAttr.y;)", parametricIntoleranceName);
+            float JOIN_TYPE = dynamicStrokeAttr.y;)", parametricPrecisionName);
         }
 
         if (!shader.viewMatrix().isIdentity()) {
@@ -415,6 +415,7 @@ private:
     }
 
     void setData(const GrGLSLProgramDataManager& pdman,
+                 const GrShaderCaps&,
                  const GrGeometryProcessor& geomProc) override {
         const auto& shader = geomProc.cast<GrStrokeTessellateShader>();
         const auto& stroke = shader.fStroke;
@@ -431,14 +432,14 @@ private:
             }
             float strokeRadius = (stroke.isHairlineStyle()) ? .5f : stroke.getWidth() * .5;
             pdman.set4f(fTessArgsUniform,
-                        tolerances.fParametricIntolerance,  // PARAMETRIC_INTOLERANCE
+                        tolerances.fParametricPrecision,  // PARAMETRIC_PRECISION
                         tolerances.fNumRadialSegmentsPerRadian,  // NUM_RADIAL_SEGMENTS_PER_RADIAN
                         GetJoinType(shader.fStroke),  // JOIN_TYPE
                         strokeRadius);  // STROKE_RADIUS
         } else {
             SkASSERT(!stroke.isHairlineStyle());
             float maxScale = shader.viewMatrix().getMaxScale();
-            pdman.set1f(fTessArgsUniform, GrStrokeTolerances::CalcParametricIntolerance(maxScale));
+            pdman.set1f(fTessArgsUniform, GrStrokeTolerances::CalcParametricPrecision(maxScale));
         }
 
         // Set up the view matrix, if any.
@@ -465,7 +466,7 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
         const char* versionAndExtensionDecls,
         const GrGLSLUniformHandler& uniformHandler,
         const GrShaderCaps& shaderCaps) const {
-    SkASSERT(fMode == Mode::kTessellation);
+    SkASSERT(fMode == Mode::kHardwareTessellation);
     auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslGeomProc);
 
     SkString code(versionAndExtensionDecls);
@@ -485,11 +486,11 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
     const char* tessArgsName = impl->getTessArgsUniformName(uniformHandler);
     if (!this->hasDynamicStroke()) {
         code.appendf("uniform vec4 %s;\n", tessArgsName);
-        code.appendf("#define PARAMETRIC_INTOLERANCE %s.x\n", tessArgsName);
+        code.appendf("#define PARAMETRIC_PRECISION %s.x\n", tessArgsName);
         code.appendf("#define NUM_RADIAL_SEGMENTS_PER_RADIAN %s.y\n", tessArgsName);
     } else {
         code.appendf("uniform float %s;\n", tessArgsName);
-        code.appendf("#define PARAMETRIC_INTOLERANCE %s\n", tessArgsName);
+        code.appendf("#define PARAMETRIC_PRECISION %s\n", tessArgsName);
         code.appendf("#define NUM_RADIAL_SEGMENTS_PER_RADIAN vsStrokeArgs[0].x\n");
     }
 
@@ -574,7 +575,7 @@ SkString GrStrokeTessellateShader::getTessControlShaderGLSL(
         // Calculate the number of parametric segments. The final tessellated strip will be a
         // composition of these parametric segments as well as radial segments.
         float w = isinf(P[3].y) ? P[3].x : -1.0; // w<0 means the curve is an integral cubic.
-        float numParametricSegments = wangs_formula(P, w, PARAMETRIC_INTOLERANCE);
+        float numParametricSegments = wangs_formula(P, w, PARAMETRIC_PRECISION);
         if (P[0] == P[1] && P[2] == P[3]) {
             // This is how the patch builder articulates lineTos but Wang's formula returns
             // >>1 segment in this scenario. Assign 1 parametric segment.
@@ -825,7 +826,7 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
         const char* versionAndExtensionDecls,
         const GrGLSLUniformHandler& uniformHandler,
         const GrShaderCaps& shaderCaps) const {
-    SkASSERT(fMode == Mode::kTessellation);
+    SkASSERT(fMode == Mode::kHardwareTessellation);
     auto impl = static_cast<const GrStrokeTessellateShader::TessellationImpl*>(glslGeomProc);
 
     SkString code(versionAndExtensionDecls);
@@ -994,7 +995,7 @@ SkString GrStrokeTessellateShader::getTessEvaluationShaderGLSL(
     return code;
 }
 
-class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
+class GrStrokeTessellateShader::InstancedImpl : public GrGLSLGeometryProcessor {
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
         const auto& shader = args.fGeomProc.cast<GrStrokeTessellateShader>();
         SkPaint::Join joinType = shader.fStroke.getJoin();
@@ -1019,27 +1020,39 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
 
         // Tessellation control uniforms and/or dynamic attributes.
         if (!shader.hasDynamicStroke()) {
-            // [PARAMETRIC_INTOLERANCE, NUM_RADIAL_SEGMENTS_PER_RADIAN, JOIN_TYPE, STROKE_RADIUS]
+            // [PARAMETRIC_PRECISION, NUM_RADIAL_SEGMENTS_PER_RADIAN, JOIN_TYPE, STROKE_RADIUS]
             const char* tessArgsName;
             fTessControlArgsUniform = args.fUniformHandler->addUniform(
                     nullptr, kVertex_GrShaderFlag, kFloat4_GrSLType, "tessControlArgs",
                     &tessArgsName);
             args.fVertBuilder->codeAppendf(R"(
-            float PARAMETRIC_INTOLERANCE = %s.x;
+            float PARAMETRIC_PRECISION = %s.x;
             float NUM_RADIAL_SEGMENTS_PER_RADIAN = %s.y;
             float JOIN_TYPE = %s.z;
             float STROKE_RADIUS = %s.w;)", tessArgsName, tessArgsName, tessArgsName, tessArgsName);
         } else {
-            const char* parametricIntoleranceName;
+            const char* parametricPrecisionName;
             fTessControlArgsUniform = args.fUniformHandler->addUniform(
-                    nullptr, kVertex_GrShaderFlag, kFloat_GrSLType, "parametricIntolerance",
-                    &parametricIntoleranceName);
+                    nullptr, kVertex_GrShaderFlag, kFloat_GrSLType, "parametricPrecision",
+                    &parametricPrecisionName);
             args.fVertBuilder->codeAppendf(R"(
-            float PARAMETRIC_INTOLERANCE = %s;
+            float PARAMETRIC_PRECISION = %s;
             float STROKE_RADIUS = dynamicStrokeAttr.x;
             float NUM_RADIAL_SEGMENTS_PER_RADIAN = num_radial_segments_per_radian(
-                    PARAMETRIC_INTOLERANCE, STROKE_RADIUS);
-            float JOIN_TYPE = dynamicStrokeAttr.y;)", parametricIntoleranceName);
+                    PARAMETRIC_PRECISION, STROKE_RADIUS);
+            float JOIN_TYPE = dynamicStrokeAttr.y;)", parametricPrecisionName);
+        }
+
+        if (shader.fMode == Mode::kLog2Indirect) {
+            args.fVertBuilder->codeAppend(R"(
+            float NUM_TOTAL_EDGES = abs(argsAttr.z);)");
+        } else {
+            SkASSERT(shader.fMode == Mode::kFixedCount);
+            const char* edgeCountName;
+            fEdgeCountUniform = args.fUniformHandler->addUniform(
+                    nullptr, kVertex_GrShaderFlag, kFloat_GrSLType, "edgeCount", &edgeCountName);
+            args.fVertBuilder->codeAppendf(R"(
+            float NUM_TOTAL_EDGES = %s;)", edgeCountName);
         }
 
         // View matrix uniforms.
@@ -1074,11 +1087,10 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             P = AFFINE_MATRIX * P;
             lastControlPoint = AFFINE_MATRIX * lastControlPoint;)");
         }
-        args.fVertBuilder->codeAppend(R"(
-        float numTotalEdges = abs(argsAttr.z);
 
+        args.fVertBuilder->codeAppend(R"(
         // Find how many parametric segments this stroke requires.
-        float numParametricSegments = min(wangs_formula(P, w, PARAMETRIC_INTOLERANCE),
+        float numParametricSegments = min(wangs_formula(P, w, PARAMETRIC_PRECISION),
                                           float(1 << MAX_PARAMETRIC_SEGMENTS_LOG2));
         if (P[0] == P[1] && P[2] == P[3]) {
             // This is how we describe lines, but Wang's formula does not return 1 in this case.
@@ -1095,6 +1107,7 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             tan1 = float2(-1,0);
         })");
 
+        // Potential optimization: (shader.hasDynamicStroke() && shader.hasRoundJoins())?
         if (shader.fStroke.getJoin() == SkPaint::kRound_Join || shader.hasDynamicStroke()) {
             args.fVertBuilder->codeAppend(R"(
             // Determine how many edges to give to the round join. We emit the first and final edges
@@ -1106,13 +1119,17 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             // +2 because we emit the beginning and ending edges twice (see above comment).
             float numEdgesInJoin = numRadialSegmentsInJoin + 2;
             // The stroke section needs at least two edges. Don't assign more to the join than
-            // "numTotalEdges - 2".
-            numEdgesInJoin = min(numEdgesInJoin, numTotalEdges - 2);
-            // Negative argsAttr.z means the join is a chop, and chop joins get exactly one segment.
-            if (argsAttr.z < 0) {
-                // +2 because we emit the beginning and ending edges twice (see above comment).
-                numEdgesInJoin = 1 + 2;
-            })");
+            // "NUM_TOTAL_EDGES - 2".
+            numEdgesInJoin = min(numEdgesInJoin, NUM_TOTAL_EDGES - 2);)");
+            if (shader.fMode == Mode::kLog2Indirect) {
+                args.fVertBuilder->codeAppend(R"(
+                // Negative argsAttr.z means the join is an internal chop or circle, and both of
+                // those have empty joins. All we need is a bevel join.
+                if (argsAttr.z < 0) {
+                    // +2 because we emit the beginning and ending edges twice (see above comment).
+                    numEdgesInJoin = 1 + 2;
+                })");
+            }
             if (shader.hasDynamicStroke()) {
                 args.fVertBuilder->codeAppend(R"(
                 if (JOIN_TYPE >= 0 /*Is the join not a round type?*/) {
@@ -1123,7 +1140,7 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             }
         } else {
             args.fVertBuilder->codeAppendf(R"(
-            float numEdgesInJoin = %i;)", NumExtraEdgesInIndirectJoin(joinType));
+            float numEdgesInJoin = %i;)", NumFixedEdgesInJoin(joinType));
         }
 
         args.fVertBuilder->codeAppend(R"(
@@ -1182,7 +1199,7 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             combinedEdgeID = max(combinedEdgeID, 0);
         } else {
             // We belong to the stroke.
-            float maxCombinedSegments = numTotalEdges - numEdgesInJoin - 1;
+            float maxCombinedSegments = NUM_TOTAL_EDGES - numEdgesInJoin - 1;
             numRadialSegments = max(ceil(abs(rotation) * NUM_RADIAL_SEGMENTS_PER_RADIAN), 1);
             numRadialSegments = min(numRadialSegments, maxCombinedSegments);
             numParametricSegments = min(numParametricSegments,
@@ -1254,6 +1271,7 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
     }
 
     void setData(const GrGLSLProgramDataManager& pdman,
+                 const GrShaderCaps&,
                  const GrGeometryProcessor& geomProc) override {
         const auto& shader = geomProc.cast<GrStrokeTessellateShader>();
         const auto& stroke = shader.fStroke;
@@ -1271,7 +1289,7 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             }
             float strokeRadius = (stroke.isHairlineStyle()) ? .5f : stroke.getWidth() * .5;
             pdman.set4f(fTessControlArgsUniform,
-                        tolerances.fParametricIntolerance,  // PARAMETRIC_INTOLERANCE
+                        tolerances.fParametricPrecision,  // PARAMETRIC_PRECISION
                         tolerances.fNumRadialSegmentsPerRadian,  // NUM_RADIAL_SEGMENTS_PER_RADIAN
                         GetJoinType(shader.fStroke),  // JOIN_TYPE
                         strokeRadius);  // STROKE_RADIUS
@@ -1279,7 +1297,12 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
             SkASSERT(!stroke.isHairlineStyle());
             float maxScale = shader.viewMatrix().getMaxScale();
             pdman.set1f(fTessControlArgsUniform,
-                        GrStrokeTolerances::CalcParametricIntolerance(maxScale));
+                        GrStrokeTolerances::CalcParametricPrecision(maxScale));
+        }
+
+        if (shader.fMode == Mode::kFixedCount) {
+            SkASSERT(shader.fFixedCountNumTotalEdges != 0);
+            pdman.set1f(fEdgeCountUniform, (float)shader.fFixedCountNumTotalEdges);
         }
 
         // Set up the view matrix, if any.
@@ -1298,17 +1321,20 @@ class GrStrokeTessellateShader::IndirectImpl : public GrGLSLGeometryProcessor {
     GrGLSLUniformHandler::UniformHandle fTessControlArgsUniform;
     GrGLSLUniformHandler::UniformHandle fTranslateUniform;
     GrGLSLUniformHandler::UniformHandle fAffineMatrixUniform;
+    GrGLSLUniformHandler::UniformHandle fEdgeCountUniform;
     GrGLSLUniformHandler::UniformHandle fColorUniform;
 };
 
 void GrStrokeTessellateShader::getGLSLProcessorKey(const GrShaderCaps&,
                                                    GrProcessorKeyBuilder* b) const {
-    bool keyNeedsJoin = (fMode == Mode::kIndirect) && !(fShaderFlags & ShaderFlags::kDynamicStroke);
+    bool keyNeedsJoin = (fMode != Mode::kHardwareTessellation) &&
+                        !(fShaderFlags & ShaderFlags::kDynamicStroke);
+    SkASSERT((int)fMode >> 2 == 0);
     SkASSERT(fStroke.getJoin() >> 2 == 0);
     // Attribs get worked into the key automatically during GrGeometryProcessor::getAttributeKey().
     // When color is in a uniform, it's always wide. kWideColor doesn't need to be considered here.
     uint32_t key = (uint32_t)(fShaderFlags & ~ShaderFlags::kWideColor);
-    key = (key << 1) | (uint32_t)fMode;
+    key = (key << 2) | (uint32_t)fMode;
     key = (key << 2) | ((keyNeedsJoin) ? fStroke.getJoin() : 0);
     key = (key << 1) | (uint32_t)fStroke.isHairlineStyle();
     key = (key << 1) | (uint32_t)this->viewMatrix().isIdentity();
@@ -1316,6 +1342,6 @@ void GrStrokeTessellateShader::getGLSLProcessorKey(const GrShaderCaps&,
 }
 
 GrGLSLGeometryProcessor* GrStrokeTessellateShader::createGLSLInstance(const GrShaderCaps&) const {
-    return (fMode == Mode::kTessellation) ? (GrGLSLGeometryProcessor*)new TessellationImpl
-                                          : new IndirectImpl;
+    return (fMode == Mode::kHardwareTessellation) ? (GrGLSLGeometryProcessor*) new TessellationImpl
+                                                  : new InstancedImpl;
 }

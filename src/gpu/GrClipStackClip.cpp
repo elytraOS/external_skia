@@ -272,7 +272,6 @@ bool GrClipStackClip::applyClipMask(GrRecordingContext* context,
     SkASSERT(rtIBounds.contains(scissor)); // Mask shouldn't be larger than the RT.
 #endif
 
-    // MIXED SAMPLES TODO: We may want to explore using the stencil buffer for AA clipping.
     if ((surfaceDrawContext->numSamples() <= 1 && reducedClip.maskRequiresAA()) ||
         context->priv().caps()->avoidStencilBuffers() ||
         surfaceDrawContext->wrapsVkSecondaryCB()) {
@@ -358,8 +357,8 @@ GrSurfaceProxyView GrClipStackClip::createAlphaClipMask(GrRecordingContext* cont
 
     auto rtc = GrSurfaceDrawContext::MakeWithFallback(
             context, GrColorType::kAlpha_8, nullptr, SkBackingFit::kApprox,
-            {reducedClip.width(), reducedClip.height()}, 1, GrMipmapped::kNo, GrProtected::kNo,
-            kMaskOrigin);
+            {reducedClip.width(), reducedClip.height()}, SkSurfaceProps(), 1, GrMipmapped::kNo,
+            GrProtected::kNo, kMaskOrigin);
     if (!rtc) {
         return {};
     }

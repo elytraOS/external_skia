@@ -152,10 +152,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		args = append(args, "--randomProcessorTest")
 	}
 
-	if b.model("Pixel3", "Pixel3a") && b.extraConfig("Vulkan") {
-		args = append(args, "--dontReduceOpsTaskSplitting")
-	}
-
 	threadLimit := -1
 	const MAIN_THREAD_ONLY = 0
 
@@ -312,12 +308,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			}
 		}
 
-		if b.model("Pixelbook") {
-			// skbug.com/10232
-			skip("_ test _ ProcessorCloneTest")
-
-		}
-
 		if b.model("AndroidOne", "GalaxyS6", "Nexus5", "Nexus7") {
 			// skbug.com/9019
 			skip("_ test _ ProcessorCloneTest")
@@ -338,13 +328,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("CommandBuffer") {
 			// skbug.com/10412
 			skip("_ test _ GLBackendAllocationTest")
-		}
-
-		// skbug.com/9033 - these devices run out of memory on this test
-		// when opList splitting reduction is enabled
-		if b.gpu() && (b.model("Nexus7", "NVIDIA_Shield", "Nexus5x") ||
-			(b.os("Win10") && b.gpu("GTX660") && b.extraConfig("Vulkan"))) {
-			skip("_", "gm", "_", "savelayer_clipmask")
 		}
 
 		// skbug.com/9043 - these devices render this test incorrectly
@@ -434,11 +417,16 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 
 		if b.gpu("AppleM1") && !b.extraConfig("Metal") {
-			skip("_ test _ TransferPixelsFromTextureTest")  // skia:11814
+			skip("_ test _ TransferPixelsFromTextureTest") // skia:11814
 		}
 
-		if b.model(REDUCE_OPS_TASK_SPLITTING_MODELS...) {
-			args = append(args, "--reduceOpsTaskSplitting", "true")
+		if b.model(DONT_REDUCE_OPS_TASK_SPLITTING_MODELS...) {
+			args = append(args, "--dontReduceOpsTaskSplitting", "true")
+		}
+
+		// Test reduceOpsTaskSplitting fallback when over budget.
+		if b.model("NUC7i5BNK") && b.extraConfig("ASAN") {
+			args = append(args, "--gpuResourceCacheLimit", "16777216")
 		}
 
 		// Test rendering to wrapped dsts on a few bots
@@ -461,7 +449,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// Test dynamic MSAA.
 		if b.extraConfig("DMSAA") {
 			configs = []string{glPrefix + "dmsaa"}
-			args = append(args, "--hwtess")
+			if !b.os("Android") {
+				// Also enable hardware tessellation if not on android.
+				args = append(args, "--hwtess")
+			}
 		}
 
 		// DDL is a GPU-only feature
@@ -846,8 +837,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 	}
 
-	if b.matchGpu("Adreno[56][0-9][0-9]") { // skia:11308 - disable on Adreno 5xx/6xx
+	if b.matchGpu("Adreno[456][0-9][0-9]") { // skia:11308, skia:11891 - disable on Adreno 4/5/6xx
 		skip("_", "tests", "_", "SkSLMatrixEquality_GPU")
+		skip("_", "tests", "_", "DSLFPTest_SwitchStatement")
 	}
 
 	match := []string{}
@@ -941,6 +933,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "~WritePixelsNonTextureMSAA_Gpu")
 		// skbug.com/11366
 		match = append(match, "~SurfacePartialDraw_Gpu")
+	}
+
+	if b.extraConfig("Metal") && b.gpu("PowerVRGX6450") && b.matchOs("iOS") {
+		// skbug.com/11885
+		match = append(match, "~flight_animated_image")
 	}
 
 	if b.extraConfig("Direct3D") {

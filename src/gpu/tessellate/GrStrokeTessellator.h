@@ -25,15 +25,21 @@ public:
         PathStrokeList* fNext = nullptr;
     };
 
-    GrStrokeTessellator(ShaderFlags shaderFlags, PathStrokeList* pathStrokeList)
-            : fShaderFlags(shaderFlags), fPathStrokeList(pathStrokeList) {}
+    GrStrokeTessellator(GrStrokeTessellateShader::Mode shaderMode, ShaderFlags shaderFlags,
+                        const SkMatrix& viewMatrix, PathStrokeList* pathStrokeList)
+            : fShaderFlags(shaderFlags)
+            , fPathStrokeList(pathStrokeList)
+            , fShader(shaderMode, shaderFlags, viewMatrix, fPathStrokeList->fStroke,
+                      fPathStrokeList->fColor) {
+    }
+
+    const GrPathShader* shader() const { return &fShader; }
 
     // Called before draw(). Prepares GPU buffers containing the geometry to tessellate.
-    virtual void prepare(GrMeshDrawOp::Target*, const SkMatrix& viewMatrix,
-                         int totalCombinedVerbCnt) = 0;
+    virtual void prepare(GrMeshDrawOp::Target*, int totalCombinedVerbCnt) = 0;
 
-    // Issues draw calls for the tessellated stroke. The caller is responsible for binding its
-    // desired pipeline ahead of time.
+    // Issues draw calls for the tessellated stroke. The caller is responsible for creating and
+    // binding a pipeline that uses this class's shader() before calling draw().
     virtual void draw(GrOpFlushState*) const = 0;
 
     virtual ~GrStrokeTessellator() {}
@@ -41,6 +47,7 @@ public:
 protected:
     const ShaderFlags fShaderFlags;
     PathStrokeList* fPathStrokeList;
+    GrStrokeTessellateShader fShader;
 };
 
 // These tolerances decide the number of parametric and radial segments the tessellator will
@@ -49,20 +56,20 @@ struct GrStrokeTolerances {
     // Decides the number of parametric segments the tessellator adds for each curve. (Uniform
     // steps in parametric space.) The tessellator will add enough parametric segments so that,
     // once transformed into device space, they never deviate by more than
-    // 1/GrTessellationPathRenderer::kLinearizationIntolerance pixels from the true curve.
-    constexpr static float CalcParametricIntolerance(float matrixMaxScale) {
-        return matrixMaxScale * GrTessellationPathRenderer::kLinearizationIntolerance;
+    // 1/GrTessellationPathRenderer::kLinearizationPrecision pixels from the true curve.
+    constexpr static float CalcParametricPrecision(float matrixMaxScale) {
+        return matrixMaxScale * GrTessellationPathRenderer::kLinearizationPrecision;
     }
     // Decides the number of radial segments the tessellator adds for each curve. (Uniform steps
     // in tangent angle.) The tessellator will add this number of radial segments for each
     // radian of rotation in local path space.
-    static float CalcNumRadialSegmentsPerRadian(float parametricIntolerance,
+    static float CalcNumRadialSegmentsPerRadian(float parametricPrecision,
                                                 float strokeWidth) {
-        return .5f / acosf(std::max(1 - 2 / (parametricIntolerance * strokeWidth), -1.f));
+        return .5f / acosf(std::max(1 - 2 / (parametricPrecision * strokeWidth), -1.f));
     }
     template<int N> static grvx::vec<N> ApproxNumRadialSegmentsPerRadian(
-            float parametricIntolerance, grvx::vec<N> strokeWidths) {
-        grvx::vec<N> cosTheta = skvx::max(1 - 2 / (parametricIntolerance * strokeWidths), -1);
+            float parametricPrecision, grvx::vec<N> strokeWidths) {
+        grvx::vec<N> cosTheta = skvx::max(1 - 2 / (parametricPrecision * strokeWidths), -1);
         // Subtract GRVX_APPROX_ACOS_MAX_ERROR so we never account for too few segments.
         return .5f / (grvx::approx_acos(cosTheta) - GRVX_APPROX_ACOS_MAX_ERROR);
     }
@@ -99,11 +106,11 @@ struct GrStrokeTolerances {
     }
     static GrStrokeTolerances MakeNonHairline(float matrixMaxScale, float strokeWidth) {
         SkASSERT(strokeWidth > 0);
-        float parametricIntolerance = CalcParametricIntolerance(matrixMaxScale);
-        return {parametricIntolerance,
-                CalcNumRadialSegmentsPerRadian(parametricIntolerance, strokeWidth)};
+        float parametricPrecision = CalcParametricPrecision(matrixMaxScale);
+        return {parametricPrecision,
+                CalcNumRadialSegmentsPerRadian(parametricPrecision, strokeWidth)};
     }
-    float fParametricIntolerance;
+    float fParametricPrecision;
     float fNumRadialSegmentsPerRadian;
 };
 
@@ -112,8 +119,8 @@ class alignas(sizeof(float) * 4) GrStrokeToleranceBuffer {
 public:
     using PathStrokeList = GrStrokeTessellator::PathStrokeList;
 
-    GrStrokeToleranceBuffer(float parametricIntolerance)
-            : fParametricIntolerance(parametricIntolerance) {
+    GrStrokeToleranceBuffer(float parametricPrecision)
+            : fParametricPrecision(parametricPrecision) {
     }
 
     float fetchRadialSegmentsPerRadian(PathStrokeList* head) {
@@ -128,7 +135,7 @@ public:
             do {
                 fStrokeWidths[i++] = peekAhead->fStroke.getWidth();
             } while ((peekAhead = peekAhead->fNext) && i < 4);
-            auto tol = GrStrokeTolerances::ApproxNumRadialSegmentsPerRadian(fParametricIntolerance,
+            auto tol = GrStrokeTolerances::ApproxNumRadialSegmentsPerRadian(fParametricPrecision,
                                                                             fStrokeWidths);
             tol.store(fNumRadialSegmentsPerRadian);
             fBufferIdx = 0;
@@ -141,7 +148,7 @@ public:
 private:
     grvx::float4 fStrokeWidths{};  // Must be first for alignment purposes.
     float fNumRadialSegmentsPerRadian[4];
-    const float fParametricIntolerance;
+    const float fParametricPrecision;
     int fBufferIdx = 4;  // Initialize the buffer as "empty";
 };
 

@@ -47,6 +47,7 @@ class SkDrawable;
 struct SkDrawShadowRec;
 class SkFont;
 class SkGlyphRunBuilder;
+class SkGlyphRunList;
 class SkImage;
 class SkImageFilter;
 class SkMarkerStack;
@@ -1781,8 +1782,29 @@ public:
         @param font        typeface, text size and so, used to describe the text
         @param paint       blend, color, and so on, used to draw
     */
-
     void drawGlyphs(int count, const SkGlyphID glyphs[], const SkPoint positions[],
+                    SkPoint origin, const SkFont& font, const SkPaint& paint);
+
+    /** Draws count glyphs, at positions relative to origin styled with font and paint.
+
+        This function draw glyphs using the given scaling and rotations. They are positioned
+        relative to the given origin. It does not perform typeface fallback for glyphs not found
+        in the SkTypeface in font.
+
+        The drawing obeys the current transform matrix and clipping.
+
+        All elements of paint: SkPathEffect, SkMaskFilter, SkShader,
+        SkColorFilter, and SkImageFilter; apply to text. By
+        default, draws filled black glyphs.
+
+        @param count    number of glyphs to draw
+        @param glyphs   the array of glyphIDs to draw
+        @param xforms   where to draw and orient each glyph
+        @param origin   the origin of all the positions
+        @param font     typeface, text size and so, used to describe the text
+        @param paint    blend, color, and so on, used to draw
+    */
+    void drawGlyphs(int count, const SkGlyphID glyphs[], const SkRSXform xforms[],
                     SkPoint origin, const SkFont& font, const SkPaint& paint);
 
     /** Draws SkTextBlob blob at (x, y), using clip, SkMatrix, and SkPaint paint.
@@ -2195,6 +2217,8 @@ protected:
     virtual void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                 const SkPaint& paint);
 
+    virtual void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint);
+
     virtual void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
                            const SkPoint texCoords[4], SkBlendMode mode, const SkPaint& paint);
     virtual void onDrawPoints(PointMode mode, size_t count, const SkPoint pts[],
@@ -2316,6 +2340,7 @@ private:
     friend class AutoLayerForImageFilter;
     friend class SkSurface_Raster;  // needs getDevice()
     friend class SkNoDrawCanvas;    // needs resetForNextPicture()
+    friend class SkNWayCanvas;
     friend class SkPictureRecord;   // predrawNotify (why does it need it? <reed>)
     friend class SkOverdrawCanvas;
     friend class SkRasterHandleAllocator;

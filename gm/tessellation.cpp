@@ -79,6 +79,7 @@ private:
         }
         void writeFragmentShader(GrGLSLFPFragmentBuilder*, const char* color, const char* coverage);
         void setData(const GrGLSLProgramDataManager& pdman,
+                     const GrShaderCaps&,
                      const GrGeometryProcessor& geomProc) override {
             pdman.setSkMatrix(fViewMatrixUniform,
                               geomProc.cast<TessellationTestTriShader>().fViewMatrix);
@@ -201,6 +202,7 @@ private:
         }
         void writeFragmentShader(GrGLSLFPFragmentBuilder*, const char* color, const char* coverage);
         void setData(const GrGLSLProgramDataManager& pdman,
+                     const GrShaderCaps&,
                      const GrGeometryProcessor& geomProc) override {
             pdman.setSkMatrix(fViewMatrixUniform,
                               geomProc.cast<TessellationTestRectShader>().fViewMatrix);
@@ -311,8 +313,7 @@ public:
 private:
     const char* name() const override { return "TessellationTestOp"; }
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
-    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
-                                      bool hasMixedSampledCoverage, GrClampType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) override {
         return GrProcessorSet::EmptySetAnalysis();
     }
 

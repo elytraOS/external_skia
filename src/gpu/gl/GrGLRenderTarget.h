@@ -48,13 +48,16 @@ public:
 
     GrBackendFormat backendFormat() const override;
 
-    bool canAttemptStencilAttachment() const override;
+    bool canAttemptStencilAttachment(bool useMultisampleFBO) const override;
 
     // GrGLRenderTarget overrides dumpMemoryStatistics so it can log its texture and renderbuffer
     // components separately.
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;
 
     GrGLFormat format() const { return fRTFormat; }
+
+    bool hasDynamicMSAAAttachment() const { return SkToBool(fDynamicMSAAAttachment); }
+    bool ensureDynamicMSAAAttachment();
 
 protected:
     // Constructor for subclasses.
@@ -79,9 +82,11 @@ private:
     void setFlags(const GrGLCaps&, const IDs&);
 
     GrGLGpu* getGLGpu() const;
-    bool completeStencilAttachment() override;
+    bool completeStencilAttachment(GrAttachment* stencil, bool useMultisampleFBO) override;
 
     size_t onGpuMemorySize() const override;
+
+    sk_sp<GrGLAttachment> fDynamicMSAAAttachment;
 
     GrGLuint    fMultisampleFBOID;
     GrGLuint    fSingleSampleFBOID;

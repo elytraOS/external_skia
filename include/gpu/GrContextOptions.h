@@ -239,8 +239,8 @@ struct SK_API GrContextOptions {
     ShaderErrorHandler* fShaderErrorHandler = nullptr;
 
     /**
-     * Specifies the number of samples Ganesh should use when performing internal draws with MSAA or
-     * mixed samples (hardware capabilities permitting).
+     * Specifies the number of samples Ganesh should use when performing internal draws with MSAA
+     * (hardware capabilities permitting).
      *
      * If 0, Ganesh will disable internal code paths that use multisampling.
      */
@@ -320,15 +320,17 @@ struct SK_API GrContextOptions {
     bool fDisallowWritePixelRowBytes = false;
 
     /**
-     * Forces all draws to use antialiasing. This allows Ganesh to use internal multisampling
-     * as well as certain clip optimizations.
-     */
-    bool fAlwaysAntialias = false;
-
-    /**
      * Include or exclude specific GPU path renderers.
      */
     GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kDefault;
+
+    /**
+     * Specify the GPU resource cache limit. Equivalent to calling `setResourceCacheLimit` on the
+     * context at construction time.
+     *
+     * A value of -1 means use the default limit value.
+     */
+    int fResourceCacheLimitOverride = -1;
 #endif
 
     GrDriverBugWorkarounds fDriverBugWorkarounds;

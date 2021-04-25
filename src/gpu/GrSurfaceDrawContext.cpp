@@ -97,7 +97,7 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::Make(GrRecordingCont
                                                                  sk_sp<SkColorSpace> colorSpace,
                                                                  sk_sp<GrSurfaceProxy> proxy,
                                                                  GrSurfaceOrigin origin,
-                                                                 const SkSurfaceProps* surfaceProps,
+                                                                 const SkSurfaceProps& surfaceProps,
                                                                  bool flushTimeOpsTask) {
     if (!proxy) {
         return nullptr;
@@ -135,7 +135,7 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::Make(
         GrSwizzle writeSwizzle,
         GrSurfaceOrigin origin,
         SkBudgeted budgeted,
-        const SkSurfaceProps* surfaceProps) {
+        const SkSurfaceProps& surfaceProps) {
     // It is probably not necessary to check if the context is abandoned here since uses of the
     // GrSurfaceDrawContext which need the context will mostly likely fail later on without an
     // issue. However having this hear adds some reassurance in case there is a path doesn't handle
@@ -176,12 +176,12 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::Make(
         sk_sp<SkColorSpace> colorSpace,
         SkBackingFit fit,
         SkISize dimensions,
+        const SkSurfaceProps& surfaceProps,
         int sampleCnt,
         GrMipmapped mipMapped,
         GrProtected isProtected,
         GrSurfaceOrigin origin,
-        SkBudgeted budgeted,
-        const SkSurfaceProps* surfaceProps) {
+        SkBudgeted budgeted) {
     auto format = context->priv().caps()->getDefaultBackendFormat(colorType, GrRenderable::kYes);
     if (!format.isValid()) {
         return nullptr;
@@ -212,18 +212,18 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::MakeWithFallback(
         sk_sp<SkColorSpace> colorSpace,
         SkBackingFit fit,
         SkISize dimensions,
+        const SkSurfaceProps& surfaceProps,
         int sampleCnt,
         GrMipmapped mipMapped,
         GrProtected isProtected,
         GrSurfaceOrigin origin,
-        SkBudgeted budgeted,
-        const SkSurfaceProps* surfaceProps) {
+        SkBudgeted budgeted) {
     auto [ct, format] = GetFallbackColorTypeAndFormat(context, colorType, sampleCnt);
     if (ct == GrColorType::kUnknown) {
         return nullptr;
     }
-    return GrSurfaceDrawContext::Make(context, ct, colorSpace, fit, dimensions, sampleCnt,
-                                      mipMapped, isProtected, origin, budgeted, surfaceProps);
+    return GrSurfaceDrawContext::Make(context, ct, colorSpace, fit, dimensions, surfaceProps,
+                                      sampleCnt, mipMapped, isProtected, origin, budgeted);
 }
 
 std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::MakeFromBackendTexture(
@@ -233,7 +233,7 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::MakeFromBackendTextu
         const GrBackendTexture& tex,
         int sampleCnt,
         GrSurfaceOrigin origin,
-        const SkSurfaceProps* surfaceProps,
+        const SkSurfaceProps& surfaceProps,
         sk_sp<GrRefCntedCallback> releaseHelper) {
     SkASSERT(sampleCnt > 0);
     sk_sp<GrTextureProxy> proxy(context->priv().proxyProvider()->wrapRenderableBackendTexture(
@@ -253,7 +253,7 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::MakeFromBackendRende
         sk_sp<SkColorSpace> colorSpace,
         const GrBackendRenderTarget& rt,
         GrSurfaceOrigin origin,
-        const SkSurfaceProps* surfaceProps,
+        const SkSurfaceProps& surfaceProps,
         sk_sp<GrRefCntedCallback> releaseHelper) {
     sk_sp<GrSurfaceProxy> proxy(
             context->priv().proxyProvider()->wrapBackendRenderTarget(rt, std::move(releaseHelper)));
@@ -269,7 +269,7 @@ std::unique_ptr<GrSurfaceDrawContext> GrSurfaceDrawContext::MakeFromVulkanSecond
         GrRecordingContext* context,
         const SkImageInfo& imageInfo,
         const GrVkDrawableInfo& vkInfo,
-        const SkSurfaceProps* props) {
+        const SkSurfaceProps& props) {
     sk_sp<GrSurfaceProxy> proxy(
             context->priv().proxyProvider()->wrapVulkanSecondaryCBAsRenderTarget(imageInfo,
                                                                                  vkInfo));
@@ -291,14 +291,17 @@ GrSurfaceDrawContext::GrSurfaceDrawContext(GrRecordingContext* context,
                                            GrSurfaceProxyView writeView,
                                            GrColorType colorType,
                                            sk_sp<SkColorSpace> colorSpace,
-                                           const SkSurfaceProps* surfaceProps,
+                                           const SkSurfaceProps& surfaceProps,
                                            bool flushTimeOpsTask)
         : GrSurfaceFillContext(context,
                                std::move(readView),
                                std::move(writeView),
                                {colorType, kPremul_SkAlphaType, std::move(colorSpace)},
                                flushTimeOpsTask)
-        , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
+        , fSurfaceProps(surfaceProps)
+        , fCanUseDynamicMSAA(
+                (fSurfaceProps.flags() & kDMSAA_SkSurfacePropsPrivateFlag) &&
+                context->priv().caps()->supportsDynamicMSAA(this->asRenderTargetProxy()))
         , fGlyphPainter(*this) {
     SkDEBUGCODE(this->validate();)
 }
@@ -307,7 +310,24 @@ GrSurfaceDrawContext::~GrSurfaceDrawContext() {
     ASSERT_SINGLE_OWNER
 }
 
+void GrSurfaceDrawContext::willReplaceOpsTask(GrOpsTask* prevTask, GrOpsTask* nextTask) {
+    if (prevTask && fNeedsStencil) {
+        // Store the stencil values in memory upon completion of fOpsTask.
+        prevTask->setMustPreserveStencil();
+        // Reload the stencil buffer content at the beginning of newOpsTask.
+        // FIXME: Could the topo sort insert a task between these two that modifies the stencil
+        // values?
+        nextTask->setInitialStencilContent(GrOpsTask::StencilContent::kPreserved);
+    }
+}
+
 inline GrAAType GrSurfaceDrawContext::chooseAAType(GrAA aa) {
+    if (fCanUseDynamicMSAA) {
+        // Trigger dmsaa by default if the render target has it. Coverage ops that know how to
+        // handle both single and multisample targets without popping will do so without calling
+        // chooseAAType.
+        return GrAAType::kMSAA;
+    }
     if (GrAA::kNo == aa) {
         // On some devices we cannot disable MSAA if it is enabled so we make the AA type reflect
         // that.
@@ -335,7 +355,7 @@ void GrSurfaceDrawContext::drawGlyphRunListNoCache(const GrClip* clip,
     const SkPoint drawOrigin = glyphRunList.origin();
     SkMatrix drawMatrix = viewMatrix.localToDevice();
     drawMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
-    GrSubRunAllocator* const alloc = this->recordingContext()->priv().recordTimeSubRunAllocator();
+    GrSubRunAllocator* const alloc = this->subRunAlloc();
 
     for (auto& glyphRun : glyphRunList) {
         GrSubRunNoCachePainter painter{this, alloc, clip, viewMatrix, glyphRunList, paint};
@@ -415,8 +435,10 @@ void GrSurfaceDrawContext::drawGlyphRunList(const GrClip* clip,
         return;
     }
 
-    if (gGrDrawTextNoCache) {
-        // drawGlyphRunListNoCache lives in GrTextBlob.cpp to share sub run implementation code.
+    if (gGrDrawTextNoCache || glyphRunList.blob() == nullptr) {
+        // If the glyphRunList does not have an associated text blob, then it was created by one of
+        // the direct draw APIs (drawGlyphs, etc.). There is no need to create a GrTextBlob just
+        // build the sub run directly and place it in the op.
         this->drawGlyphRunListNoCache(clip, viewMatrix, glyphRunList, paint);
     } else {
         this->drawGlyphRunListWithCache(clip, viewMatrix, glyphRunList, paint);
@@ -606,8 +628,17 @@ void GrSurfaceDrawContext::drawFilledQuad(const GrClip* clip,
     if (opt >= QuadOptimization::kClipApplied) {
         // These optimizations require caller to add an op themselves
         const GrClip* finalClip = opt == QuadOptimization::kClipApplied ? nullptr : clip;
-        GrAAType aaType = ss ? (aa == GrAA::kYes ? GrAAType::kMSAA : GrAAType::kNone)
-                             : this->chooseAAType(aa);
+        GrAAType aaType;
+        if (ss) {
+            aaType = (aa == GrAA::kYes) ? GrAAType::kMSAA : GrAAType::kNone;
+        } else if (fCanUseDynamicMSAA && aa == GrAA::kNo) {
+            // The SkGpuDevice ensures GrAA is always kYes when using dmsaa. If the caller calls
+            // into here with GrAA::kNo, trust that they know what they're doing and that the
+            // rendering will be equal with or without msaa.
+            aaType = GrAAType::kNone;
+        } else {
+            aaType = this->chooseAAType(aa);
+        }
         this->addDrawOp(finalClip, GrFillRectOp::Make(fContext, std::move(paint), aaType,
                                                       quad, ss));
     }
@@ -629,7 +660,7 @@ void GrSurfaceDrawContext::drawTexture(const GrClip* clip,
                                        const SkMatrix& viewMatrix,
                                        sk_sp<GrColorSpaceXform> colorSpaceXform) {
     // If we are using dmsaa then go through GrFillRRectOp (via fillRectToRect).
-    if (fContext->priv().alwaysAntialias() && aa == GrAA::kYes) {
+    if ((this->alwaysAntialias() || this->caps()->reducedShaderMode()) && aa == GrAA::kYes) {
         GrPaint paint;
         paint.setColor4f(color);
         std::unique_ptr<GrFragmentProcessor> fp;
@@ -730,7 +761,7 @@ void GrSurfaceDrawContext::drawRect(const GrClip* clip,
                (rect.width() && rect.height())) {
         // Only use the StrokeRectOp for non-empty rectangles. Empty rectangles will be processed by
         // GrStyledShape to handle stroke caps and dashing properly.
-        GrAAType aaType = this->chooseAAType(aa);
+        GrAAType aaType = (fCanUseDynamicMSAA) ? GrAAType::kCoverage : this->chooseAAType(aa);
         GrOp::Owner op = GrStrokeRectOp::Make(
                 fContext, std::move(paint), aaType, viewMatrix, rect, stroke);
         // op may be null if the stroke is not supported or if using coverage aa and the view matrix
@@ -755,7 +786,8 @@ void GrSurfaceDrawContext::fillRectToRect(const GrClip* clip,
                   aa == GrAA::kYes ? GrQuadAAFlags::kAll : GrQuadAAFlags::kNone};
 
     // If we are using dmsaa then attempt to draw the rect with GrFillRRectOp.
-    if (fContext->priv().alwaysAntialias() && this->caps()->drawInstancedSupport() &&
+    if ((fContext->priv().caps()->reducedShaderMode() || this->alwaysAntialias()) &&
+        this->caps()->drawInstancedSupport()                                      &&
         aa == GrAA::kYes) {  // If aa is kNo when using dmsaa, the rect is axis aligned. Don't use
                              // GrFillRRectOp because it might require dual source blending.
                              // http://skbug.com/11756
@@ -828,28 +860,16 @@ GrOpsTask::CanDiscardPreviousOps GrSurfaceDrawContext::canDiscardPreviousOpsOnFu
     // Although the clear will ignore the stencil buffer, following draw ops may not so we can't get
     // rid of all the preceding ops. Beware! If we ever add any ops that have a side effect beyond
     // modifying the stencil buffer we will need a more elaborate tracking system (skbug.com/7002).
-    return GrOpsTask::CanDiscardPreviousOps(!fNumStencilSamples);
+    return GrOpsTask::CanDiscardPreviousOps(!fNeedsStencil);
 }
 
-void GrSurfaceDrawContext::setNeedsStencil(bool useMixedSamplesIfNotMSAA) {
-    // Don't clear stencil until after we've changed fNumStencilSamples. This ensures we don't loop
-    // forever in the event that there are driver bugs and we need to clear as a draw.
-    bool hasInitializedStencil = fNumStencilSamples > 0;
-
-    int numRequiredSamples = this->numSamples();
-    if (useMixedSamplesIfNotMSAA && 1 == numRequiredSamples) {
-        SkASSERT(this->asRenderTargetProxy()->canUseMixedSamples(*this->caps()));
-        numRequiredSamples =
-                this->caps()->internalMultisampleCount(this->asSurfaceProxy()->backendFormat());
-    }
-    SkASSERT(numRequiredSamples > 0);
-
-    if (numRequiredSamples > fNumStencilSamples) {
-        fNumStencilSamples = numRequiredSamples;
-        this->asRenderTargetProxy()->setNeedsStencil(fNumStencilSamples);
-    }
-
+void GrSurfaceDrawContext::setNeedsStencil() {
+    // Don't clear stencil until after we've set fNeedsStencil. This ensures we don't loop forever
+    // in the event that there are driver bugs and we need to clear as a draw.
+    bool hasInitializedStencil = fNeedsStencil;
+    fNeedsStencil = true;
     if (!hasInitializedStencil) {
+        this->asRenderTargetProxy()->setNeedsStencil();
         if (this->caps()->performStencilClearsAsDraws()) {
             // There is a driver bug with clearing stencil. We must use an op to manually clear the
             // stencil buffer before the op that required 'setNeedsStencil'.
@@ -862,7 +882,7 @@ void GrSurfaceDrawContext::setNeedsStencil(bool useMixedSamplesIfNotMSAA) {
 }
 
 void GrSurfaceDrawContext::internalStencilClear(const SkIRect* scissor, bool insideStencilMask) {
-    this->setNeedsStencil(/* useMixedSamplesIfNotMSAA = */ false);
+    this->setNeedsStencil();
 
     GrScissorState scissorState(this->asSurfaceProxy()->backingStoreDimensions());
     if (scissor && !scissorState.set(*scissor)) {
@@ -1056,9 +1076,14 @@ void GrSurfaceDrawContext::drawRRect(const GrClip* origClip,
     AutoCheckFlush acf(this->drawingManager());
 
     GrAAType aaType = this->chooseAAType(aa);
+    bool preferFillRRectOverCircle = aaType == GrAAType::kCoverage        &&
+                                     this->caps()->drawInstancedSupport() &&
+                                     this->caps()->reducedShaderMode();
 
     GrOp::Owner op;
-    if (GrAAType::kCoverage == aaType && rrect.isSimple() &&
+    if (!preferFillRRectOverCircle                             &&
+        GrAAType::kCoverage == aaType                          &&
+        rrect.isSimple()                                       &&
         rrect.getSimpleRadii().fX == rrect.getSimpleRadii().fY &&
         viewMatrix.rectStaysRect() && viewMatrix.isSimilarity()) {
         // In coverage mode, we draw axis-aligned circular roundrects with the GrOvalOpFactory
@@ -1072,7 +1097,7 @@ void GrSurfaceDrawContext::drawRRect(const GrClip* origClip,
         op = GrFillRRectOp::Make(fContext, std::move(paint), viewMatrix, rrect, rrect.rect(),
                                  GrAA(aaType != GrAAType::kNone));
     }
-    if (!op && GrAAType::kCoverage == aaType) {
+    if (!op && (GrAAType::kCoverage == aaType || fCanUseDynamicMSAA)) {
         assert_alive(paint);
         op = GrOvalOpFactory::MakeRRectOp(
                 fContext, std::move(paint), viewMatrix, rrect, stroke, this->caps()->shaderCaps());
@@ -1359,9 +1384,16 @@ void GrSurfaceDrawContext::drawOval(const GrClip* clip,
 
     GrAAType aaType = this->chooseAAType(aa);
 
+    bool preferFillRRectOverCircle = aaType == GrAAType::kCoverage        &&
+                                     this->caps()->drawInstancedSupport() &&
+                                     this->caps()->reducedShaderMode();
+
     GrOp::Owner op;
-    if (GrAAType::kCoverage == aaType && oval.width() > SK_ScalarNearlyZero &&
-        oval.width() == oval.height() && viewMatrix.isSimilarity()) {
+    if (!preferFillRRectOverCircle         &&
+        GrAAType::kCoverage == aaType      &&
+        oval.width() > SK_ScalarNearlyZero &&
+        oval.width() == oval.height()      &&
+        viewMatrix.isSimilarity()) {
         // We don't draw true circles as round rects in coverage mode, because it can
         // cause perf regressions on some platforms as compared to the dedicated circle Op.
         assert_alive(paint);
@@ -1378,7 +1410,7 @@ void GrSurfaceDrawContext::drawOval(const GrClip* clip,
         op = GrFillRRectOp::Make(fContext, std::move(paint), viewMatrix, SkRRect::MakeOval(oval),
                                  oval, GrAA(aaType != GrAAType::kNone));
     }
-    if (!op && GrAAType::kCoverage == aaType) {
+    if (!op && (GrAAType::kCoverage == aaType || fCanUseDynamicMSAA)) {
         assert_alive(paint);
         op = GrOvalOpFactory::MakeOvalOp(fContext, std::move(paint), viewMatrix, oval, style,
                                          this->caps()->shaderCaps());
@@ -1411,7 +1443,7 @@ void GrSurfaceDrawContext::drawArc(const GrClip* clip,
     AutoCheckFlush acf(this->drawingManager());
 
     GrAAType aaType = this->chooseAAType(aa);
-    if (GrAAType::kCoverage == aaType) {
+    if (GrAAType::kCoverage == aaType || fCanUseDynamicMSAA) {
         const GrShaderCaps* shaderCaps = this->caps()->shaderCaps();
         GrOp::Owner op = GrOvalOpFactory::MakeArcOp(fContext,
                                                     std::move(paint),
@@ -1884,7 +1916,7 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
     bool usesUserStencilBits = fixedFunctionFlags & GrDrawOp::FixedFunctionFlags::kUsesStencil;
 
     if (usesUserStencilBits) {  // Stencil clipping will call setNeedsStencil on its own, if needed.
-        this->setNeedsStencil(usesHWAA);
+        this->setNeedsStencil();
     }
 
     bool skipDraw = false;
@@ -1907,20 +1939,8 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
         return;
     }
 
-    bool willUseStencil = usesUserStencilBits || appliedClip.hasStencilClip();
-    SkASSERT(!willUseStencil || fNumStencilSamples > 0);
-
-    // If stencil is enabled and the framebuffer is mixed sampled, then the graphics pipeline will
-    // have mixed sampled coverage, regardless of whether HWAA is enabled. (e.g., a non-aa draw
-    // that uses a stencil test when the stencil buffer is multisampled.)
-    bool hasMixedSampledCoverage = (
-            willUseStencil && fNumStencilSamples > this->numSamples());
-    SkASSERT(!hasMixedSampledCoverage ||
-             this->asRenderTargetProxy()->canUseMixedSamples(*this->caps()));
-
     GrClampType clampType = GrColorTypeClampType(this->colorInfo().colorType());
-    GrProcessorSet::Analysis analysis = drawOp->finalize(
-            *this->caps(), &appliedClip, hasMixedSampledCoverage, clampType);
+    GrProcessorSet::Analysis analysis = drawOp->finalize(*this->caps(), &appliedClip, clampType);
 
     // Must be called before setDstProxyView so that it sees the final bounds of the op.
     op->setClippedBounds(bounds);
@@ -1936,9 +1956,9 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
     if (willAddFn) {
         willAddFn(op.get(), opsTask->uniqueID());
     }
-    opsTask->addDrawOp(this->drawingManager(), std::move(op), analysis, std::move(appliedClip),
-                       dstProxyView, GrTextureResolveManager(this->drawingManager()),
-                       *this->caps());
+    opsTask->addDrawOp(this->drawingManager(), std::move(op), fixedFunctionFlags, analysis,
+                       std::move(appliedClip), dstProxyView,
+                       GrTextureResolveManager(this->drawingManager()), *this->caps());
 }
 
 bool GrSurfaceDrawContext::setupDstProxyView(const GrOp& op,
