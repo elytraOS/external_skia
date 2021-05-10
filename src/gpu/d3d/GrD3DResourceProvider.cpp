@@ -199,6 +199,70 @@ GrD3DPipelineState* GrD3DResourceProvider::findOrCreateCompatiblePipelineState(
     return fPipelineStateCache->refPipelineState(rt, info);
 }
 
+sk_sp<GrD3DPipeline> GrD3DResourceProvider::findOrCreateMipmapPipeline() {
+    if (!fMipmapPipeline) {
+        // Note: filtering for non-even widths and heights samples at the 0.25 and 0.75
+        // locations and averages the result. As the initial samples are bilerped this is
+        // approximately a triangle filter. We should look into doing a better kernel but
+        // this should hold us for now.
+        const char* shader =
+            "SamplerState textureSampler : register(s0, space1);\n"
+            "Texture2D<float4> inputTexture : register(t1, space1);\n"
+            "RWTexture2D<float4> outUAV : register(u2, space1);\n"
+            "\n"
+            "cbuffer UniformBuffer : register(b0, space0) {\n"
+            "    float2 inverseDims;\n"
+            "    uint mipLevel;\n"
+            "    uint sampleMode;\n"
+            "}\n"
+            "\n"
+            "[numthreads(8, 8, 1)]\n"
+            "void main(uint groupIndex : SV_GroupIndex, uint3 threadID : SV_DispatchThreadID) {\n"
+            "    float2 uv = inverseDims * (threadID.xy + 0.5);\n"
+            "    float4 mipVal;\n"
+            "    switch (sampleMode) {\n"
+            "        case 0: {\n"
+            "            mipVal = inputTexture.SampleLevel(textureSampler, uv, mipLevel);\n"
+            "            break;\n"
+            "        }\n"
+            "        case 1: {\n"
+            "            float2 uvdiff = inverseDims * 0.25;\n"
+            "            mipVal = inputTexture.SampleLevel(textureSampler, uv-uvdiff, mipLevel);\n"
+            "            mipVal += inputTexture.SampleLevel(textureSampler, uv+uvdiff, mipLevel);\n"
+            "            uvdiff.y = -uvdiff.y;\n"
+            "            mipVal += inputTexture.SampleLevel(textureSampler, uv-uvdiff, mipLevel);\n"
+            "            mipVal += inputTexture.SampleLevel(textureSampler, uv+uvdiff, mipLevel);\n"
+            "            mipVal *= 0.25;\n"
+            "            break;\n"
+            "        }\n"
+            "        case 2: {\n"
+            "            float2 uvdiff = float2(inverseDims.x * 0.25, 0);\n"
+            "            mipVal = inputTexture.SampleLevel(textureSampler, uv-uvdiff, mipLevel);\n"
+            "            mipVal += inputTexture.SampleLevel(textureSampler, uv+uvdiff, mipLevel);\n"
+            "            mipVal *= 0.5;\n"
+            "            break;\n"
+            "        }\n"
+            "        case 3: {\n"
+            "            float2 uvdiff = float2(0, inverseDims.y * 0.25);\n"
+            "            mipVal = inputTexture.SampleLevel(textureSampler, uv-uvdiff, mipLevel);\n"
+            "            mipVal += inputTexture.SampleLevel(textureSampler, uv+uvdiff, mipLevel);\n"
+            "            mipVal *= 0.5;\n"
+            "            break;\n"
+            "        }\n"
+            "    }\n"
+            "\n"
+            "    outUAV[threadID.xy] = mipVal;\n"
+            "}\n";
+
+        sk_sp<GrD3DRootSignature> rootSig = this->findOrCreateRootSignature(1, 1);
+
+        fMipmapPipeline =
+                GrD3DPipelineStateBuilder::MakeComputePipeline(fGpu, rootSig.get(), shader);
+    }
+
+    return fMipmapPipeline;
+}
+
 D3D12_GPU_VIRTUAL_ADDRESS GrD3DResourceProvider::uploadConstantData(void* data, size_t size) {
     // constant size has to be aligned to 256
     constexpr int kConstantAlignment = 256;

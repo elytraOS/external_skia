@@ -134,7 +134,7 @@ var CanvasKit = {
     getMaxWidth: function() {},
     getMinIntrinsicWidth: function() {},
     getWordBoundary: function() {},
-    getShapedRuns: function() {},
+    getShapedLines: function() {},
     layout: function() {},
 
     // private API
@@ -146,6 +146,7 @@ var CanvasKit = {
   ParagraphBuilder: {
     Make: function() {},
     MakeFromFontProvider: function() {},
+    ShapeText: function() {},
     addText: function() {},
     build: function() {},
     pop: function() {},
@@ -159,6 +160,7 @@ var CanvasKit = {
     // private API
     _Make: function() {},
     _MakeFromFontProvider: function() {},
+    _ShapeText: function() {},
     _pushStyle: function() {},
     _pushPaintStyle: function() {},
     _addPlaceholder: function() {},
@@ -873,6 +875,10 @@ var CanvasKit = {
     Expanded: {},
     ExtraExpanded: {},
     UltraExpanded: {},
+  },
+
+  GlyphRunFlags: {
+    IsWhiteSpace: {},
   },
 
   ImageFormat: {

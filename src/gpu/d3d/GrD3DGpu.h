@@ -114,6 +114,8 @@ public:
     }
 
     void submit(GrOpsRenderPass* renderPass) override;
+    void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
+                       const SkIRect& bounds);
 
     void checkFinishProcs() override { this->checkForFinishedCommandLists(); }
     void finishOutstandingGpuWork() override;
@@ -186,7 +188,7 @@ private:
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
-    bool onRegenerateMipMapLevels(GrTexture*) override { return true; }
+    bool onRegenerateMipMapLevels(GrTexture*) override;
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect&) override;
 
@@ -279,6 +281,9 @@ private:
     uint64_t fCurrentFenceValue = 0;
 
     std::unique_ptr<GrD3DDirectCommandList> fCurrentDirectCommandList;
+    // One-off special-case descriptors created directly for the mipmap compute shader
+    // and hence aren't tracked by the normal path.
+    SkSTArray<32, GrD3DDescriptorHeap::CPUHandle> fMipmapCPUDescriptors;
 
     struct OutstandingCommandList {
         OutstandingCommandList(std::unique_ptr<GrD3DDirectCommandList> commandList,
