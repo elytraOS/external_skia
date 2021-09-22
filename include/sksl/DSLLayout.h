@@ -19,12 +19,10 @@ namespace dsl {
 
 class DSLLayout {
 public:
+    DSLLayout() {}
+
     DSLLayout& originUpperLeft(PositionInfo pos = PositionInfo()) {
         return this->flag(SkSL::Layout::kOriginUpperLeft_Flag, "origin_upper_left", pos);
-    }
-
-    DSLLayout& overrideCoverage(PositionInfo pos = PositionInfo()) {
-        return this->flag(SkSL::Layout::kOverrideCoverage_Flag, "override_coverage", pos);
     }
 
     DSLLayout& pushConstant(PositionInfo pos = PositionInfo()) {
@@ -75,6 +73,9 @@ public:
     }
 
 private:
+    explicit DSLLayout(SkSL::Layout skslLayout)
+        : fSkSLLayout(skslLayout) {}
+
     DSLLayout& flag(SkSL::Layout::Flag mask, const char* name, PositionInfo pos);
 
     DSLLayout& intValue(int* target, int value, SkSL::Layout::Flag flag, const char* name,

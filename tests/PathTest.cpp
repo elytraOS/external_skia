@@ -3806,6 +3806,11 @@ static void check_quad(skiatest::Reporter* reporter, SkPathPriv::RangeIter* iter
     REPORTER_ASSERT(reporter, pts[2].fY == y2);
 }
 
+static void check_close(skiatest::Reporter* reporter, SkPathPriv::RangeIter* iter) {
+    auto [v, pts, w] = *(*iter)++;
+    REPORTER_ASSERT(reporter, v == SkPathVerb::kClose);
+}
+
 static void check_done(skiatest::Reporter* reporter, SkPath* p, SkPathPriv::RangeIter* iter) {
     REPORTER_ASSERT(reporter, *iter == SkPathPriv::Iterate(*p).end());
 }
@@ -3861,6 +3866,34 @@ static bool nearly_equal(const SkRect& a, const SkRect& b) {
             SkScalarNearlyEqual(a.fTop, b.fTop) &&
             SkScalarNearlyEqual(a.fRight, b.fRight) &&
             SkScalarNearlyEqual(a.fBottom, b.fBottom);
+}
+
+static void test_rMoveTo(skiatest::Reporter* reporter) {
+    SkPath p;
+    p.moveTo(10, 11);
+    p.lineTo(20, 21);
+    p.close();
+    p.rMoveTo(30, 31);
+    SkPathPriv::RangeIter iter = SkPathPriv::Iterate(p).begin();
+    check_move(reporter, &iter, 10, 11);
+    check_line(reporter, &iter, 20, 21);
+    check_close(reporter, &iter);
+    check_move(reporter, &iter, 10 + 30, 11 + 31);
+    check_done_and_reset(reporter, &p, &iter);
+
+    p.moveTo(10, 11);
+    p.lineTo(20, 21);
+    p.rMoveTo(30, 31);
+    iter = SkPathPriv::Iterate(p).begin();
+    check_move(reporter, &iter, 10, 11);
+    check_line(reporter, &iter, 20, 21);
+    check_move(reporter, &iter, 20 + 30, 21 + 31);
+    check_done_and_reset(reporter, &p, &iter);
+
+    p.rMoveTo(30, 31);
+    iter = SkPathPriv::Iterate(p).begin();
+    check_move(reporter, &iter, 30, 31);
+    check_done_and_reset(reporter, &p, &iter);
 }
 
 static void test_arcTo(skiatest::Reporter* reporter) {
@@ -4927,6 +4960,7 @@ DEF_TEST(Paths, reporter) {
     test_path_close_issue1474(reporter);
     test_path_to_region(reporter);
     test_rrect(reporter);
+    test_rMoveTo(reporter);
     test_arc(reporter);
     test_arc_ovals(reporter);
     test_arcTo(reporter);
@@ -5833,4 +5867,24 @@ DEF_TEST(path_moveto_addrect, r) {
             REPORTER_ASSERT(r, path.conservativelyContainsRect(query));
         }
     }
+}
+
+// crbug.com/1220754
+DEF_TEST(path_moveto_twopass_convexity, r) {
+    // There had been a bug when the last moveTo index > 0, the calculated point count was incorrect
+    // and the BySign convexity pass would not evaluate the entire path, effectively only using the
+    // winding rule for determining convexity.
+    SkPath path;
+    path.setFillType(SkPathFillType::kWinding);
+    path.moveTo(3.25f, 115.5f);
+    path.conicTo(9.98099e+17f, 2.83874e+15f, 1.75098e-30f, 1.75097e-30f, 1.05385e+18f);
+    path.conicTo(9.96938e+17f, 6.3804e+19f, 9.96934e+17f, 1.75096e-30f, 1.75096e-30f);
+    path.quadTo(1.28886e+10f, 9.9647e+17f, 9.98101e+17f, 2.61006e+15f);
+    REPORTER_ASSERT(r, !path.isConvex());
+
+    SkPath pathWithExtraMoveTo;
+    pathWithExtraMoveTo.setFillType(SkPathFillType::kWinding);
+    pathWithExtraMoveTo.moveTo(5.90043e-39f, 1.34525e-43f);
+    pathWithExtraMoveTo.addPath(path);
+    REPORTER_ASSERT(r, !pathWithExtraMoveTo.isConvex());
 }

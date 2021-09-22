@@ -30,28 +30,33 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
         using String = SkSL::String;
 
         String declareUniform(const SkSL::VarDeclaration* decl) override {
-            return decl->var().name();
+            return String(decl->var().name());
         }
 
         void defineFunction(const char* /*decl*/, const char* /*body*/, bool /*isMain*/) override {}
         void defineStruct(const char* /*definition*/) override {}
         void declareGlobal(const char* /*declaration*/) override {}
 
-        String sampleChild(int index, String coords, String color) override {
+        String sampleShader(int index, String coords) override {
+            return "sample(" + SkSL::to_string(index) + ", " + coords + ")";
+        }
+
+        String sampleColorFilter(int index, String color) override {
             String result = "sample(" + SkSL::to_string(index);
-            if (!coords.empty()) {
-                result += ", " + coords;
-            }
             if (!color.empty()) {
                 result += ", " + color;
             }
             result += ")";
             return result;
         }
+
+        String sampleBlender(int index, String src, String dst) override {
+            return "sample(" + SkSL::to_string(index) + ", " + src + ", " + dst + ")";
+        }
     };
 
     Callbacks callbacks;
-    SkSL::PipelineStage::ConvertProgram(*program, "coords", "inColor", &callbacks);
+    SkSL::PipelineStage::ConvertProgram(*program, "coords", "inColor", "half4(1)", &callbacks);
     return true;
 }
 

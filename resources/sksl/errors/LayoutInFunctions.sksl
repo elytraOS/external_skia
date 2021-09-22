@@ -1,11 +1,8 @@
 layout (
     origin_upper_left,
-    override_coverage,
     push_constant,
     blend_support_all_equations,
-    tracked,
     srgb_unpremul,
-    key,
     location = 1,
     offset = 1,
     binding = 1,
@@ -14,20 +11,15 @@ layout (
     builtin = 1,
     input_attachment_index = 1,
     max_vertices = 1,
-    invocations = 1,
-    when = one,
-    ctype = int)
+    invocations = 1)
 void on_return() {}
 
 void on_param(
 layout (
     origin_upper_left,
-    override_coverage,
     push_constant,
     blend_support_all_equations,
-    tracked,
     srgb_unpremul,
-    key,
     location = 1,
     offset = 1,
     binding = 1,
@@ -36,6 +28,4 @@ layout (
     builtin = 1,
     input_attachment_index = 1,
     max_vertices = 1,
-    invocations = 1,
-    when = one,
-    ctype = int) float x) {}
+    invocations = 1) float x) {}
