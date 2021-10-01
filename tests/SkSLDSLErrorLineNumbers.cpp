@@ -34,12 +34,11 @@ public:
         SetErrorHandler(nullptr);
     }
 
-    void handleError(const char* msg, PositionInfo* pos) override {
+    void handleError(const char* msg, PositionInfo pos) override {
         REPORTER_ASSERT(fReporter, !strcmp(msg, fMsg),
                         "Error mismatch: expected:\n%sbut received:\n%s", fMsg, msg);
-        REPORTER_ASSERT(fReporter, pos);
-        REPORTER_ASSERT(fReporter, pos->line() == fLine,
-                        "Line number mismatch: expected %d, but received %d\n", fLine, pos->line());
+        REPORTER_ASSERT(fReporter, pos.line() == fLine,
+                        "Line number mismatch: expected %d, but received %d\n", fLine, pos.line());
         fMsg = nullptr;
     }
 
@@ -55,7 +54,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLErrorLineNumbers, r, ctxInfo) {
         ExpectErrorLineNumber error(r,
                                     "error: type mismatch: '+' cannot operate on 'float', 'bool'\n",
                                     __LINE__ + 1);
-        DSLExpression x = (Float(1) + true);
+        (Float(1) + true).release();
     }
 
     {
@@ -64,7 +63,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLErrorLineNumbers, r, ctxInfo) {
         ExpectErrorLineNumber error(r,
                                     "error: type mismatch: '=' cannot operate on 'bool', 'float'\n",
                                     __LINE__ + 1);
-        DSLExpression x = (a = 5.0f);
+        (a = 5.0f).release();
     }
 
     {
@@ -73,7 +72,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLErrorLineNumbers, r, ctxInfo) {
         ExpectErrorLineNumber error(r,
                                     "error: expected 'int', but found 'bool'\n",
                                     __LINE__ + 1);
-        DSLExpression x = (a[true]);
+        (a[true]).release();
     }
 
     {
@@ -82,42 +81,42 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLErrorLineNumbers, r, ctxInfo) {
         ExpectErrorLineNumber error(r,
                                     "error: '++' cannot operate on 'int[5]'\n",
                                     __LINE__ + 1);
-        DSLExpression x = ++a;
+        (++a).release();
     }
 
     {
         ExpectErrorLineNumber error(r,
                                     "error: expected 'bool', but found 'int'\n",
                                     __LINE__ + 1);
-        DSLStatement x = Do(Discard(), 5);
+        Do(Discard(), 5).release();
     }
 
     {
         ExpectErrorLineNumber error(r,
                                     "error: expected 'bool', but found 'int'\n",
                                     __LINE__ + 1);
-        DSLStatement x = For(DSLStatement(), 5, DSLExpression(), DSLStatement());
+        For(DSLStatement(), 5, DSLExpression(), Block()).release();
     }
 
     {
         ExpectErrorLineNumber error(r,
                                     "error: expected 'bool', but found 'int'\n",
                                     __LINE__ + 1);
-        DSLStatement x = If(5, Discard());
+        If(5, Discard()).release();
     }
 
     {
         ExpectErrorLineNumber error(r,
                                     "error: expected 'bool', but found 'int'\n",
                                     __LINE__ + 1);
-        DSLStatement x = While(5, Discard());
+        While(5, Discard()).release();
     }
 
     {
         ExpectErrorLineNumber error(r,
                                     "error: no match for abs(bool)\n",
                                     __LINE__ + 1);
-        DSLStatement x = Abs(true);
+        Abs(true).release();
     }
     End();
 }

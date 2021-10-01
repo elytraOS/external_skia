@@ -9,12 +9,12 @@
 #define GrStrokeTessellator_DEFINED
 
 #include "src/gpu/GrVx.h"
-#include "src/gpu/tessellate/GrStrokeTessellateShader.h"
+#include "src/gpu/tessellate/shaders/GrStrokeTessellationShader.h"
 
 // Prepares GPU data for, and then draws a stroke's tessellated geometry.
 class GrStrokeTessellator {
 public:
-    using ShaderFlags = GrStrokeTessellateShader::ShaderFlags;
+    using ShaderFlags = GrStrokeTessellationShader::ShaderFlags;
 
     struct PathStrokeList {
         PathStrokeList(const SkPath& path, const SkStrokeRec& stroke, const SkPMColor4f& color)
@@ -25,18 +25,21 @@ public:
         PathStrokeList* fNext = nullptr;
     };
 
-    GrStrokeTessellator(GrStrokeTessellateShader::Mode shaderMode, ShaderFlags shaderFlags,
-                        const SkMatrix& viewMatrix, PathStrokeList* pathStrokeList)
-            : fShaderFlags(shaderFlags)
+    GrStrokeTessellator(const GrShaderCaps& shaderCaps, GrStrokeTessellationShader::Mode shaderMode,
+                        ShaderFlags shaderFlags, int8_t maxParametricSegments_log2,
+                        const SkMatrix& viewMatrix, PathStrokeList* pathStrokeList,
+                        std::array<float, 2> matrixMinMaxScales, const SkRect& strokeCullBounds)
+            : fShader(shaderCaps, shaderMode, shaderFlags, viewMatrix, pathStrokeList->fStroke,
+                      pathStrokeList->fColor, maxParametricSegments_log2)
             , fPathStrokeList(pathStrokeList)
-            , fShader(shaderMode, shaderFlags, viewMatrix, fPathStrokeList->fStroke,
-                      fPathStrokeList->fColor) {
+            , fMatrixMinMaxScales(matrixMinMaxScales)
+            , fStrokeCullBounds(strokeCullBounds) {
     }
 
-    const GrPathShader* shader() const { return &fShader; }
+    const GrTessellationShader* shader() const { return &fShader; }
 
     // Called before draw(). Prepares GPU buffers containing the geometry to tessellate.
-    virtual void prepare(GrMeshDrawOp::Target*, int totalCombinedVerbCnt) = 0;
+    virtual void prepare(GrMeshDrawTarget*, int totalCombinedVerbCnt) = 0;
 
     // Issues draw calls for the tessellated stroke. The caller is responsible for creating and
     // binding a pipeline that uses this class's shader() before calling draw().
@@ -45,9 +48,10 @@ public:
     virtual ~GrStrokeTessellator() {}
 
 protected:
-    const ShaderFlags fShaderFlags;
+    GrStrokeTessellationShader fShader;
     PathStrokeList* fPathStrokeList;
-    GrStrokeTessellateShader fShader;
+    const std::array<float,2> fMatrixMinMaxScales;
+    const SkRect fStrokeCullBounds;  // See SkStrokeRec::inflationRadius.
 };
 
 // These tolerances decide the number of parametric and radial segments the tessellator will
@@ -58,7 +62,7 @@ struct GrStrokeTolerances {
     // once transformed into device space, they never deviate by more than
     // 1/GrTessellationPathRenderer::kLinearizationPrecision pixels from the true curve.
     constexpr static float CalcParametricPrecision(float matrixMaxScale) {
-        return matrixMaxScale * GrTessellationPathRenderer::kLinearizationPrecision;
+        return matrixMaxScale * GrTessellationShader::kLinearizationPrecision;
     }
     // Decides the number of radial segments the tessellator adds for each curve. (Uniform steps
     // in tangent angle.) The tessellator will add this number of radial segments for each

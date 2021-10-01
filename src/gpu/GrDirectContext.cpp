@@ -20,8 +20,7 @@
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrShaderUtils.h"
-#include "src/gpu/GrSurfaceContext.h"
-#include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
+#include "src/gpu/SurfaceContext.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/mock/GrMockGpu.h"
@@ -234,10 +233,6 @@ bool GrDirectContext::init() {
     }
 
     fPersistentCache = this->options().fPersistentCache;
-    fShaderErrorHandler = this->options().fShaderErrorHandler;
-    if (!fShaderErrorHandler) {
-        fShaderErrorHandler = GrShaderUtils::DefaultShaderErrorHandler();
-    }
 
     GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
     if (GrContextOptions::Enable::kNo == this->options().fAllowMultipleGlyphCacheTextures ||
@@ -359,7 +354,7 @@ bool GrDirectContext::wait(int numSemaphores, const GrBackendSemaphore waitSemap
             deleteSemaphoresAfterWait ? kAdopt_GrWrapOwnership : kBorrow_GrWrapOwnership;
     for (int i = 0; i < numSemaphores; ++i) {
         std::unique_ptr<GrSemaphore> sema = fResourceProvider->wrapBackendSemaphore(
-                waitSemaphores[i], GrResourceProvider::SemaphoreWrapType::kWillWait, ownership);
+                waitSemaphores[i], GrSemaphoreWrapType::kWillWait, ownership);
         // If we failed to wrap the semaphore it means the client didn't give us a valid semaphore
         // to begin with. Therefore, it is fine to not wait on it.
         if (sema) {
@@ -528,7 +523,7 @@ static bool update_texture_with_pixmaps(GrDirectContext* context,
 
     GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, ct);
     GrSurfaceProxyView view(std::move(proxy), textureOrigin, swizzle);
-    GrSurfaceContext surfaceContext(context, std::move(view), src[0].info().colorInfo());
+    skgpu::SurfaceContext surfaceContext(context, std::move(view), src[0].info().colorInfo());
     SkAutoSTArray<15, GrCPixmap> tmpSrc(numLevels);
     for (int i = 0; i < numLevels; ++i) {
         tmpSrc[i] = src[i];

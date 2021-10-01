@@ -19,13 +19,15 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBitmapTextGeoProc.h"
 #include "src/gpu/effects/GrDistanceFieldGeoProc.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 #include "src/gpu/text/GrAtlasManager.h"
 #include "src/gpu/text/GrDistanceFieldAdjustTable.h"
+#if SK_GPU_V1
+#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#endif
 
 #if GR_TEST_UTILS
 #include "src/gpu/GrDrawOpTest.h"
@@ -133,7 +135,7 @@ void GrAtlasTextOp::Geometry::fillVertexData(void *dst, int offset, int count) c
             dst, offset, count, fColor.toBytes_RGBA(), positionMatrix, fClipRect);
 }
 
-void GrAtlasTextOp::visitProxies(const VisitProxyFunc& func) const {
+void GrAtlasTextOp::visitProxies(const GrVisitProxyFunc& func) const {
     fProcessors.visitProxies(func);
 }
 
@@ -195,7 +197,7 @@ GrProcessorSet::Analysis GrAtlasTextOp::finalize(const GrCaps& caps, const GrApp
     return analysis;
 }
 
-void GrAtlasTextOp::onPrepareDraws(Target* target) {
+void GrAtlasTextOp::onPrepareDraws(GrMeshDrawTarget* target) {
     auto resourceProvider = target->resourceProvider();
 
     // If we need local coordinates, compute an inverse view matrix. If this is solid color, the
@@ -325,16 +327,18 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
 }
 
 void GrAtlasTextOp::onExecute(GrOpFlushState* flushState, const SkRect& chainBounds) {
+    auto pipelineFlags = flushState->usesMSAASurface() ? GrPipeline::InputFlags::kHWAntialias
+                                                       : GrPipeline::InputFlags::kNone;
     auto pipeline = GrSimpleMeshDrawOpHelper::CreatePipeline(flushState,
                                                              std::move(fProcessors),
-                                                             GrPipeline::InputFlags::kNone);
+                                                             pipelineFlags);
 
     flushState->executeDrawsAndUploadsForMeshDrawOp(this, chainBounds, pipeline,
                                                     &GrUserStencilSettings::kUnused);
 }
 
 void GrAtlasTextOp::createDrawForGeneratedGlyphs(
-        GrMeshDrawOp::Target* target, FlushInfo* flushInfo) const {
+        GrMeshDrawTarget* target, FlushInfo* flushInfo) const {
     if (!flushInfo->fGlyphsToFlush) {
         return;
     }
@@ -484,9 +488,9 @@ GrGeometryProcessor* GrAtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
     }
 }
 
-#if GR_TEST_UTILS
+#if GR_TEST_UTILS && SK_GPU_V1
 
-GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
+GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(skgpu::v1::SurfaceDrawContext* sdc,
                                                const SkPaint& skPaint,
                                                const SkFont& font,
                                                const SkMatrixProvider& mtxProvider,
@@ -504,11 +508,11 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
         return nullptr;
     }
 
-    auto rContext = rtc->recordingContext();
+    auto rContext = sdc->recordingContext();
     GrSDFTControl control =
-            rContext->priv().getSDFTControl(rtc->surfaceProps().isUseDeviceIndependentFonts());
+            rContext->priv().getSDFTControl(sdc->surfaceProps().isUseDeviceIndependentFonts());
 
-    SkGlyphRunListPainter* painter = rtc->glyphRunPainter();
+    SkGlyphRunListPainter* painter = sdc->glyphRunPainter();
     sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, skPaint, drawMatrix, control, painter);
 
     if (blob->subRunList().isEmpty()) {
@@ -519,7 +523,7 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
     SkASSERT(subRun);
     GrOp::Owner op;
     std::tie(std::ignore, op) = subRun->makeAtlasTextOp(
-            nullptr, mtxProvider, glyphRunList, skPaint, rtc, nullptr);
+            nullptr, mtxProvider, glyphRunList, skPaint, sdc, nullptr);
     return op;
 }
 

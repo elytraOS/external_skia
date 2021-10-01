@@ -8,6 +8,7 @@
 #ifndef SKSL_DSL_EXPRESSION
 #define SKSL_DSL_EXPRESSION
 
+#include "include/core/SkStringView.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkTArray.h"
 #include "include/sksl/DSLErrorHandling.h"
@@ -26,7 +27,7 @@ namespace dsl {
 class DSLPossibleExpression;
 class DSLStatement;
 class DSLType;
-class DSLVar;
+class DSLVarBase;
 
 /**
  * Represents an expression such as 'cos(x)' or 'a + b'.
@@ -56,6 +57,11 @@ public:
     DSLExpression(int value);
 
     /**
+     * Creates an expression representing a literal int.
+     */
+    DSLExpression(int64_t value);
+
+    /**
      * Creates an expression representing a literal uint.
      */
     DSLExpression(unsigned int value);
@@ -68,13 +74,13 @@ public:
     /**
      * Creates an expression representing a variable reference.
      */
-    DSLExpression(DSLVar& var);
+    DSLExpression(DSLVarBase& var);
 
-    DSLExpression(DSLVar&& var);
+    DSLExpression(DSLVarBase&& var);
 
     DSLExpression(DSLPossibleExpression expr, PositionInfo pos = PositionInfo());
 
-    DSLExpression(std::unique_ptr<SkSL::Expression> expression);
+    explicit DSLExpression(std::unique_ptr<SkSL::Expression> expression);
 
     ~DSLExpression();
 
@@ -104,7 +110,7 @@ public:
     /**
      * Creates an SkSL struct field access expression.
      */
-    DSLExpression field(const char* name, PositionInfo pos = PositionInfo());
+    DSLExpression field(skstd::string_view name, PositionInfo pos = PositionInfo());
 
     /**
      * Creates an SkSL array index expression.
@@ -114,12 +120,27 @@ public:
     DSLPossibleExpression operator()(SkTArray<DSLWrapper<DSLExpression>> args);
 
     /**
-     * Invalidates this object and returns the SkSL expression it represents.
+     * Returns true if this object contains an expression. DSLExpressions which were created with
+     * the empty constructor or which have already been release()ed are not valid. DSLExpressions
+     * created with errors are still considered valid (but contain a poison value).
+     */
+    bool valid() const {
+        return fExpression != nullptr;
+    }
+
+    void swap(DSLExpression& other);
+
+    /**
+     * Invalidates this object and returns the SkSL expression it represents. It is an error to call
+     * this on an invalid DSLExpression.
      */
     std::unique_ptr<SkSL::Expression> release();
 
 private:
-    void swap(DSLExpression& other);
+    /**
+     * Calls release if this expression is valid, otherwise returns null.
+     */
+    std::unique_ptr<SkSL::Expression> releaseIfValid();
 
     /**
      * Invalidates this object and returns the SkSL expression it represents coerced to the
@@ -134,7 +155,7 @@ private:
     friend class DSLCore;
     friend class DSLFunction;
     friend class DSLPossibleExpression;
-    friend class DSLVar;
+    friend class DSLVarBase;
     friend class DSLWriter;
     template<typename T> friend class DSLWrapper;
 };
@@ -163,6 +184,7 @@ DSLPossibleExpression operator|(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator|=(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator^(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator^=(DSLExpression left, DSLExpression right);
+DSLPossibleExpression LogicalXor(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator,(DSLExpression left, DSLExpression right);
 DSLPossibleExpression operator,(DSLPossibleExpression left, DSLExpression right);
 DSLPossibleExpression operator,(DSLExpression left, DSLPossibleExpression right);
@@ -197,6 +219,15 @@ public:
 
     ~DSLPossibleExpression();
 
+    bool valid() const {
+        return fExpression != nullptr;
+    }
+
+    /**
+     * Reports any pending errors at the specified position.
+     */
+    void reportErrors(PositionInfo pos);
+
     DSLType type();
 
     DSLExpression x(PositionInfo pos = PositionInfo());
@@ -215,7 +246,7 @@ public:
 
     DSLExpression a(PositionInfo pos = PositionInfo());
 
-    DSLExpression field(const char* name, PositionInfo pos = PositionInfo());
+    DSLExpression field(skstd::string_view name, PositionInfo pos = PositionInfo());
 
     DSLPossibleExpression operator=(DSLExpression expr);
 
@@ -237,7 +268,7 @@ public:
 
     DSLPossibleExpression operator--(int);
 
-    std::unique_ptr<SkSL::Expression> release();
+    std::unique_ptr<SkSL::Expression> release(PositionInfo pos = PositionInfo());
 
 private:
     std::unique_ptr<SkSL::Expression> fExpression;

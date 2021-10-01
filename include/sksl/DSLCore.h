@@ -20,9 +20,13 @@
 #include "include/sksl/DSLVar.h"
 #include "include/sksl/DSLWrapper.h"
 
+#define SKSL_DSL_PARSER 0
+
 namespace SkSL {
 
 class Compiler;
+struct Program;
+struct ProgramSettings;
 
 namespace dsl {
 
@@ -32,22 +36,13 @@ namespace dsl {
 // shouldn't pollute the SkSL::dsl namespace with anything else.
 using namespace SkSL::SwizzleComponent;
 
-enum DSLFlag {
-    kNo_Flag               = 0,
-    kMangle_Flag           = 1 << 0,
-    kOptimize_Flag         = 1 << 1,
-    kValidate_Flag         = 1 << 2,
-    kMarkVarsDeclared_Flag = 1 << 3,
-};
-
-constexpr int kDefaultDSLFlags = kMangle_Flag | kOptimize_Flag | kValidate_Flag;
-
 /**
  * Starts DSL output on the current thread using the specified compiler. This must be called
  * prior to any other DSL functions.
  */
-void Start(SkSL::Compiler* compiler, SkSL::ProgramKind kind = SkSL::ProgramKind::kFragment,
-           int flags = kDefaultDSLFlags);
+void Start(SkSL::Compiler* compiler, SkSL::ProgramKind kind = SkSL::ProgramKind::kFragment);
+
+void Start(SkSL::Compiler* compiler, SkSL::ProgramKind kind, const SkSL::ProgramSettings& settings);
 
 /**
  * Signals the end of DSL output. This must be called sometime between a call to Start() and the
@@ -56,14 +51,30 @@ void Start(SkSL::Compiler* compiler, SkSL::ProgramKind kind = SkSL::ProgramKind:
 void End();
 
 /**
+ * Returns all global elements (functions and global variables) as a self-contained Program. The
+ * optional source string is retained as the program's source. DSL programs do not normally have
+ * sources, but when a DSL program is produced from parsed program text (as in DSLParser), it may be
+ * important to retain it so that any skstd::string_views derived from it remain valid.
+ */
+std::unique_ptr<SkSL::Program> ReleaseProgram(std::unique_ptr<SkSL::String> source = nullptr);
+
+/**
+ * Returns the ErrorHandler which will be notified of any errors that occur during DSL calls. The
+ * default error handler is null, which means any errors encountered will be fatal.
+ */
+ErrorHandler* GetErrorHandler();
+
+/**
  * Installs an ErrorHandler which will be notified of any errors that occur during DSL calls. If
  * no ErrorHandler is installed, any errors will be fatal.
  */
 void SetErrorHandler(ErrorHandler* errorHandler);
 
-DSLVar sk_FragColor();
+DSLGlobalVar sk_FragColor();
 
-DSLVar sk_FragCoord();
+DSLGlobalVar sk_FragCoord();
+
+DSLExpression sk_Position();
 
 /**
  * break;
@@ -76,14 +87,24 @@ DSLStatement Break();
 DSLStatement Continue();
 
 /**
- * Creates a variable declaration statement.
+ * Creates a local variable declaration statement.
  */
 DSLStatement Declare(DSLVar& var, PositionInfo pos = PositionInfo());
 
 /**
+ * Creates a local variable declaration statement containing multiple variables.
+ */
+DSLStatement Declare(SkTArray<DSLVar>& vars, PositionInfo pos = PositionInfo());
+
+/**
  * Declares a global variable.
  */
-void DeclareGlobal(DSLVar& var, PositionInfo pos = PositionInfo());
+void Declare(DSLGlobalVar& var, PositionInfo pos = PositionInfo());
+
+/**
+ * Declares a set of global variables.
+ */
+void Declare(SkTArray<DSLGlobalVar>& vars, PositionInfo pos = PositionInfo());
 
 /**
  * default: statements
@@ -114,6 +135,10 @@ DSLStatement For(DSLStatement initializer, DSLExpression test, DSLExpression nex
  */
 DSLStatement If(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFalse = DSLStatement(),
                 PositionInfo pos = PositionInfo());
+
+DSLGlobalVar InterfaceBlock(const DSLModifiers& modifiers,  skstd::string_view typeName,
+                            SkTArray<DSLField> fields, skstd::string_view varName = "",
+                            int arraySize = 0, PositionInfo pos = PositionInfo());
 
 /**
  * return [value];

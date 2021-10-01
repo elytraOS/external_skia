@@ -65,6 +65,7 @@
 #include <thread>
 
 extern bool gSkForceRasterPipelineBlitter;
+extern bool gForceHighPrecisionRasterPipeline;
 extern bool gUseSkVMBlitter;
 extern bool gSkVMAllowJIT;
 extern bool gSkVMJITViaDylib;
@@ -140,6 +141,7 @@ static DEFINE_string(benchType,  "",
         "piping, playback, skcodec, etc.");
 
 static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
+static DEFINE_bool(forceRasterPipelineHP, false, "sets gSkForceRasterPipelineBlitter and gForceHighPrecisionRasterPipeline");
 static DEFINE_bool(skvm, false, "sets gUseSkVMBlitter");
 static DEFINE_bool(jit, true, "JIT SkVM?");
 static DEFINE_bool(dylib, false, "JIT via dylib (much slower compile but easier to debug/profile)");
@@ -1228,9 +1230,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<SkWStream> logStream(new SkNullWStream);
     if (!FLAGS_outResultsFile.isEmpty()) {
 #if defined(SK_RELEASE)
-        // SkJSONWriter uses a 32k in-memory cache, so it only flushes occasionally and is well
-        // equipped for a stream that re-opens, appends, and closes the file on every write.
-        logStream.reset(new NanoFILEAppendAndCloseStream(FLAGS_outResultsFile[0]));
+        logStream.reset(new SkFILEWStream(FLAGS_outResultsFile[0]));
 #else
         SkDebugf("I'm ignoring --outResultsFile because this is a Debug build.");
         return 1;
@@ -1287,7 +1287,8 @@ int main(int argc, char** argv) {
 
     SetAnalyticAAFromCommonFlags();
 
-    gSkForceRasterPipelineBlitter = FLAGS_forceRasterPipeline;
+    gSkForceRasterPipelineBlitter     = FLAGS_forceRasterPipelineHP || FLAGS_forceRasterPipeline;
+    gForceHighPrecisionRasterPipeline = FLAGS_forceRasterPipelineHP;
     gUseSkVMBlitter = FLAGS_skvm;
     gSkVMAllowJIT = FLAGS_jit;
     gSkVMJITViaDylib = FLAGS_dylib;
@@ -1416,6 +1417,7 @@ int main(int argc, char** argv) {
 
             // Metrics
             log.appendMetric("min_ms", stats.min);
+            log.appendMetric("min_ratio", sk_ieee_double_divide(stats.median, stats.min));
             log.beginArray("samples");
             for (double sample : samples) {
                 log.appendDoubleDigits(sample, 16);
