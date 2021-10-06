@@ -142,7 +142,7 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext
         effect.uniform(SkString(gColor.name()).c_str()) = float4{ 0.0f, 0.25f, 0.75f, 1.0f };
         effect.test(0xFFBF4000);
         effect.uniform(SkString(gColor.name()).c_str()) = float4{ 1.0f, 0.0f, 0.0f, 0.498f };
-        effect.test(0x7F00007F);  // Tests that we clamp to valid premul
+        effect.test(0x7F0000FF);  // Tests that we don't clamp to valid premul
     }
 
     // Same, with integer uniforms
@@ -158,7 +158,7 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext
         effect.uniform(SkString(gColor.name()).c_str()) = int4{ 0x00, 0x40, 0xBF, 0xFF };
         effect.test(0xFFBF4000);
         effect.uniform(SkString(gColor.name()).c_str()) = int4{ 0xFF, 0x00, 0x00, 0x7F };
-        effect.test(0x7F00007F);  // Tests that we clamp to valid premul
+        effect.test(0x7F0000FF);  // Tests that we don't clamp to valid premul
     }
 
     // Test sk_FragCoord (device coords). Rotate the canvas to be sure we're seeing device coords.
@@ -200,22 +200,22 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext
     // Test error reporting. We put this before a couple of successful tests to ensure that a
     // failure doesn't leave us in a broken state.
     {
-        class SimpleErrorHandler : public ErrorHandler {
+        class SimpleErrorReporter : public SkSL::ErrorReporter {
         public:
-            void handleError(const char* msg, PositionInfo pos) override {
-                fMsg = msg;
+            void handleError(skstd::string_view msg, SkSL::PositionInfo pos) override {
+                fMsg += msg;
             }
 
             SkSL::String fMsg;
-        } errorHandler;
+        } errorReporter;
         effect.start();
-        SetErrorHandler(&errorHandler);
+        SetErrorReporter(&errorReporter);
         Parameter p(kFloat2_Type, "p");
         Function(kHalf4_Type, "main", p).define(
             Return(1) // Error, type mismatch
         );
         effect.end(false);
-        REPORTER_ASSERT(r, errorHandler.fMsg == "error: expected 'half4', but found 'int'\n");
+        REPORTER_ASSERT(r, errorReporter.fMsg == "expected 'half4', but found 'int'");
     }
 
     // Mutating coords should work. (skbug.com/10918)
@@ -256,7 +256,7 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext
         Declare(child);
         Parameter p2(kFloat2_Type, "p");
         Function(kFloat4_Type, "main", p2).define(
-            Return(Sample(child, p2))
+            Return(child.eval(p2))
         );
         effect.end();
         effect.child(child.name()) = nullptr;

@@ -11,7 +11,6 @@
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrVertexWriter.h"
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 class SkArenaAlloc;
 
@@ -61,29 +60,22 @@ public:
     struct ProgramArgs {
         SkArenaAlloc* fArena;
         const GrSurfaceProxyView& fWriteView;
+        bool fUsesMSAASurface;
         const GrDstProxyView* fDstProxyView;
         GrXferBarrierFlags fXferBarrierFlags;
         GrLoadOp fColorLoadOp;
         const GrCaps* fCaps;
     };
 
-    static const GrPipeline* MakePipeline(const ProgramArgs& args, GrAAType aaType,
-                                          GrAppliedClip&& appliedClip,
-                                          GrProcessorSet&& processors) {
-        auto pipelineFlags = GrPipeline::InputFlags::kNone;
-        if (aaType == GrAAType::kMSAA) {
-            pipelineFlags |= GrPipeline::InputFlags::kHWAntialias;
-        }
-        return GrSimpleMeshDrawOpHelper::CreatePipeline(
-                args.fCaps, args.fArena, args.fWriteView.swizzle(), std::move(appliedClip),
-                *args.fDstProxyView, std::move(processors), pipelineFlags);
-    }
+    static const GrPipeline* MakePipeline(const ProgramArgs&, GrAAType,
+                                          GrAppliedClip&&, GrProcessorSet&&);
 
-    static GrProgramInfo* MakeProgram(const ProgramArgs& args, const GrTessellationShader* shader,
+    static GrProgramInfo* MakeProgram(const ProgramArgs& args,
+                                      const GrTessellationShader* shader,
                                       const GrPipeline* pipeline,
                                       const GrUserStencilSettings* stencil) {
-        return args.fArena->make<GrProgramInfo>(args.fWriteView, pipeline, stencil, shader,
-                                                shader->fPrimitiveType,
+        return args.fArena->make<GrProgramInfo>(*args.fCaps, args.fWriteView, args.fUsesMSAASurface,
+                                                pipeline, stencil, shader, shader->fPrimitiveType,
                                                 shader->fTessellationPatchVertexCount,
                                                 args.fXferBarrierFlags, args.fColorLoadOp);
     }

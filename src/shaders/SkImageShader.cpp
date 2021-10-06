@@ -60,7 +60,9 @@ static SkTileMode optimize(SkTileMode tm, int dimension) {
     // for transforming to clamp.
     return tm;
 #else
-    return dimension == 1 ? SkTileMode::kClamp : tm;
+    // mirror and repeat on a 1px axis are the same as clamping, but decal will still transition to
+    // transparent black.
+    return (tm != SkTileMode::kDecal && dimension == 1) ? SkTileMode::kClamp : tm;
 #endif
 }
 
@@ -538,6 +540,11 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
 
             case kBGRA_8888_SkColorType:    p->append(SkRasterPipeline::gather_8888,    ctx);
                                             p->append(SkRasterPipeline::swap_rb            ); break;
+
+            case kSRGBA_8888_SkColorType:
+                p->append(SkRasterPipeline::gather_8888, ctx);
+                p->append_transfer_function(*skcms_sRGB_TransferFunction());
+                break;
 
             case kUnknown_SkColorType: SkASSERT(false);
         }

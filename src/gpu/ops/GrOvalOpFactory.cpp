@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "src/gpu/ops/GrOvalOpFactory.h"
+
 #include "include/core/SkStrokeRec.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRRectPriv.h"
@@ -24,7 +26,6 @@
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/ops/GrOvalOpFactory.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 #include <utility>
@@ -1254,9 +1255,16 @@ private:
                                                                 fRoundCaps, fWideColor,
                                                                 localMatrix);
 
-        fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                                 dstProxyView, gp, GrPrimitiveType::kTriangles,
-                                                 renderPassXferBarriers, colorLoadOp);
+        fProgramInfo = fHelper.createProgramInfo(caps,
+                                                 arena,
+                                                 writeView,
+                                                 usesMSAASurface,
+                                                 std::move(appliedClip),
+                                                 dstProxyView,
+                                                 gp,
+                                                 GrPrimitiveType::kTriangles,
+                                                 renderPassXferBarriers,
+                                                 colorLoadOp);
     }
 
     void onPrepareDraws(GrMeshDrawTarget* target) override {
@@ -1619,9 +1627,16 @@ private:
                                                                              fWideColor,
                                                                              localMatrix);
 
-        fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                                 dstProxyView, gp, GrPrimitiveType::kTriangles,
-                                                 renderPassXferBarriers, colorLoadOp);
+        fProgramInfo = fHelper.createProgramInfo(caps,
+                                                 arena,
+                                                 writeView,
+                                                 usesMSAASurface,
+                                                 std::move(appliedClip),
+                                                 dstProxyView,
+                                                 gp,
+                                                 GrPrimitiveType::kTriangles,
+                                                 renderPassXferBarriers,
+                                                 colorLoadOp);
     }
 
     void onPrepareDraws(GrMeshDrawTarget* target) override {
@@ -1948,18 +1963,16 @@ private:
         GrGeometryProcessor* gp = EllipseGeometryProcessor::Make(arena, fStroked, fWideColor,
                                                                  fUseScale, localMatrix);
 
-        GrPipeline::InputFlags pipelineFlags = fHelper.pipelineFlags();
-        if (usesMSAASurface) {
-            pipelineFlags |= GrPipeline::InputFlags::kHWAntialias;
-        }
-
-        fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps, arena, writeView,
-                                                                   std::move(appliedClip),
-                                                                   dstProxyView, gp,
-                                                                   fHelper.detachProcessorSet(),
-                                                                   GrPrimitiveType::kTriangles,
-                                                                   renderPassXferBarriers,
-                                                                   colorLoadOp, pipelineFlags);
+        fProgramInfo = fHelper.createProgramInfo(caps,
+                                                 arena,
+                                                 writeView,
+                                                 usesMSAASurface,
+                                                 std::move(appliedClip),
+                                                 dstProxyView,
+                                                 gp,
+                                                 GrPrimitiveType::kTriangles,
+                                                 renderPassXferBarriers,
+                                                 colorLoadOp);
     }
 
     void onPrepareDraws(GrMeshDrawTarget* target) override {
@@ -2235,18 +2248,10 @@ private:
                                                                    this->viewMatrix(),
                                                                    this->style());
 
-        GrPipeline::InputFlags pipelineFlags = fHelper.pipelineFlags();
-        if (usesMSAASurface) {
-            pipelineFlags |= GrPipeline::InputFlags::kHWAntialias;
-        }
-
-        fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps, arena, writeView,
-                                                                   std::move(appliedClip),
-                                                                   dstProxyView, gp,
-                                                                   fHelper.detachProcessorSet(),
-                                                                   GrPrimitiveType::kTriangles,
-                                                                   renderPassXferBarriers,
-                                                                   colorLoadOp, pipelineFlags);
+        fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, usesMSAASurface,
+                                                 std::move(appliedClip), dstProxyView, gp,
+                                                 GrPrimitiveType::kTriangles,
+                                                 renderPassXferBarriers, colorLoadOp);
     }
 
     void onPrepareDraws(GrMeshDrawTarget* target) override {
@@ -2658,8 +2663,9 @@ private:
                                                                 false, false, false, false,
                                                                 fWideColor, localMatrix);
 
-        fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, std::move(appliedClip),
-                                                 dstProxyView, gp, GrPrimitiveType::kTriangles,
+        fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, usesMSAASurface,
+                                                 std::move(appliedClip), dstProxyView, gp,
+                                                 GrPrimitiveType::kTriangles,
                                                  renderPassXferBarriers, colorLoadOp);
     }
 
@@ -2978,18 +2984,10 @@ private:
         GrGeometryProcessor* gp = EllipseGeometryProcessor::Make(arena, fStroked, fWideColor,
                                                                  fUseScale, localMatrix);
 
-        GrPipeline::InputFlags pipelineFlags = fHelper.pipelineFlags();
-        if (usesMSAASurface) {
-            pipelineFlags |= GrPipeline::InputFlags::kHWAntialias;
-        }
-
-        fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps, arena, writeView,
-                                                                   std::move(appliedClip),
-                                                                   dstProxyView, gp,
-                                                                   fHelper.detachProcessorSet(),
-                                                                   GrPrimitiveType::kTriangles,
-                                                                   renderPassXferBarriers,
-                                                                   colorLoadOp, pipelineFlags);
+        fProgramInfo = fHelper.createProgramInfo(caps, arena, writeView, usesMSAASurface,
+                                                 std::move(appliedClip), dstProxyView, gp,
+                                                 GrPrimitiveType::kTriangles,
+                                                 renderPassXferBarriers, colorLoadOp);
     }
 
     void onPrepareDraws(GrMeshDrawTarget* target) override {

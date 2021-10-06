@@ -42,7 +42,6 @@ namespace dsl {
 class DSLGlobalVar;
 class DSLParameter;
 class DSLVar;
-class ErrorHandler;
 
 /**
  * Thread-safe class that tracks per-thread state associated with DSL output. This class is for
@@ -50,17 +49,20 @@ class ErrorHandler;
  */
 class DSLWriter {
 public:
-    DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind,
+    DSLWriter(SkSL::Compiler* compiler,  SkSL::ProgramKind kind,
               const SkSL::ProgramSettings& settings, SkSL::ParsedModule module, bool isModule);
 
     ~DSLWriter();
 
     /**
+     * Returns true if the DSL has been started.
+     */
+    static bool IsActive();
+
+    /**
      * Returns the Compiler used by DSL operations in the current thread.
      */
-    static SkSL::Compiler& Compiler() {
-        return *Instance().fCompiler;
-    }
+    static SkSL::Compiler& Compiler() { return *Instance().fCompiler; }
 
     /**
      * Returns the IRGenerator used by DSL operations in the current thread.
@@ -70,12 +72,17 @@ public:
     /**
      * Returns the Context used by DSL operations in the current thread.
      */
-    static const SkSL::Context& Context();
+    static SkSL::Context& Context();
 
     /**
      * Returns the Settings used by DSL operations in the current thread.
      */
     static SkSL::ProgramSettings& Settings();
+
+    /**
+     * Returns the Program::Inputs used by the current thread.
+     */
+    static SkSL::Program::Inputs& Inputs();
 
     /**
      * Returns the collection to which DSL program elements in this thread should be appended.
@@ -108,7 +115,7 @@ public:
      */
     static std::unique_ptr<ProgramConfig>& GetProgramConfig() { return Instance().fConfig; }
 
-    static bool IsModule() { return Instance().fIsModule; }
+    static bool IsModule() { return GetProgramConfig()->fIsBuiltinCode; }
 
     static void Reset();
 
@@ -186,56 +193,28 @@ public:
     }
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
-    static std::unique_ptr<SkSL::Expression> Call(const FunctionDeclaration& function,
-                                                  ExpressionArray arguments);
+    /**
+     * Adds a new declaration into an existing declaration statement. This either turns the original
+     * declaration into an unscoped block or, if it already was, appends a new statement to the end
+     * of it.
+     */
+    static void AddVarDeclaration(DSLStatement& existing, DSLVar& additional);
 
     /**
-     * Invokes expr(arguments), where expr is a function or type reference.
+     * Returns the ErrorReporter associated with the current thread. This object will be notified
+     * when any DSL errors occur.
      */
-    static std::unique_ptr<SkSL::Expression> Call(std::unique_ptr<SkSL::Expression> expr,
-                                                  ExpressionArray arguments);
-
-    static DSLPossibleExpression Coerce(std::unique_ptr<Expression> expr, const SkSL::Type& type);
-
-    static DSLPossibleExpression Construct(const SkSL::Type& type, SkSpan<DSLExpression> rawArgs);
-
-    static std::unique_ptr<Expression> ConvertBinary(std::unique_ptr<Expression> left, Operator op,
-                                                     std::unique_ptr<Expression> right);
-
-    static std::unique_ptr<SkSL::Expression> ConvertField(std::unique_ptr<Expression> base,
-                                                          skstd::string_view name);
-
-    static std::unique_ptr<Expression> ConvertIndex(std::unique_ptr<Expression> base,
-                                                    std::unique_ptr<Expression> index);
-
-    static std::unique_ptr<Expression> ConvertPostfix(std::unique_ptr<Expression> expr,
-                                                      Operator op);
-
-    static std::unique_ptr<Expression> ConvertPrefix(Operator op, std::unique_ptr<Expression> expr);
-
-    static DSLPossibleStatement ConvertSwitch(std::unique_ptr<Expression> value,
-                                              ExpressionArray caseValues,
-                                              SkTArray<SkSL::StatementArray> caseStatements,
-                                              bool isStatic);
-
-    /**
-     * Returns the ErrorHandler associated with the current thread. This object will be notified
-     * when any DSL errors occur. With a null ErrorHandler (the default), any errors will be dumped
-     * to stderr and a fatal exception will be generated.
-     */
-    static ErrorHandler* GetErrorHandler() {
-        return Instance().fErrorHandler;
+    static ErrorReporter& GetErrorReporter() {
+        return *Context().fErrors;
     }
 
-    static void SetErrorHandler(ErrorHandler* errorHandler) {
-        Instance().fErrorHandler = errorHandler;
-    }
+    static void SetErrorReporter(ErrorReporter* errorReporter);
 
     /**
-     * Notifies the current ErrorHandler that a DSL error has occurred. With a null ErrorHandler
-     * (the default), any errors will be dumped to stderr and a fatal exception will be generated.
+     * Notifies the current ErrorReporter that a DSL error has occurred. The default error handler
+     * prints the message to stderr and aborts.
      */
-    static void ReportError(const char* msg, PositionInfo info = PositionInfo());
+    static void ReportError(skstd::string_view msg, PositionInfo info = PositionInfo::Capture());
 
     /**
      * Returns whether name mangling is enabled. Mangling is important for the DSL because its
@@ -268,15 +247,19 @@ public:
     }
 
     /**
-     * Forwards any pending Compiler errors to the DSL ErrorHandler.
+     * Forwards any pending errors to the DSL ErrorReporter.
      */
-    static void ReportErrors(PositionInfo pos = PositionInfo());
+    static void ReportErrors(PositionInfo pos);
 
     static DSLWriter& Instance();
 
     static void SetInstance(std::unique_ptr<DSLWriter> instance);
 
 private:
+    class DefaultErrorReporter : public ErrorReporter {
+        void handleError(skstd::string_view msg, PositionInfo pos) override;
+    };
+
     std::unique_ptr<SkSL::ProgramConfig> fConfig;
     std::unique_ptr<SkSL::ModifiersPool> fModifiersPool;
     SkSL::Compiler* fCompiler;
@@ -285,11 +268,10 @@ private:
     SkSL::ModifiersPool* fOldModifiersPool;
     std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
     std::vector<const SkSL::ProgramElement*> fSharedElements;
-    ErrorHandler* fErrorHandler = nullptr;
+    DefaultErrorReporter fDefaultErrorReporter;
+    ErrorReporter& fOldErrorReporter;
     ProgramSettings fSettings;
     Mangler fMangler;
-    bool fIsModule;
-    bool fEncounteredErrors = false;
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     struct StackFrame {
         GrFragmentProcessor::ProgramImpl* fProcessor;
