@@ -31,10 +31,10 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		if b.extraConfig("BonusConfigs") {
 			configs = []string{
 				"f16",
-				"srgb",
-				"esrgb",
-				"narrow",
-				"enarrow",
+				"srgb-rgba",
+				"srgb-f16",
+				"narrow-rgba",
+				"narrow-f16",
 			}
 		}
 
@@ -70,15 +70,15 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 			glPrefix = "gles"
 		}
 
-		configs = append(configs, glPrefix, glPrefix+"srgb")
+		configs = append(configs, glPrefix, "srgb-"+glPrefix)
 
 		if b.os("Ubuntu18") && b.noExtraConfig() {
 			configs = append(configs, glPrefix+"reducedshaders")
 		}
-		// glnarrow/glesnarrow tests the case of color converting *all* content
+		// narrow-gl/gles tests the case of color converting *all* content
 		// It hangs on the AndroidOne (Mali400)  skia:10669
 		if (!b.gpu("Mali400MP2")) {
-			configs = append(configs, glPrefix+"narrow")
+			configs = append(configs, "narrow-"+glPrefix)
 		}
 
 		// skia:10644 The fake ES2 config is used to compare highest available ES version to
@@ -100,7 +100,7 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		// We want to test both the OpenGL config and the GLES config on Linux Intel:
 		// GL is used by Chrome, GLES is used by ChromeOS.
 		if b.matchGpu("Intel") && b.isLinux() {
-			configs = append(configs, "gles", "glessrgb")
+			configs = append(configs, "gles", "srgb-gles")
 		}
 
 		if b.extraConfig("CommandBuffer") {
@@ -122,6 +122,9 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 				if !b.matchGpu("Intel") {
 					configs = append(configs, "vkmsaa8")
 				}
+			}
+			if b.gpu("QuadroP400", "MaliG77") {
+				configs = append(configs, "vkdmsaa")
 			}
 		}
 		if b.extraConfig("Metal") {
@@ -157,10 +160,21 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 			// Just run GLES for now - maybe add gles_msaa4 in the future
 			configs = []string{"gles"}
 		}
+		if b.extraConfig("SwiftShader") {
+			configs = []string{"gles", "glesdmsaa"}
+		}
 	}
 
 	args = append(args, "--config")
 	args = append(args, configs...)
+
+	// Use 4 internal msaa samples on mobile and AppleM1, otherwise 8.
+	args = append(args, "--internalSamples")
+	if b.os("Android") || b.os("iOS") || b.matchGpu("AppleM1") {
+		args = append(args, "4")
+	} else {
+		args = append(args, "8")
+	}
 
 	// By default, we test with GPU threading enabled, unless specifically
 	// disabled.

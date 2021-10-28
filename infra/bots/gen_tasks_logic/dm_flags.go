@@ -192,8 +192,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = []string{
 				"g8", "565",
 				"pic-8888", "serialize-8888",
-				"f16", "srgb", "esrgb", "narrow", "enarrow",
-				"p3", "ep3", "rec2020", "erec2020"}
+				"linear-f16", "srgb-rgba", "srgb-f16", "narrow-rgba", "narrow-f16",
+				"p3-rgba", "p3-f16", "rec2020-rgba", "rec2020-f16"}
 		}
 
 		if b.extraConfig("PDF") {
@@ -230,7 +230,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("NativeFonts") {
 			configs = append(configs, glPrefix)
 		} else {
-			configs = append(configs, glPrefix, glPrefix+"dft", glPrefix+"srgb")
+			configs = append(configs, glPrefix, glPrefix+"dft", "srgb-"+glPrefix)
 			if sampleCount > 0 {
 				configs = append(configs, fmt.Sprintf("%smsaa%d", glPrefix, sampleCount))
 				// Temporarily limit the bots we test dynamic MSAA on.
@@ -254,7 +254,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// Also do the Ganesh threading verification test (render with and without
 		// worker threads, using only the SW path renderer, and compare the results).
 		if b.matchGpu("Intel") && b.isLinux() {
-			configs = append(configs, "gles", "glesdft", "glessrgb", "gltestthreading")
+			configs = append(configs, "gles", "glesdft", "srgb-gles", "gltestthreading")
 			// skbug.com/6333, skbug.com/6419, skbug.com/6702
 			skip("gltestthreading gm _ lcdblendmodes")
 			skip("gltestthreading gm _ lcdoverlap")
@@ -290,6 +290,20 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = []string{"dawn"}
 		}
 
+		// Graphite bot *only* runs the grmtl config
+		if b.extraConfig("Graphite") {
+			if b.extraConfig("ASAN") {
+			    // skbug.com/12507 (Neon UB during JPEG compression on M1 ASAN Graphite bot)
+				skip("_", "gm", "_", "yuv420_odd_dim")  // Oddly enough yuv420_odd_dim_repeat doesn't crash
+				skip("_", "gm", "_", "encode-alpha-jpeg")
+				skip("_", "gm", "_", "encode")
+				skip("_", "gm", "_", "jpg-color-cube")
+				// TODO: re-enable - currently fails with "Failed to make lazy image"
+				skip("_", "gm", "_", "image_subset")
+			}
+			configs = []string{"grmtl"}
+		}
+
 		// ANGLE bot *only* runs the angle configs
 		if b.extraConfig("ANGLE") {
 			configs = []string{"angle_d3d11_es2",
@@ -323,7 +337,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			}
 		}
 
-		if b.model("AndroidOne", "GalaxyS6", "Nexus5", "Nexus7") {
+		if b.model("AndroidOne", "Nexus5", "Nexus7") {
 			// skbug.com/9019
 			skip("_ test _ ProcessorCloneTest")
 			skip("_ test _ Programs")
@@ -343,11 +357,23 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.model("Spin513") {
 			// skbug.com/11876
 			skip("_ test _ Programs")
+            // skbug.com/12486
+			skip("_ test _ TestMockContext")
+			skip("_ test _ TestGpuRenderingContexts")
+			skip("_ test _ TestGpuAllContexts")
+			skip("_ test _ OverdrawSurface_Gpu")
+			skip("_ test _ ReplaceSurfaceBackendTexture")
+			skip("_ test _ SurfaceAttachStencil_Gpu")
+			skip("_ test _ SurfaceWrappedWithRelease_Gpu")
 		}
 
 		if b.extraConfig("CommandBuffer") {
 			// skbug.com/10412
 			skip("_ test _ GLBackendAllocationTest")
+			skip("_ test _ InitialTextureClear")
+			// skbug.com/12437
+			skip("_ test _ GrDDLImage_MakeSubset")
+			skip("_ test _ GrContext_oomed")
 		}
 
 		// skbug.com/9043 - these devices render this test incorrectly
@@ -360,6 +386,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			// MSAA doesn't work well on Intel GPUs chromium:527565, chromium:983926, skia:9023
 			if !b.matchGpu("Intel") {
 				configs = append(configs, "vkmsaa4")
+			}
+			// Temporarily limit the bots we test dynamic MSAA on.
+			if b.gpu("QuadroP400", "MaliG77") && !b.extraConfig("TSAN") {
+				configs = append(configs, "vkdmsaa")
 			}
 		}
 		if b.extraConfig("Metal") {
@@ -426,7 +456,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile gm _ glyph_pos_h_f")
 			skip("mtltestprecompile gm _ glyph_pos_n_f")
 			skip("mtltestprecompile gm _ persp_images")
+			skip("mtltestprecompile gm _ ovals")
+			skip("mtltestprecompile gm _ roundrects")
+			skip("mtltestprecompile gm _ shadow_utils_occl")
 			skip("mtltestprecompile gm _ strokedlines")
+			skip("mtltestprecompile gm _ strokerect")
 			skip("mtltestprecompile gm _ strokes3")
 			skip("mtltestprecompile gm _ texel_subset_linear_mipmap_nearest_down")
 			skip("mtltestprecompile gm _ texel_subset_linear_mipmap_linear_down")
@@ -437,6 +471,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile svg _ Ghostscript_Tiger.svg")
 			skip("mtltestprecompile svg _ Seal_of_American_Samoa.svg")
 			skip("mtltestprecompile svg _ Seal_of_Illinois.svg")
+			skip("mtltestprecompile svg _ desk_motionmark_paths.svg")
+			skip("mtltestprecompile svg _ rg1024_green_grapes.svg")
+			skip("mtltestprecompile svg _ shapes-intro-02-f.svg")
+			skip("mtltestprecompile svg _ tiger-8.svg")
 		}
 		// Test reduced shader mode on iPhone 11 as representative iOS device
 		if b.model("iPhone11") && b.extraConfig("Metal") {
@@ -457,9 +495,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 
 		// Test rendering to wrapped dsts on a few bots
-		// Also test "glenarrow", which hits F16 surfaces and F16 vertex colors.
+		// Also test "narrow-glf16", which hits F16 surfaces and F16 vertex colors.
 		if b.extraConfig("BonusConfigs") {
-			configs = []string{"glbetex", "glbert", "glenarrow", "glreducedshaders"}
+			configs = []string{"glbetex", "glbert", "narrow-glf16", "glreducedshaders"}
 		}
 
 		if b.os("ChromeOS") {
@@ -540,8 +578,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		removeFromArgs("colorImage")
 	}
 
-	if b.matchExtraConfig("DDL", "PDF") {
-		// The DDL and PDF bots just render the large skps and the gms
+	if b.matchExtraConfig("DDL", "PDF", "Graphite") {
+		// The DDL, PDF and Graphite bots just render the large skps and the gms
 		removeFromArgs("tests")
 		removeFromArgs("image")
 		removeFromArgs("colorImage")
@@ -570,8 +608,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	// TODO: ???
 	skip("f16 _ _ dstreadshuffle")
-	skip("glsrgb image _ _")
-	skip("glessrgb image _ _")
+	skip("srgb-gl image _ _")
+	skip("srgb-gles image _ _")
 
 	// --src image --config g8 means "decode into Gray8", which isn't supported.
 	skip("g8 image _ _")
@@ -860,16 +898,49 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 	}
 
-	if b.matchGpu("Adreno[3456][0-9][0-9]") { // disable broken tests on Adreno 3/4/5/6xx
+	if b.matchGpu("Adreno[3456]") { // disable broken tests on Adreno 3/4/5/6xx
+		skip("_", "tests", "_", "SkSLArrayCast_GPU")       // skia:12332
+		skip("_", "tests", "_", "SkSLArrayComparison_GPU") // skia:12332
+	}
+
+	if b.matchGpu("Adreno[345]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 3/4/5xx GLSL
 		skip("_", "tests", "_", "DSLFPTest_SwitchStatement")  // skia:11891
-		skip("_", "tests", "_", "SkSLArrayCast_GPU")          // skia:12332
-		skip("_", "tests", "_", "SkSLArrayComparison_GPU")    // skia:12332
 		skip("_", "tests", "_", "SkSLMatrixToVectorCast_GPU") // skia:12192
 		skip("_", "tests", "_", "SkSLStructsInFunctions_GPU") // skia:11929
 	}
 
+	if b.matchGpu("Adreno6") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 6xx GLSL
+		skip("_", "tests", "_", "SkSLIntrinsicIsInf_GPU") // skia:12377
+	}
+
+	if (b.matchGpu("Adreno3") || b.matchGpu("Mali400")) && !b.extraConfig("Vulkan") {
+		skip("_", "tests", "_", "SkSLMatrices") // skia:12456
+	}
+
 	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
 		skip("_", "tests", "_", "SkSLVectorToMatrixCast_GPU") // skia:12179
+	}
+
+	if ((b.extraConfig("Vulkan") && b.isLinux() && b.matchGpu("Intel")) ||
+        (b.extraConfig("ANGLE") && b.matchOs("Win") && b.matchGpu("IntelIris(540|655)"))) {
+		skip("_", "tests", "_", "SkSLSwitchDefaultOnly_GPU") // skia:12465
+	}
+
+	if (b.gpu("Tegra3")) { // Tegra3 fails to compile break stmts inside a for loop (skia:12477)
+		skip("_", "tests", "_", "SkSLSwitch_GPU")
+		skip("_", "tests", "_", "SkSLSwitchDefaultOnly_GPU")
+		skip("_", "tests", "_", "SkSLSwitchWithFallthrough_GPU")
+		skip("_", "tests", "_", "SkSLSwitchWithLoops_GPU")
+	}
+
+	if b.matchGpu("Intel") { // some Intel GPUs don't return zero for the derivative of a uniform
+		skip("_", "tests", "_", "SkSLIntrinsicDFdy_GPU")
+		skip("_", "tests", "_", "SkSLIntrinsicDFdx_GPU")
+		skip("_", "tests", "_", "SkSLIntrinsicFwidth_GPU")
+	}
+
+	if b.matchOs("Mac") && b.matchGpu("Intel(Iris5100|HD6000)") {
+		skip("_", "tests", "_", "SkSLLoopFloat_GPU") // skia:12426
 	}
 
 	match := []string{}
@@ -887,11 +958,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "~PremulAlphaRoundTrip_Gpu")                // skia:7501
 		match = append(match, "~ReimportImageTextureWithMipLevels")       // skia:8090
 		match = append(match, "~MorphologyFilterRadiusWithMirrorCTM_Gpu") // skia:10383
-	}
-
-	if b.model("GalaxyS6") {
-		match = append(match, "~SpecialImage") // skia:6338
-		match = append(match, "~skbug6653")    // skia:6653
 	}
 
 	if b.extraConfig("MSAN") {

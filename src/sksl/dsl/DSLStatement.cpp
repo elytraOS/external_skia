@@ -37,12 +37,12 @@ DSLStatement::DSLStatement(DSLExpression expr) {
 
 DSLStatement::DSLStatement(std::unique_ptr<SkSL::Expression> expr)
     : fStatement(SkSL::ExpressionStatement::Make(DSLWriter::Context(), std::move(expr))) {
-    SkASSERT(this->valid());
+    SkASSERT(this->hasValue());
 }
 
 DSLStatement::DSLStatement(std::unique_ptr<SkSL::Statement> stmt)
     : fStatement(std::move(stmt)) {
-    SkASSERT(this->valid());
+    SkASSERT(this->hasValue());
 }
 
 DSLStatement::DSLStatement(DSLPossibleExpression expr, PositionInfo pos)
@@ -50,10 +50,13 @@ DSLStatement::DSLStatement(DSLPossibleExpression expr, PositionInfo pos)
 
 DSLStatement::DSLStatement(DSLPossibleStatement stmt, PositionInfo pos) {
     DSLWriter::ReportErrors(pos);
-    if (stmt.valid()) {
+    if (stmt.hasValue()) {
         fStatement = std::move(stmt.fStatement);
     } else {
         fStatement = SkSL::Nop::Make();
+    }
+    if (pos.line() != -1) {
+        fStatement->fLine = pos.line();
     }
 }
 
@@ -80,11 +83,12 @@ DSLPossibleStatement::~DSLPossibleStatement() {
 }
 
 DSLStatement operator,(DSLStatement left, DSLStatement right) {
+    int line = left.fStatement->fLine;
     StatementArray stmts;
     stmts.reserve_back(2);
     stmts.push_back(left.release());
     stmts.push_back(right.release());
-    return DSLStatement(SkSL::Block::MakeUnscoped(/*offset=*/-1, std::move(stmts)));
+    return DSLStatement(SkSL::Block::MakeUnscoped(line, std::move(stmts)));
 }
 
 } // namespace dsl

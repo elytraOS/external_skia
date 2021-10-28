@@ -760,31 +760,40 @@ DEF_TEST(canvas_savelayer_destructor, reporter) {
         }
     };
 
-    auto do_test = [&](bool doRestore) {
+    auto do_test = [&](int saveCount, int restoreCount) {
+        SkASSERT(restoreCount <= saveCount);
+
         auto surf = SkSurface::MakeRasterDirect(pm);
         auto canvas = surf->getCanvas();
 
         canvas->clear(SK_ColorRED);
         check_pixels(SK_ColorRED);
 
-        canvas->saveLayer(nullptr, nullptr);
+        for (int i = 0; i < saveCount; ++i) {
+            canvas->saveLayer(nullptr, nullptr);
+        }
+
         canvas->clear(SK_ColorBLUE);
         // so far, we still expect to see the red, since the blue was drawn in a layer
         check_pixels(SK_ColorRED);
 
-        if (doRestore) {
+        for (int i = 0; i < restoreCount; ++i) {
             canvas->restore();
         }
         // by returning, we are implicitly deleting the surface, and its associated canvas
     };
 
-    do_test(true);
+    do_test(1, 1);
     // since we called restore, we expect to see now see blue
     check_pixels(SK_ColorBLUE);
 
-    // Now we're repeat that, but delete the canvas before we restore it
-    do_test(false);
-    // We now suppress blitting the unbalanced saveLayers, so we expect to see red
-    // (not the layer's blue)
+    // Now repeat that, but delete the canvas before we restore it
+    do_test(1, 0);
+    // We don't blit the unbalanced saveLayers, so we expect to see red (not the layer's blue)
+    check_pixels(SK_ColorRED);
+
+    // Finally, test with multiple unbalanced saveLayers. This led to a crash in an earlier
+    // implementation (crbug.com/1238731)
+    do_test(2, 0);
     check_pixels(SK_ColorRED);
 }

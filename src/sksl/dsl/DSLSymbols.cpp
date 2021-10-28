@@ -15,19 +15,19 @@ namespace SkSL {
 namespace dsl {
 
 void PushSymbolTable() {
-    DSLWriter::IRGenerator().pushSymbolTable();
+    SymbolTable::Push(&DSLWriter::IRGenerator().symbolTable());
 }
 
 void PopSymbolTable() {
-    DSLWriter::IRGenerator().popSymbolTable();
+    SymbolTable::Pop(&DSLWriter::IRGenerator().symbolTable());
 }
 
 std::shared_ptr<SymbolTable> CurrentSymbolTable() {
     return DSLWriter::IRGenerator().symbolTable();
 }
 
-DSLPossibleExpression Symbol(skstd::string_view name) {
-    return DSLWriter::IRGenerator().convertIdentifier(/*offset=*/-1, name);
+DSLPossibleExpression Symbol(skstd::string_view name, PositionInfo pos) {
+    return DSLWriter::IRGenerator().convertIdentifier(pos.line(), name);
 }
 
 bool IsType(skstd::string_view name) {
@@ -35,11 +35,12 @@ bool IsType(skstd::string_view name) {
     return s && s->is<Type>();
 }
 
-void AddToSymbolTable(DSLVarBase& var) {
+void AddToSymbolTable(DSLVarBase& var, PositionInfo pos) {
     const SkSL::Variable* skslVar = DSLWriter::Var(var);
     if (skslVar) {
         CurrentSymbolTable()->addWithoutOwnership(skslVar);
     }
+    DSLWriter::ReportErrors(pos);
 }
 
 const String* Retain(String string) {

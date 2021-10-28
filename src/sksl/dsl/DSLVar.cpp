@@ -21,23 +21,27 @@ namespace SkSL {
 
 namespace dsl {
 
-DSLVarBase::DSLVarBase(DSLType type, skstd::string_view name, DSLExpression initialValue)
-    : DSLVarBase(DSLModifiers(), std::move(type), name, std::move(initialValue)) {}
+DSLVarBase::DSLVarBase(DSLType type, skstd::string_view name, DSLExpression initialValue,
+                       PositionInfo pos)
+    : DSLVarBase(DSLModifiers(), std::move(type), name, std::move(initialValue), pos) {}
 
-DSLVarBase::DSLVarBase(DSLType type, DSLExpression initialValue)
-    : DSLVarBase(type, "var", std::move(initialValue)) {}
+DSLVarBase::DSLVarBase(DSLType type, DSLExpression initialValue, PositionInfo pos)
+    : DSLVarBase(type, "var", std::move(initialValue), pos) {}
 
-DSLVarBase::DSLVarBase(const DSLModifiers& modifiers, DSLType type, DSLExpression initialValue)
-    : DSLVarBase(modifiers, type, "var", std::move(initialValue)) {}
+DSLVarBase::DSLVarBase(const DSLModifiers& modifiers, DSLType type, DSLExpression initialValue,
+                       PositionInfo pos)
+    : DSLVarBase(modifiers, type, "var", std::move(initialValue), pos) {}
 
 DSLVarBase::DSLVarBase(const DSLModifiers& modifiers, DSLType type, skstd::string_view name,
-                       DSLExpression initialValue)
+                       DSLExpression initialValue, PositionInfo pos)
     : fModifiers(std::move(modifiers))
     , fType(std::move(type))
     , fRawName(name)
     , fName(fType.skslType().isOpaque() ? name : DSLWriter::Name(name))
     , fInitialValue(std::move(initialValue))
-    , fDeclared(DSLWriter::MarkVarsDeclared()) {
+    , fDeclared(DSLWriter::MarkVarsDeclared())
+    , fPosition(pos) {
+    type.reportIllegalTypes(pos);
     if (fModifiers.fModifiers.fFlags & Modifiers::kUniform_Flag) {
 #if SK_SUPPORT_GPU && !defined(SKSL_STANDALONE)
         if (DSLWriter::InFragmentProcessor()) {
@@ -72,8 +76,8 @@ DSLVarBase::DSLVarBase(const DSLModifiers& modifiers, DSLType type, skstd::strin
 
 DSLVarBase::~DSLVarBase() {
     if (fDeclaration && !fDeclared) {
-        DSLWriter::ReportError(String::printf("error: variable '%.*s' was destroyed without being "
-                                              "declared\n",
+        DSLWriter::ReportError(String::printf("variable '%.*s' was destroyed without being "
+                                              "declared",
                                               (int)fRawName.length(),
                                               fRawName.data()).c_str());
     }
@@ -90,6 +94,8 @@ void DSLVarBase::swap(DSLVarBase& other) {
     std::swap(fName, other.fName);
     std::swap(fInitialValue.fExpression, other.fInitialValue.fExpression);
     std::swap(fDeclared, other.fDeclared);
+    std::swap(fInitialized, other.fInitialized);
+    std::swap(fPosition, other.fPosition);
 }
 
 void DSLVar::swap(DSLVar& other) {
@@ -101,7 +107,7 @@ VariableStorage DSLVar::storage() const {
 }
 
 DSLGlobalVar::DSLGlobalVar(const char* name)
-    : INHERITED(kVoid_Type, name, DSLExpression()) {
+    : INHERITED(kVoid_Type, name, DSLExpression(), PositionInfo()) {
     fName = name;
     DSLWriter::MarkDeclared(*this);
 #if SK_SUPPORT_GPU && !defined(SKSL_STANDALONE)
@@ -115,24 +121,24 @@ DSLGlobalVar::DSLGlobalVar(const char* name)
         const SkSL::Modifiers* modifiers = DSLWriter::Context().fModifiersPool->add(
                 SkSL::Modifiers(SkSL::Layout(/*flags=*/0, /*location=*/-1, /*offset=*/-1,
                                              /*binding=*/-1, /*index=*/-1, /*set=*/-1,
-                                             SK_MAIN_COORDS_BUILTIN, /*inputAttachmentIndex=*/-1,
-                                             Layout::kUnspecified_Primitive, /*maxVertices=*/1,
-                                             /*invocations=*/-1),
+                                             SK_MAIN_COORDS_BUILTIN, /*inputAttachmentIndex=*/-1),
                                 SkSL::Modifiers::kNo_Flag));
 
         fVar = DSLWriter::SymbolTable()->takeOwnershipOfIRNode(std::make_unique<SkSL::Variable>(
-                /*offset=*/-1,
+                /*line=*/-1,
                 modifiers,
                 fName,
                 DSLWriter::Context().fTypes.fFloat2.get(),
                 /*builtin=*/true,
                 SkSL::VariableStorage::kGlobal));
+        fInitialized = true;
         return;
     }
 #endif
     const SkSL::Symbol* result = (*DSLWriter::SymbolTable())[fName];
     SkASSERTF(result, "could not find '%.*s' in symbol table", (int)fName.length(), fName.data());
     fVar = &result->as<SkSL::Variable>();
+    fInitialized = true;
 }
 
 void DSLGlobalVar::swap(DSLGlobalVar& other) {
@@ -153,12 +159,13 @@ VariableStorage DSLParameter::storage() const {
 
 
 DSLPossibleExpression DSLVarBase::operator[](DSLExpression&& index) {
-    return DSLExpression(*this)[std::move(index)];
+    return DSLExpression(*this, PositionInfo())[std::move(index)];
 }
 
 DSLPossibleExpression DSLVarBase::assign(DSLExpression expr) {
-    return DSLWriter::ConvertBinary(DSLExpression(*this).release(), SkSL::Token::Kind::TK_EQ,
-                                    expr.release());
+    return BinaryExpression::Convert(DSLWriter::Context(),
+            DSLExpression(*this, PositionInfo()).release(), SkSL::Token::Kind::TK_EQ,
+            expr.release());
 }
 
 DSLPossibleExpression DSLVar::operator=(DSLExpression expr) {
@@ -171,6 +178,39 @@ DSLPossibleExpression DSLGlobalVar::operator=(DSLExpression expr) {
 
 DSLPossibleExpression DSLParameter::operator=(DSLExpression expr) {
     return this->assign(std::move(expr));
+}
+
+std::unique_ptr<SkSL::Expression> DSLGlobalVar::methodCall(skstd::string_view methodName,
+                                                           PositionInfo pos) {
+    if (!this->fType.isEffectChild()) {
+        DSLWriter::ReportError("type does not support method calls", pos);
+        return nullptr;
+    }
+    return FieldAccess::Convert(DSLWriter::Context(), *DSLWriter::SymbolTable(),
+            DSLExpression(*this, PositionInfo()).release(), methodName);
+}
+
+DSLExpression DSLGlobalVar::eval(ExpressionArray args, PositionInfo pos) {
+    auto method = this->methodCall("eval", pos);
+    // We can't call FunctionCall::Convert directly here, because intrinsic management is handled in
+    // IRGenerator::call. skbug.com/12500
+    return DSLExpression(
+            method ? DSLWriter::IRGenerator().call(pos.line(), std::move(method), std::move(args))
+                   : nullptr,
+            pos);
+}
+
+DSLExpression DSLGlobalVar::eval(DSLExpression x, PositionInfo pos) {
+    ExpressionArray converted;
+    converted.push_back(x.release());
+    return this->eval(std::move(converted), pos);
+}
+
+DSLExpression DSLGlobalVar::eval(DSLExpression x, DSLExpression y, PositionInfo pos) {
+    ExpressionArray converted;
+    converted.push_back(x.release());
+    converted.push_back(y.release());
+    return this->eval(std::move(converted), pos);
 }
 
 } // namespace dsl

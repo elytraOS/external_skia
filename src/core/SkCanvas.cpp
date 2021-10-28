@@ -194,7 +194,10 @@ enum class CheckForOverwrite : bool {
 SkCanvas::Layer::Layer(sk_sp<SkBaseDevice> device,
                        sk_sp<SkImageFilter> imageFilter,
                        const SkPaint& paint)
-        : fDevice(std::move(device)), fImageFilter(std::move(imageFilter)), fPaint(paint) {
+        : fDevice(std::move(device))
+        , fImageFilter(std::move(imageFilter))
+        , fPaint(paint)
+        , fDiscard(false) {
     SkASSERT(fDevice);
     // Any image filter should have been pulled out and stored in 'imageFilter' so that 'paint'
     // can be used as-is to draw the result of the filter to the dst device.
@@ -461,14 +464,16 @@ SkCanvas::SkCanvas(const SkBitmap& bitmap, ColorBehavior)
 #endif
 
 SkCanvas::~SkCanvas() {
-    // Discard all pending layers
+    // Mark all pending layers to be discarded during restore (rather than drawn)
     SkDeque::Iter iter(fMCStack, SkDeque::Iter::kFront_IterStart);
     for (;;) {
         MCRec* rec = (MCRec*)iter.next();
         if (!rec) {
             break;
         }
-        rec->fLayer.reset();
+        if (rec->fLayer) {
+            rec->fLayer->fDiscard = true;
+        }
     }
 
     // free up the contents of our deque
@@ -668,21 +673,20 @@ static void check_drawdevice_colorspaces(SkColorSpace* src, SkColorSpace* dst) {
 
 // Helper function to compute the center reference point used for scale decomposition under
 // non-linear transformations.
-static bool compute_decomposition_center(const SkMatrix& dstToLocal,
-                                         const skif::ParameterSpace<SkRect>* contentBounds,
-                                         const skif::DeviceSpace<SkIRect>& targetOutput,
-                                         skif::ParameterSpace<SkPoint>* out) {
+static skif::ParameterSpace<SkPoint> compute_decomposition_center(
+        const SkMatrix& dstToLocal,
+        const skif::ParameterSpace<SkRect>* contentBounds,
+        const skif::DeviceSpace<SkIRect>& targetOutput) {
     // Will use the inverse and center of the device bounds if the content bounds aren't provided.
     SkRect rect = contentBounds ? SkRect(*contentBounds) : SkRect::Make(SkIRect(targetOutput));
     SkPoint center = {rect.centerX(), rect.centerY()};
     if (!contentBounds) {
         // Theoretically, the inverse transform could put center's homogeneous coord behind W = 0,
-        // but that case is handled automatically in DecomposeCTM later.
+        // but that case is handled automatically in Mapping::decomposeCTM later.
         dstToLocal.mapPoints(&center, 1);
     }
 
-    *out = skif::ParameterSpace<SkPoint>(center);
-    return true;
+    return skif::ParameterSpace<SkPoint>(center);
 }
 
 // Compute suitable transformations and layer bounds for a new layer that will be used as the source
@@ -697,13 +701,19 @@ static std::pair<skif::Mapping, skif::LayerSpace<SkIRect>> get_layer_mapping_and
         const skif::DeviceSpace<SkIRect>& targetOutput,
         const skif::ParameterSpace<SkRect>* contentBounds = nullptr,
         bool mustCoverDst = true) {
-    skif::ParameterSpace<SkPoint> center;
+    auto failedMapping = []() {
+        return std::make_pair<skif::Mapping, skif::LayerSpace<SkIRect>>(
+                {}, skif::LayerSpace<SkIRect>::Empty());
+    };
+
     SkMatrix dstToLocal;
     if (!localToDst.isFinite() ||
-        !localToDst.invert(&dstToLocal) ||
-        !compute_decomposition_center(dstToLocal, contentBounds, targetOutput, &center)) {
-        return {{}, skif::LayerSpace<SkIRect>(SkIRect::MakeEmpty())};
+        !localToDst.invert(&dstToLocal)) {
+        return failedMapping();
     }
+
+    skif::ParameterSpace<SkPoint> center =
+            compute_decomposition_center(dstToLocal, contentBounds, targetOutput);
     // *after* possibly getting a representative point from the provided content bounds, it might
     // be necessary to discard the bounds for subsequent layer calculations.
     if (mustCoverDst) {
@@ -712,7 +722,10 @@ static std::pair<skif::Mapping, skif::LayerSpace<SkIRect>> get_layer_mapping_and
 
     // Determine initial mapping and a reasonable maximum dimension to prevent layer-to-device
     // transforms with perspective and skew from triggering excessive buffer allocations.
-    skif::Mapping mapping = skif::Mapping::DecomposeCTM(localToDst, filter, center);
+    skif::Mapping mapping;
+    if (!mapping.decomposeCTM(localToDst, filter, center)) {
+        return failedMapping();
+    }
     // Perspective and skew could exceed this since mapping.deviceToLayer(targetOutput) is
     // theoretically unbounded under those conditions. Under a 45 degree rotation, a layer needs to
     // be 2X larger per side of the prior device in order to fully cover it. We use the max of that
@@ -742,7 +755,7 @@ static std::pair<skif::Mapping, skif::LayerSpace<SkIRect>> get_layer_mapping_and
             // extent (i.e., they implement the CSS filter-effects 'filter region' feature).
             skif::LayerSpace<SkIRect> knownBounds = mapping.paramToLayer(*contentBounds).roundOut();
             if (!layerBounds.intersect(knownBounds)) {
-                layerBounds = skif::LayerSpace<SkIRect>(SkIRect::MakeEmpty());
+                return failedMapping();
             }
         }
     }
@@ -755,7 +768,7 @@ static std::pair<skif::Mapping, skif::LayerSpace<SkIRect>> get_layer_mapping_and
                                                    SkRect::Make(SkIRect(newLayerBounds)),
                                                    SkMatrix::kFill_ScaleToFit);
         if (!mapping.adjustLayerSpace(adjust)) {
-            layerBounds = skif::LayerSpace<SkIRect>(SkIRect::MakeEmpty());
+            return failedMapping();
         } else {
             layerBounds = newLayerBounds;
         }
@@ -1008,10 +1021,16 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
             skif::ParameterSpace<SkRect>::Optional(rec.fBounds),
             must_cover_prior_device(rec.fBackdrop, restorePaint) || optimizedCFAffectsTransparent);
 
-    if (layerBounds.isEmpty()) {
-        // The filtered content of the layer would not draw anything, so skip the layer
+    auto abortLayer = [this]() {
+        // The filtered content would not draw anything, or the new device space has an invalid
+        // coordinate system, in which case we mark the current top device as empty so that nothing
+        // draws until the canvas is restored past this saveLayer.
         AutoUpdateQRBounds aqr(this);
-        priorDevice->clipRect(SkRect::MakeEmpty(), SkClipOp::kIntersect, /* aa */ false);
+        this->topDevice()->clipRect(SkRect::MakeEmpty(), SkClipOp::kIntersect, /* aa */ false);
+    };
+
+    if (layerBounds.isEmpty()) {
+        abortLayer();
         return;
     }
 
@@ -1054,10 +1073,19 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
     // 'newLayerMapping' only defines the transforms between the two devices and it must be updated
     // to the global coordinate system.
     newDevice->setMarkerStack(fMarkerStack.get());
-    newDevice->setDeviceCoordinateSystem(priorDevice->deviceToGlobal() *
-                                         SkM44(newLayerMapping.deviceMatrix()),
-                                         SkM44(newLayerMapping.layerMatrix()),
-                                         layerBounds.left(), layerBounds.top());
+    if (!newDevice->setDeviceCoordinateSystem(priorDevice->deviceToGlobal() *
+                                              SkM44(newLayerMapping.deviceMatrix()),
+                                              SkM44(newLayerMapping.layerMatrix()),
+                                              layerBounds.left(), layerBounds.top())) {
+        // If we made it this far and the coordinate system is invalid, we most likely had a valid
+        // mapping until being combined with the previous device-to-global matrix, at which point
+        // it overflowed or floating point rounding caused it to no longer be invertible. There's
+        // not much we can do but clean up the layer and mark the clip as empty. This tends to come
+        // up in fuzzer-generated inputs, so this policy is not unreasonable and helps avoids UB.
+        newDevice = nullptr;
+        abortLayer();
+        return;
+    }
 
     if (initBackdrop) {
         SkPaint backdropPaint;
@@ -1160,7 +1188,7 @@ void SkCanvas::internalRestore() {
 
     // Draw the layer's device contents into the now-current older device. We can't call public
     // draw functions since we don't want to record them.
-    if (layer && !layer->fDevice->isNoPixelsDevice()) {
+    if (layer && !layer->fDevice->isNoPixelsDevice() && !layer->fDiscard) {
         layer->fDevice->setImmutable();
 
         // Don't go through AutoLayerForImageFilter since device draws are so closely tied to
@@ -2385,7 +2413,7 @@ void SkCanvas::onDrawDrawable(SkDrawable* dr, const SkMatrix* matrix) {
     // drawable bounds are no longer reliable (e.g. android displaylist)
     // so don't use them for quick-reject
     this->predrawNotify();
-    this->baseDevice()->drawDrawable(dr, matrix, this);
+    this->topDevice()->drawDrawable(dr, matrix, this);
 }
 
 void SkCanvas::onDrawAtlas2(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],

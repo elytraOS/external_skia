@@ -23,6 +23,7 @@
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
+#include "src/gpu/ops/GrDrawOp.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 /**
@@ -159,7 +160,9 @@ private:
 
         auto geomProc = PipelineDynamicStateTestProcessor::Make(flushState->allocator());
 
-        GrProgramInfo programInfo(flushState->writeView(),
+        GrProgramInfo programInfo(flushState->caps(),
+                                  flushState->writeView(),
+                                  flushState->usesMSAASurface(),
                                   &pipeline,
                                   &GrUserStencilSettings::kUnused,
                                   geomProc,

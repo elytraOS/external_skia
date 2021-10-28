@@ -34,24 +34,20 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
         }
 
         void defineFunction(const char* /*decl*/, const char* /*body*/, bool /*isMain*/) override {}
+        void declareFunction(const char* /*decl*/) override {}
         void defineStruct(const char* /*definition*/) override {}
         void declareGlobal(const char* /*declaration*/) override {}
 
         String sampleShader(int index, String coords) override {
-            return "sample(" + SkSL::to_string(index) + ", " + coords + ")";
+            return "child_" + SkSL::to_string(index) + ".eval(" + coords + ")";
         }
 
         String sampleColorFilter(int index, String color) override {
-            String result = "sample(" + SkSL::to_string(index);
-            if (!color.empty()) {
-                result += ", " + color;
-            }
-            result += ")";
-            return result;
+            return "child_" + SkSL::to_string(index) + ".eval(" + color + ")";
         }
 
         String sampleBlender(int index, String src, String dst) override {
-            return "sample(" + SkSL::to_string(index) + ", " + src + ", " + dst + ")";
+            return "child_" + SkSL::to_string(index) + ".eval(" + src + ", " + dst + ")";
         }
     };
 
