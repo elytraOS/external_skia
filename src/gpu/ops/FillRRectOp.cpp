@@ -367,7 +367,7 @@ private:
         this->setInstanceAttributes(fInstanceAttribs.begin(), fInstanceAttribs.count());
     }
 
-    static constexpr Attribute kVertexAttribs[] = {
+    inline static constexpr Attribute kVertexAttribs[] = {
             {"radii_selector", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
             {"corner_and_radius_outsets", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
             // Coverage only.
@@ -379,8 +379,6 @@ private:
     SkSTArray<kMaxInstanceAttribs, Attribute> fInstanceAttribs;
     const Attribute* fColorAttrib;
 };
-
-constexpr GrGeometryProcessor::Attribute FillRRectOpImpl::Processor::kVertexAttribs[];
 
 // Our coverage geometry consists of an inset octagon with solid coverage, surrounded by linear
 // coverage ramps on the horizontal and vertical edges, and "arc coverage" pieces on the diagonal
@@ -532,7 +530,7 @@ void FillRRectOpImpl::onPrepareDraws(GrMeshDrawTarget* target) {
 
             // Convert the radii to [-1, -1, +1, +1] space and write their attribs.
             grvx::float4 radiiX, radiiY;
-            grvx::strided_load2(&SkRRectPriv::GetRadiiArray(i->fRRect)->fX, radiiX, radiiY);
+            skvx::strided_load2(&SkRRectPriv::GetRadiiArray(i->fRRect)->fX, radiiX, radiiY);
             radiiX *= 2 / (r - l);
             radiiY *= 2 / (b - t);
 
