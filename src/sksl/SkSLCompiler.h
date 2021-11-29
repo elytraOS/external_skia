@@ -64,10 +64,10 @@ struct LoadedModule {
  */
 class SK_API Compiler {
 public:
-    static constexpr const char FRAGCOLOR_NAME[] = "sk_FragColor";
-    static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
-    static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
-    static constexpr const char POISON_TAG[]     = "<POISON>";
+    inline static constexpr const char FRAGCOLOR_NAME[] = "sk_FragColor";
+    inline static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
+    inline static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
+    inline static constexpr const char POISON_TAG[]     = "<POISON>";
 
     /**
      * Gets a float4 that adjusts the position from Skia device coords to normalized device coords,
@@ -232,16 +232,6 @@ private:
     /** Optimize the module. */
     bool optimize(LoadedModule& module);
 
-    /** Eliminates unused functions from a Program, according to the stats in ProgramUsage. */
-    bool removeDeadFunctions(Program& program, ProgramUsage* usage);
-
-    /** Eliminates unreferenced variables from a Program, according to the stats in ProgramUsage. */
-    bool removeDeadGlobalVariables(Program& program, ProgramUsage* usage);
-    bool removeDeadLocalVariables(Program& program, ProgramUsage* usage);
-
-    /** Eliminates unreachable statements from a Program. */
-    void removeUnreachableCode(Program& program, ProgramUsage* usage);
-
     /** Flattens out function calls when it is safe to do so. */
     bool runInliner(const std::vector<std::unique_ptr<ProgramElement>>& elements,
                     std::shared_ptr<SymbolTable> symbols,
@@ -275,8 +265,8 @@ private:
     friend class AutoSource;
     friend class ::SkSLCompileBench;
     friend class DSLParser;
+    friend class ThreadContext;
     friend class dsl::DSLCore;
-    friend class dsl::DSLWriter;
 };
 
 }  // namespace SkSL
