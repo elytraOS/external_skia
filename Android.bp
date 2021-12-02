@@ -72,7 +72,7 @@ cc_defaults {
     ],
 
     cppflags:[
-        
+        "-Wno-c++17-extensions",
     ],
 
     export_include_dirs: [
@@ -641,10 +641,10 @@ cc_library_static {
         "src/gpu/ops/TessellationPathRenderer.cpp",
         "src/gpu/ops/TextureOp.cpp",
         "src/gpu/ops/TriangulatingPathRenderer.cpp",
-        "src/gpu/tessellate/GrPathCurveTessellator.cpp",
-        "src/gpu/tessellate/GrPathWedgeTessellator.cpp",
-        "src/gpu/tessellate/GrStrokeFixedCountTessellator.cpp",
-        "src/gpu/tessellate/GrStrokeHardwareTessellator.cpp",
+        "src/gpu/tessellate/PathCurveTessellator.cpp",
+        "src/gpu/tessellate/PathWedgeTessellator.cpp",
+        "src/gpu/tessellate/StrokeFixedCountTessellator.cpp",
+        "src/gpu/tessellate/StrokeHardwareTessellator.cpp",
         "src/gpu/tessellate/shaders/GrPathTessellationShader.cpp",
         "src/gpu/tessellate/shaders/GrPathTessellationShader_Hardware.cpp",
         "src/gpu/tessellate/shaders/GrPathTessellationShader_MiddleOut.cpp",
@@ -1639,10 +1639,10 @@ cc_library_static {
           "src/gpu/ops/TessellationPathRenderer.cpp",
           "src/gpu/ops/TextureOp.cpp",
           "src/gpu/ops/TriangulatingPathRenderer.cpp",
-          "src/gpu/tessellate/GrPathCurveTessellator.cpp",
-          "src/gpu/tessellate/GrPathWedgeTessellator.cpp",
-          "src/gpu/tessellate/GrStrokeFixedCountTessellator.cpp",
-          "src/gpu/tessellate/GrStrokeHardwareTessellator.cpp",
+          "src/gpu/tessellate/PathCurveTessellator.cpp",
+          "src/gpu/tessellate/PathWedgeTessellator.cpp",
+          "src/gpu/tessellate/StrokeFixedCountTessellator.cpp",
+          "src/gpu/tessellate/StrokeHardwareTessellator.cpp",
           "src/gpu/tessellate/shaders/GrPathTessellationShader.cpp",
           "src/gpu/tessellate/shaders/GrPathTessellationShader_Hardware.cpp",
           "src/gpu/tessellate/shaders/GrPathTessellationShader_MiddleOut.cpp",
@@ -2908,7 +2908,6 @@ cc_test {
         "tests/Writer32Test.cpp",
         "tests/YUVCacheTest.cpp",
         "tests/YUVTest.cpp",
-        "tests/graphite/MaskTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
