@@ -36,6 +36,10 @@ Gpu::~Gpu() {
     fResourceProvider.reset();
 }
 
+sk_sp<const Caps> Gpu::refCaps() const {
+    return fCaps;
+}
+
 bool Gpu::submit(sk_sp<CommandBuffer> commandBuffer) {
     if (!commandBuffer) {
         return false;

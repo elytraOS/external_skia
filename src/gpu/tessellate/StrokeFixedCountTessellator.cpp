@@ -11,15 +11,15 @@
 #include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/geometry/GrPathUtils.h"
-#include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/tessellate/CullTest.h"
 #include "src/gpu/tessellate/StrokeIterator.h"
+#include "src/gpu/tessellate/WangsFormula.h"
 
 #if SK_GPU_V1
 #include "src/gpu/GrOpFlushState.h"
 #endif
 
-namespace skgpu::tess {
+namespace skgpu {
 
 namespace {
 
@@ -73,7 +73,7 @@ public:
     }
 
     SK_ALWAYS_INLINE void quadraticTo(const SkPoint p[3]) {
-        float numParametricSegments_pow4 = GrWangsFormula::quadratic_pow4(fParametricPrecision, p);
+        float numParametricSegments_pow4 = wangs_formula::quadratic_pow4(fParametricPrecision, p);
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
             this->chopQuadraticTo(p);
             return;
@@ -87,7 +87,7 @@ public:
     }
 
     SK_ALWAYS_INLINE void conicTo(const SkPoint p[3], float w) {
-        float n = GrWangsFormula::conic_pow2(fParametricPrecision, p, w);
+        float n = wangs_formula::conic_pow2(fParametricPrecision, p, w);
         float numParametricSegments_pow4 = n*n;
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
             this->chopConicTo({p, w});
@@ -102,7 +102,7 @@ public:
     }
 
     SK_ALWAYS_INLINE void cubicConvex180To(const SkPoint p[4]) {
-        float numParametricSegments_pow4 = GrWangsFormula::cubic_pow4(fParametricPrecision, p);
+        float numParametricSegments_pow4 = wangs_formula::cubic_pow4(fParametricPrecision, p);
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
             this->chopCubicConvex180To(p);
             return;
@@ -127,8 +127,8 @@ public:
             // The shader interprets an empty stroke + empty join as a special case that denotes a
             // circle, or 180-degree point stroke.
             writer.fill(location, 5);
-            writer.write(GrVertexWriter::If(!fShaderCaps->infinitySupport(),
-                                            GrTessellationShader::kCubicCurveType));
+            writer << GrVertexWriter::If(!fShaderCaps->infinitySupport(),
+                                         GrTessellationShader::kCubicCurveType);
             this->writeDynamicAttribs(&writer);
         }
     }
@@ -197,9 +197,9 @@ private:
             fHasLastControlPoint = true;
         } else if (GrVertexWriter writer = fChunkBuilder.appendVertex()) {
             writer.writeArray(p, 4);
-            writer.write(fLastControlPoint);
-            writer.write(GrVertexWriter::If(!fShaderCaps->infinitySupport(),
-                                            curveTypeIfUnsupportedInfinity));
+            writer << fLastControlPoint
+                   << GrVertexWriter::If(!fShaderCaps->infinitySupport(),
+                                         curveTypeIfUnsupportedInfinity);
             this->writeDynamicAttribs(&writer);
         }
         fLastControlPoint = endControlPoint;
@@ -207,10 +207,10 @@ private:
 
     SK_ALWAYS_INLINE void writeDynamicAttribs(GrVertexWriter* writer) {
         if (fShaderFlags & ShaderFlags::kDynamicStroke) {
-            writer->write(fDynamicStroke);
+            *writer << fDynamicStroke;
         }
         if (fShaderFlags & ShaderFlags::kDynamicColor) {
-            writer->write(fDynamicColor);
+            *writer << fDynamicColor;
         }
     }
 
@@ -462,4 +462,4 @@ void StrokeFixedCountTessellator::draw(GrOpFlushState* flushState) const {
 }
 #endif
 
-}  // namespace skgpu::tess
+}  // namespace skgpu

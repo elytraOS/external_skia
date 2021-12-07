@@ -22,7 +22,6 @@ namespace SkSL {
 
 class Compiler;
 class Context;
-class IRGenerator;
 struct ParsedModule;
 class ProgramElement;
 class SymbolTable;
@@ -57,11 +56,6 @@ public:
     static SkSL::Compiler& Compiler() { return *Instance().fCompiler; }
 
     /**
-     * Returns the IRGenerator used by DSL operations in the current thread.
-     */
-    static SkSL::IRGenerator& IRGenerator();
-
-    /**
      * Returns the Context used by DSL operations in the current thread.
      */
     static SkSL::Context& Context();
@@ -74,7 +68,7 @@ public:
     /**
      * Returns the Program::Inputs used by the current thread.
      */
-    static SkSL::Program::Inputs& Inputs();
+    static SkSL::Program::Inputs& Inputs() { return Instance().fInputs; }
 
     /**
      * Returns the collection to which DSL program elements in this thread should be appended.
@@ -88,9 +82,9 @@ public:
     }
 
     /**
-     * Returns the SymbolTable of the current thread's IRGenerator.
+     * Returns the current SymbolTable.
      */
-    static const std::shared_ptr<SkSL::SymbolTable>& SymbolTable();
+    static std::shared_ptr<SkSL::SymbolTable>& SymbolTable();
 
     /**
      * Returns the current memory pool.
@@ -197,6 +191,8 @@ private:
         void handleError(skstd::string_view msg, PositionInfo pos) override;
     };
 
+    void setupSymbolTable();
+
     std::unique_ptr<SkSL::ProgramConfig> fConfig;
     std::unique_ptr<SkSL::ModifiersPool> fModifiersPool;
     SkSL::Compiler* fCompiler;
@@ -210,6 +206,8 @@ private:
     ProgramSettings fSettings;
     Mangler fMangler;
     RTAdjustData fRTAdjust;
+    Program::Inputs fInputs;
+
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     struct StackFrame {
         GrFragmentProcessor::ProgramImpl* fProcessor;

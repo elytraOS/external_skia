@@ -16,7 +16,8 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
     const SkRect skRect = SkRect::MakeLTRB(1,-3,4,0);
     const Rect rect = skRect;
     CHECK(rect == rect);
-    CHECK(rect == skRect);
+    CHECK(rect == skRect); // promotes 'skRect' to a Rect for ==
+    CHECK(rect.asSkRect() == skRect); // converts 'rect' to SkRect for ==
 
     for (const float l : {0,1,2}) {
     for (const float t : {-4,-3,-2}) {
@@ -28,6 +29,7 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
         CHECK(rect2 == rect2);
         CHECK(rect2 == Rect(float2(l,t), float2(r,b)));
         CHECK(rect2 == Rect(skRect2));
+        CHECK(rect2.asSkRect() == skRect2);
 
         CHECK((rect2 == rect) == (rect == rect2));
         CHECK((rect2 != rect) == (rect != rect2));
@@ -52,6 +54,27 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
         CHECK(all(rect2.ltrb() == float4(l,t,r,b)));
         CHECK(all(rect2.vals() == float4(l,t,-r,-b)));
 
+        Rect setTest(-99,-99,99,99);
+        CHECK(setTest != rect2);
+        setTest.setLeft(l);
+        setTest.setTop(t);
+        setTest.setRight(r);
+        setTest.setBot(b);
+        CHECK(setTest == rect2);
+
+        setTest = Rect(-99,-99,99,99);
+        CHECK(setTest != rect2);
+        setTest.setTopLeft({l,t});
+        setTest.setBotRight({r,b});
+        CHECK(setTest == rect2);
+
+        for (int i = 0; i < 4; ++i) {
+            Rect rnan = rect2;
+            CHECK(!rnan.isEmptyNegativeOrNaN());
+            rnan.vals()[i] = std::numeric_limits<float>::quiet_NaN();
+            CHECK(rnan.isEmptyNegativeOrNaN());
+        }
+
         CHECK(all(rect2.size() == float2(skRect2.width(), skRect2.height())));
         CHECK(all(rect2.center() == float2(skRect2.centerX(), skRect2.centerY())));
         CHECK(rect2.area() == skRect2.height() * skRect2.width());
@@ -74,7 +97,7 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
         CHECK(rect.makeJoin(rect2) == skJoin);
         CHECK(rect.makeJoin(rect2) == rect2.makeJoin(rect));
 
-        CHECK(rect.intersects(rect2) == !rect.makeIntersect(rect2).isEmptyOrNegative());
+        CHECK(rect.intersects(rect2) == !rect.makeIntersect(rect2).isEmptyNegativeOrNaN());
         CHECK(rect.makeIntersect(rect2) == rect2.makeIntersect(rect));
         if (rect.intersects(rect2)) {
             CHECK(skRect.intersects(skRect2));
@@ -82,6 +105,13 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
             CHECK(skIsect.intersect(skRect, skRect2));
             CHECK(rect.makeIntersect(rect2) == Rect(skIsect));
         }
+
+        const Rect rect3{r,b,l,t}; // intentionally out of order
+        const SkRect skRect3{r,b,l,t};
+        CHECK(rect3.isEmptyNegativeOrNaN());
+        CHECK(skRect3.isEmpty());
+        CHECK(rect3.makeSorted() == skRect3.makeSorted());
+        CHECK(rect3.makeSorted() == rect2);
     }}}}
 }
 
