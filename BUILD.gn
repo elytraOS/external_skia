@@ -92,6 +92,9 @@ config("skia_private") {
       "SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1",
       "GR_TEST_UTILS=1",
     ]
+    if (skia_enable_graphite) {
+      defines += [ "GRAPHITE_TEST_UTILS=1" ]
+    }
   }
   libs = []
   lib_dirs = []
@@ -572,10 +575,20 @@ optional("fontmgr_win_gdi") {
 if (skia_lex) {
   skia_executable("sksllex") {
     sources = [
+      "src/sksl/lex/DFA.h",
+      "src/sksl/lex/DFAState.h",
+      "src/sksl/lex/LexUtil.h",
       "src/sksl/lex/Main.cpp",
       "src/sksl/lex/NFA.cpp",
+      "src/sksl/lex/NFA.h",
+      "src/sksl/lex/NFAState.h",
+      "src/sksl/lex/NFAtoDFA.h",
       "src/sksl/lex/RegexNode.cpp",
+      "src/sksl/lex/RegexNode.h",
       "src/sksl/lex/RegexParser.cpp",
+      "src/sksl/lex/RegexParser.h",
+      "src/sksl/lex/TransitionTable.cpp",
+      "src/sksl/lex/TransitionTable.h",
     ]
     include_dirs = [ "." ]
   }
@@ -1836,6 +1849,10 @@ if (skia_enable_tools) {
     sources = [ "tools/flags/CommonFlagsImages.cpp" ]
     deps = [ ":flags" ]
   }
+  test_lib("common_flags_fontmgr") {
+    sources = [ "tools/flags/CommonFlagsFontMgr.cpp" ]
+    deps = [ ":flags" ]
+  }
   test_lib("common_flags_aa") {
     sources = [ "tools/flags/CommonFlagsAA.cpp" ]
     deps = [ ":flags" ]
@@ -2031,6 +2048,9 @@ if (skia_enable_tools) {
   import("gn/bench.gni")
   test_lib("bench") {
     sources = bench_sources
+    if (skia_enable_graphite) {
+      sources += graphite_bench_sources
+    }
     if (!skia_enable_skgpu_v1) {
       sources -= skgpu_v1_bench_sources
     }
@@ -2119,6 +2139,7 @@ if (skia_enable_tools) {
       ]
       deps = [
         ":common_flags_aa",
+        ":common_flags_fontmgr",
         ":common_flags_gpu",
         ":flags",
         ":gm",
@@ -2145,6 +2166,7 @@ if (skia_enable_tools) {
       deps = [
         ":common_flags_aa",
         ":common_flags_config",
+        ":common_flags_fontmgr",
         ":common_flags_gpu",
         ":common_flags_images",
         ":flags",
@@ -2246,7 +2268,10 @@ if (skia_enable_tools) {
   }
 
   test_app("skpbench") {
-    sources = [ "tools/skpbench/skpbench.cpp" ]
+    sources = [
+      "bench/BigPath.cpp",
+      "tools/skpbench/skpbench.cpp",
+    ]
     deps = [
       ":common_flags_config",
       ":common_flags_gpu",
@@ -2496,6 +2521,7 @@ if (skia_enable_tools) {
         "modules/androidkit/src/Canvas.cpp",
         "modules/androidkit/src/ColorFilters.cpp",
         "modules/androidkit/src/Font.cpp",
+        "modules/androidkit/src/FontChainAdapter.cpp",
         "modules/androidkit/src/Gradients.cpp",
         "modules/androidkit/src/Image.cpp",
         "modules/androidkit/src/ImageFilter.cpp",
@@ -2775,6 +2801,7 @@ if (skia_enable_tools) {
       libs = []
 
       deps = [
+        ":common_flags_fontmgr",
         ":common_flags_gpu",
         ":flags",
         ":gm",

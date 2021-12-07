@@ -9,10 +9,10 @@
 
 #include "include/private/SkSLString.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/dsl/priv/DSL_priv.h"
-
 #include <memory>
 
 using namespace SkSL::dsl;
@@ -123,13 +123,23 @@ Token DSLParser::nextRawToken() {
 }
 
 Token DSLParser::nextToken() {
-    Token token = this->nextRawToken();
-    while (token.fKind == Token::Kind::TK_WHITESPACE ||
-           token.fKind == Token::Kind::TK_LINE_COMMENT ||
-           token.fKind == Token::Kind::TK_BLOCK_COMMENT) {
-        token = this->nextRawToken();
+    for (;;) {
+        Token token = this->nextRawToken();
+        switch (token.fKind) {
+            case Token::Kind::TK_WHITESPACE:
+            case Token::Kind::TK_LINE_COMMENT:
+            case Token::Kind::TK_BLOCK_COMMENT:
+                continue;
+
+            case Token::Kind::TK_RESERVED:
+                this->error(token, "'" + this->text(token) + "' is a reserved word");
+                token.fKind = Token::Kind::TK_IDENTIFIER;
+                [[fallthrough]];
+
+            default:
+                return token;
+        }
     }
-    return token;
 }
 
 void DSLParser::pushback(Token t) {
@@ -389,11 +399,11 @@ SKSL_INT DSLParser::arraySize() {
         return 1;
     }
     std::unique_ptr<SkSL::Expression> sizeLiteral = sizeExpr.release();
-    if (!sizeLiteral->isIntLiteral()) {
-        this->error(sizeLiteral->fLine, "expected int literal");
+    SKSL_INT size;
+    if (!ConstantFolder::GetConstantInt(*sizeLiteral, &size)) {
+        this->error(sizeLiteral->fLine, "array size must be an integer");
         return 1;
     }
-    SKSL_INT size = sizeLiteral->as<Literal>().intValue();
     if (size > INT32_MAX) {
         this->error(sizeLiteral->fLine, "array size out of bounds");
         return 1;

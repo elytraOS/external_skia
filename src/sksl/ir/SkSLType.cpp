@@ -9,12 +9,14 @@
 
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArrayCast.h"
 #include "src/sksl/ir/SkSLConstructorCompoundCast.h"
 #include "src/sksl/ir/SkSLConstructorScalarCast.h"
 #include "src/sksl/ir/SkSLExternalFunctionReference.h"
 #include "src/sksl/ir/SkSLFunctionReference.h"
+#include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLTypeReference.h"
@@ -839,11 +841,11 @@ SKSL_INT Type::convertArraySize(const Context& context, std::unique_ptr<Expressi
                                             "' may not be used in an array");
         return 0;
     }
-    if (!size->isIntLiteral()) {
+    SKSL_INT count;
+    if (!ConstantFolder::GetConstantInt(*size, &count)) {
         context.fErrors->error(size->fLine, "array size must be an integer");
         return 0;
     }
-    SKSL_INT count = size->as<Literal>().intValue();
     if (count <= 0) {
         context.fErrors->error(size->fLine, "array size must be positive");
         return 0;

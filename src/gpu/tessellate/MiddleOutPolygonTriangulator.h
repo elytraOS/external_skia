@@ -16,7 +16,7 @@
 #include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/tessellate/PathXform.h"
 
-namespace skgpu::tess {
+namespace skgpu {
 
 // This class emits a polygon triangulation with a "middle-out" topology. Conceptually, middle-out
 // emits one large triangle with vertices on both endpoints and a middle point, then recurses on
@@ -182,7 +182,7 @@ private:
     void popTopTriangle(const SkPoint& lastPt) {
         SkASSERT(fTop > fVertexStack);  // We should never pop the starting point.
         --fTop;
-        fVertexWriter.write(fTop[0].fPoint, fTop[1].fPoint, lastPt);
+        fVertexWriter << fTop[0].fPoint << fTop[1].fPoint << lastPt;
         if (fPad32Count) {
             // Output a 4-point conic with w=Inf.
             fVertexWriter.fill(fPad32Value, fPad32Count);
@@ -199,6 +199,6 @@ private:
     int fTotalClosedTriangleCount = 0;
 };
 
-}  // namespace skgpu::tess
+}  // namespace skgpu
 
 #endif  // tessellate_MiddleOutPolygonTriangulator_DEFINED

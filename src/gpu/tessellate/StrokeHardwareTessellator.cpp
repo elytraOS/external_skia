@@ -13,14 +13,14 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrVx.h"
 #include "src/gpu/geometry/GrPathUtils.h"
-#include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/tessellate/CullTest.h"
+#include "src/gpu/tessellate/WangsFormula.h"
 
 #if SK_GPU_V1
 #include "src/gpu/GrOpFlushState.h"
 #endif
 
-namespace skgpu::tess {
+namespace skgpu {
 
 namespace {
 
@@ -236,7 +236,7 @@ public:
         }
 
         if (GrVertexWriter patchWriter = fChunkBuilder.appendVertex()) {
-            patchWriter.write(fLastControlPoint);
+            patchWriter << fLastControlPoint;
             patchWriter.writeArray(p, 4);
             this->writeDynamicAttribs(&patchWriter);
         }
@@ -382,9 +382,9 @@ private:
 
         float numParametricSegments_pow4;
         if (w == 1) {
-            numParametricSegments_pow4 = GrWangsFormula::quadratic_pow4(fParametricPrecision, p);
+            numParametricSegments_pow4 = wangs_formula::quadratic_pow4(fParametricPrecision, p);
         } else {
-            float n = GrWangsFormula::conic_pow2(fParametricPrecision, p, w);
+            float n = wangs_formula::conic_pow2(fParametricPrecision, p, w);
             numParametricSegments_pow4 = n*n;
         }
         if (this->stroke180FitsInPatch(numParametricSegments_pow4) || maxDepth == 0) {
@@ -398,7 +398,7 @@ private:
         // the actual rotation.
         float numRadialSegments = SkMeasureQuadRotation(p) * fNumRadialSegmentsPerRadian;
         numRadialSegments = std::max(std::ceil(numRadialSegments), 1.f);
-        float numParametricSegments = GrWangsFormula::root4(numParametricSegments_pow4);
+        float numParametricSegments = wangs_formula::root4(numParametricSegments_pow4);
         numParametricSegments = std::max(std::ceil(numParametricSegments), 1.f);
         float numCombinedSegments = num_combined_segments(numParametricSegments, numRadialSegments);
         if (numCombinedSegments > fMaxTessellationSegments) {
@@ -455,7 +455,7 @@ private:
             return;
         }
 
-        float numParametricSegments_pow4 = GrWangsFormula::cubic_pow4(fParametricPrecision, p);
+        float numParametricSegments_pow4 = wangs_formula::cubic_pow4(fParametricPrecision, p);
         if (this->stroke180FitsInPatch(numParametricSegments_pow4) || maxDepth == 0) {
             this->internalPatchTo(prevJoinType,
                                   this->stroke180FitsInPatch_withJoin(numParametricSegments_pow4),
@@ -467,7 +467,7 @@ private:
         // its actual rotation.
         float numRadialSegments = SkMeasureNonInflectCubicRotation(p) * fNumRadialSegmentsPerRadian;
         numRadialSegments = std::max(std::ceil(numRadialSegments), 1.f);
-        float numParametricSegments = GrWangsFormula::root4(numParametricSegments_pow4);
+        float numParametricSegments = wangs_formula::root4(numParametricSegments_pow4);
         numParametricSegments = std::max(std::ceil(numParametricSegments), 1.f);
         float numCombinedSegments = num_combined_segments(numParametricSegments, numRadialSegments);
         if (numCombinedSegments > fMaxTessellationSegments) {
@@ -590,19 +590,19 @@ private:
         SkASSERT(fHasLastControlPoint);
 
         if (GrVertexWriter patchWriter = fChunkBuilder.appendVertex()) {
-            patchWriter.write(fLastControlPoint, junctionPoint);
+            patchWriter << fLastControlPoint << junctionPoint;
             if (joinType == JoinType::kBowtie) {
                 // {prevControlPoint, [p0, p0, p0, p3]} is a reserved patch pattern that means this
                 // patch is a bowtie. The bowtie is anchored on p0 and its tangent angles go from
                 // (p0 - prevControlPoint) to (p3 - p0).
-                patchWriter.write(junctionPoint, junctionPoint);
+                patchWriter << junctionPoint << junctionPoint;
             } else {
                 // {prevControlPoint, [p0, p3, p3, p3]} is a reserved patch pattern that means this
                 // patch is a join only (no curve sections in the patch). The join is anchored on p0
                 // and its tangent angles go from (p0 - prevControlPoint) to (p3 - p0).
-                patchWriter.write(nextControlPoint, nextControlPoint);
+                patchWriter << nextControlPoint << nextControlPoint;
             }
-            patchWriter.write(nextControlPoint);
+            patchWriter << (nextControlPoint);
             this->writeDynamicAttribs(&patchWriter);
         }
 
@@ -611,10 +611,10 @@ private:
 
     SK_ALWAYS_INLINE void writeDynamicAttribs(GrVertexWriter* patchWriter) {
         if (fShaderFlags & ShaderFlags::kDynamicStroke) {
-            patchWriter->write(fDynamicStroke);
+            *patchWriter << fDynamicStroke;
         }
         if (fShaderFlags & ShaderFlags::kDynamicColor) {
-            patchWriter->write(fDynamicColor);
+            *patchWriter << fDynamicColor;
         }
     }
 
@@ -811,7 +811,7 @@ void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombi
                         continue;
                     }
                     float numParametricSegments_pow4 =
-                            GrWangsFormula::quadratic_pow4(patchWriter.parametricPrecision(), p);
+                            wangs_formula::quadratic_pow4(patchWriter.parametricPrecision(), p);
                     if (!patchWriter.stroke180FitsInPatch(numParametricSegments_pow4)) {
                         // The curve requires more tessellation segments than the hardware can
                         // support. This is rare. Recursively chop until each sub-curve fits.
@@ -849,7 +849,7 @@ void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombi
                     // For now, the tessellation shader still uses Wang's quadratic formula when it
                     // draws conics.
                     // TODO: Update here when the shader starts using the real conic formula.
-                    float n = GrWangsFormula::conic_pow2(patchWriter.parametricPrecision(), p, *w);
+                    float n = wangs_formula::conic_pow2(patchWriter.parametricPrecision(), p, *w);
                     float numParametricSegments_pow4 = n*n;
                     if (!patchWriter.stroke180FitsInPatch(numParametricSegments_pow4)) {
                         // The curve requires more tessellation segments than the hardware can
@@ -875,7 +875,7 @@ void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombi
                         continue;
                     }
                     float numParametricSegments_pow4 =
-                            GrWangsFormula::cubic_pow4(patchWriter.parametricPrecision(), p);
+                            wangs_formula::cubic_pow4(patchWriter.parametricPrecision(), p);
                     if (!patchWriter.stroke360FitsInPatch(numParametricSegments_pow4) ||
                         cubic_has_cusp(p)) {
                         // Either the curve requires more tessellation segments than the hardware
@@ -913,4 +913,4 @@ void StrokeHardwareTessellator::draw(GrOpFlushState* flushState) const {
 }
 #endif
 
-}  // namespace skgpu::tess
+}  // namespace skgpu

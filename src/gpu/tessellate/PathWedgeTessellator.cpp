@@ -10,16 +10,16 @@
 #include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/geometry/GrPathUtils.h"
-#include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/tessellate/CullTest.h"
 #include "src/gpu/tessellate/PathXform.h"
+#include "src/gpu/tessellate/WangsFormula.h"
 #include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
 
 #if SK_GPU_V1
 #include "src/gpu/GrOpFlushState.h"
 #endif
 
-namespace skgpu::tess {
+namespace skgpu {
 
 namespace {
 
@@ -149,25 +149,25 @@ public:
                                          SkPoint midpoint) {
         if (GrVertexWriter vertexWriter = fChunker.appendVertex()) {
             fPathXform.mapLineToCubic(&vertexWriter, p0, p1);
-            vertexWriter.write(midpoint);
-            vertexWriter.write(GrVertexWriter::If(!shaderCaps.infinitySupport(),
-                                                  GrTessellationShader::kCubicCurveType));
+            vertexWriter << midpoint
+                         << GrVertexWriter::If(!shaderCaps.infinitySupport(),
+                                               GrTessellationShader::kCubicCurveType);
         }
     }
 
     SK_ALWAYS_INLINE void writeQuadraticWedge(const GrShaderCaps& shaderCaps,
                                               const SkPoint p[3],
                                               SkPoint midpoint) {
-        float numSegments_pow4 = GrWangsFormula::quadratic_pow4(kPrecision, p, fTotalVectorXform);
+        float numSegments_pow4 = wangs_formula::quadratic_pow4(kPrecision, p, fTotalVectorXform);
         if (numSegments_pow4 > fMaxSegments_pow4) {
             this->chopAndWriteQuadraticWedges(shaderCaps, p, midpoint);
             return;
         }
         if (GrVertexWriter vertexWriter = fChunker.appendVertex()) {
             fPathXform.mapQuadToCubic(&vertexWriter, p);
-            vertexWriter.write(midpoint);
-            vertexWriter.write(GrVertexWriter::If(!shaderCaps.infinitySupport(),
-                                                  GrTessellationShader::kCubicCurveType));
+            vertexWriter << midpoint
+                         << GrVertexWriter::If(!shaderCaps.infinitySupport(),
+                                               GrTessellationShader::kCubicCurveType);
         }
         fNumFixedSegments_pow4 = std::max(numSegments_pow4, fNumFixedSegments_pow4);
     }
@@ -176,16 +176,16 @@ public:
                                           const SkPoint p[3],
                                           float w,
                                           SkPoint midpoint) {
-        float numSegments_pow2 = GrWangsFormula::conic_pow2(kPrecision, p, w, fTotalVectorXform);
+        float numSegments_pow2 = wangs_formula::conic_pow2(kPrecision, p, w, fTotalVectorXform);
         if (numSegments_pow2 > fMaxSegments_pow2) {
             this->chopAndWriteConicWedges(shaderCaps, {p, w}, midpoint);
             return;
         }
         if (GrVertexWriter vertexWriter = fChunker.appendVertex()) {
             fPathXform.mapConicToPatch(&vertexWriter, p, w);
-            vertexWriter.write(midpoint);
-            vertexWriter.write(GrVertexWriter::If(!shaderCaps.infinitySupport(),
-                                                  GrTessellationShader::kConicCurveType));
+            vertexWriter << midpoint
+                         << GrVertexWriter::If(!shaderCaps.infinitySupport(),
+                                               GrTessellationShader::kConicCurveType);
         }
         fNumFixedSegments_pow4 = std::max(numSegments_pow2 * numSegments_pow2,
                                           fNumFixedSegments_pow4);
@@ -194,16 +194,16 @@ public:
     SK_ALWAYS_INLINE void writeCubicWedge(const GrShaderCaps& shaderCaps,
                                           const SkPoint p[4],
                                           SkPoint midpoint) {
-        float numSegments_pow4 = GrWangsFormula::cubic_pow4(kPrecision, p, fTotalVectorXform);
+        float numSegments_pow4 = wangs_formula::cubic_pow4(kPrecision, p, fTotalVectorXform);
         if (numSegments_pow4 > fMaxSegments_pow4) {
             this->chopAndWriteCubicWedges(shaderCaps, p, midpoint);
             return;
         }
         if (GrVertexWriter vertexWriter = fChunker.appendVertex()) {
             fPathXform.map4Points(&vertexWriter, p);
-            vertexWriter.write(midpoint);
-            vertexWriter.write(GrVertexWriter::If(!shaderCaps.infinitySupport(),
-                                                  GrTessellationShader::kCubicCurveType));
+            vertexWriter << midpoint
+                         << GrVertexWriter::If(!shaderCaps.infinitySupport(),
+                                               GrTessellationShader::kCubicCurveType);
         }
         fNumFixedSegments_pow4 = std::max(numSegments_pow4, fNumFixedSegments_pow4);
     }
@@ -259,7 +259,7 @@ private:
 
     GrVertexChunkBuilder fChunker;
     CullTest fCullTest;
-    VectorXform fTotalVectorXform;
+    wangs_formula::VectorXform fTotalVectorXform;
     PathXform fPathXform;
     const float fMaxSegments_pow2;
     const float fMaxSegments_pow4;
@@ -360,7 +360,7 @@ void PathWedgeTessellator::prepare(GrMeshDrawTarget* target,
 
     if (!fShader->willUseTessellationShaders()) {
         // log2(n) == log16(n^4).
-        int fixedResolveLevel = GrWangsFormula::nextlog16(wedgeWriter.numFixedSegments_pow4());
+        int fixedResolveLevel = wangs_formula::nextlog16(wedgeWriter.numFixedSegments_pow4());
         int numCurveTriangles =
                 GrPathTessellationShader::NumCurveTrianglesAtResolveLevel(fixedResolveLevel);
         // Emit 3 vertices per curve triangle, plus 3 more for the fan triangle.
@@ -401,4 +401,4 @@ void PathWedgeTessellator::draw(GrOpFlushState* flushState) const {
 }
 #endif
 
-}  // namespace skgpu::tess
+}  // namespace skgpu

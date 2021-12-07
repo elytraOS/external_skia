@@ -11,7 +11,6 @@
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLContext.h"
-#include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLThreadContext.h"
 
@@ -91,7 +90,7 @@ void VarDeclaration::ErrorCheck(const Context& context, int line, const Modifier
                      Modifiers::kFlat_Flag | Modifiers::kNoPerspective_Flag;
     }
     // TODO(skbug.com/11301): Migrate above checks into building a mask of permitted layout flags
-    IRGenerator::CheckModifiers(context, line, modifiers, permitted, /*permittedLayoutFlags=*/~0);
+    modifiers.checkPermitted(context, line, permitted, /*permittedLayoutFlags=*/~0);
 }
 
 bool VarDeclaration::ErrorCheckAndCoerce(const Context& context, const Variable& var,

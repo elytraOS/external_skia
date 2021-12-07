@@ -155,21 +155,20 @@ void PathStencilCoverOp::prePreparePrograms(const GrTessellationShader::ProgramA
                                                                shader,
                                                                stencilPipeline,
                                                                stencilSettings);
-        fTessellator = skgpu::tess::PathCurveTessellator::Make(
-                args.fArena,
-                shaderMatrix,
-                SK_PMColor4fTRANSPARENT,
-                skgpu::tess::PathCurveTessellator::DrawInnerFan::kNo,
-                fTotalCombinedPathVerbCnt,
-                *stencilPipeline,
-                *args.fCaps);
+        fTessellator = PathCurveTessellator::Make(args.fArena,
+                                                  shaderMatrix,
+                                                  SK_PMColor4fTRANSPARENT,
+                                                  PathCurveTessellator::DrawInnerFan::kNo,
+                                                  fTotalCombinedPathVerbCnt,
+                                                  *stencilPipeline,
+                                                  *args.fCaps);
     } else {
-        fTessellator = skgpu::tess::PathWedgeTessellator::Make(args.fArena,
-                                                               shaderMatrix,
-                                                               SK_PMColor4fTRANSPARENT,
-                                                               fTotalCombinedPathVerbCnt,
-                                                               *stencilPipeline,
-                                                               *args.fCaps);
+        fTessellator = PathWedgeTessellator::Make(args.fArena,
+                                                  shaderMatrix,
+                                                  SK_PMColor4fTRANSPARENT,
+                                                  fTotalCombinedPathVerbCnt,
+                                                  *stencilPipeline,
+                                                  *args.fCaps);
     }
     fStencilPathProgram = GrTessellationShader::MakeProgram(args,
                                                             fTessellator->shader(),
@@ -238,8 +237,8 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
         // The inner fan isn't built into the tessellator. Generate a standard Redbook fan with a
         // middle-out topology.
         GrEagerDynamicVertexAllocator vertexAlloc(flushState, &fFanBuffer, &fFanBaseVertex);
-        int maxCombinedFanEdges = skgpu::tess::PathTessellator::MaxCombinedFanEdgesInPathDrawList(
-                fTotalCombinedPathVerbCnt);
+        int maxCombinedFanEdges =
+                PathTessellator::MaxCombinedFanEdgesInPathDrawList(fTotalCombinedPathVerbCnt);
         // A single n-sided polygon is fanned by n-2 triangles. Multiple polygons with a combined
         // edge count of n are fanned by strictly fewer triangles.
         int maxTrianglesInFans = std::max(maxCombinedFanEdges - 2, 0);
@@ -247,7 +246,7 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
         int fanTriangleCount = 0;
         for (auto [pathMatrix, path] : *fPathDrawList) {
             int numTrianglesWritten;
-            triangleVertexWriter = skgpu::tess::MiddleOutPolygonTriangulator::WritePathInnerFan(
+            triangleVertexWriter = MiddleOutPolygonTriangulator::WritePathInnerFan(
                     std::move(triangleVertexWriter),
                     0,
                     0,
@@ -273,12 +272,12 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
         SkDEBUGCODE(int pathCount = 0;)
         for (auto [pathMatrix, path] : *fPathDrawList) {
             SkDEBUGCODE(auto end = vertexWriter.makeOffset(instanceStride));
-            vertexWriter.write(pathMatrix.getScaleX(),
-                               pathMatrix.getSkewY(),
-                               pathMatrix.getSkewX(),
-                               pathMatrix.getScaleY(),
-                               pathMatrix.getTranslateX(),
-                               pathMatrix.getTranslateY());
+            vertexWriter << pathMatrix.getScaleX()
+                         << pathMatrix.getSkewY()
+                         << pathMatrix.getSkewX()
+                         << pathMatrix.getScaleY()
+                         << pathMatrix.getTranslateX()
+                         << pathMatrix.getTranslateY();
             if (path.isInverseFillType()) {
                 // Fill the entire backing store to make sure we clear every stencil value back to
                 // 0. If there is a scissor it will have already clipped the stencil draw.
@@ -287,12 +286,12 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
                 SkASSERT(rtBounds == fOriginalDrawBounds);
                 SkRect pathSpaceRTBounds;
                 if (SkMatrixPriv::InverseMapRect(pathMatrix, &pathSpaceRTBounds, rtBounds)) {
-                    vertexWriter.write(pathSpaceRTBounds);
+                    vertexWriter << pathSpaceRTBounds;
                 } else {
-                    vertexWriter.write(path.getBounds());
+                    vertexWriter << path.getBounds();
                 }
             } else {
-                vertexWriter.write(path.getBounds());
+                vertexWriter << path.getBounds();
             }
             SkASSERT(vertexWriter == end);
             SkDEBUGCODE(++pathCount;)

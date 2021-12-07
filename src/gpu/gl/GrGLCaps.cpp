@@ -72,7 +72,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fSRGBWriteControl = false;
     fSkipErrorChecks = false;
 
-    fShaderCaps.reset(new GrShaderCaps(contextOptions));
+    fShaderCaps = std::make_unique<GrShaderCaps>();
 
     // All of Skia's automated testing of ANGLE and all related tuning of performance and driver
     // workarounds is oriented around the D3D backends of ANGLE. Chrome has started using Skia
@@ -3885,14 +3885,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     }
 #endif
 
-    if (ctxInfo.renderer() == GrGLRenderer::kAdreno615 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno630 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno640 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno6xx_other) {
-        shaderCaps->fInBlendModesFailRandomlyForAllZeroVec = true;
-    }
-
     // The Adreno 5xx and 6xx produce incorrect results when comparing a pair of matrices.
     if (ctxInfo.renderer() == GrGLRenderer::kAdreno530 ||
         ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other ||
@@ -3997,7 +3989,9 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // This is fixed by reseting the blend function to anything that does not reference src2 when we
     // disable blending.
     if (ctxInfo.renderer() == GrGLRenderer::kAdreno530 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other) {
+        ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other ||
+        ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
+        ctxInfo.renderer() == GrGLRenderer::kAdreno640) {
         fMustResetBlendFuncBetweenDualSourceAndDisable = true;
     }
 
@@ -4077,6 +4071,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (ctxInfo.renderer() == GrGLRenderer::kPowerVRRogue) {
         fNeverDisableColorWrites = true;
         shaderCaps->fMustWriteToFragColor = true;
+    }
+
+    // We've seen some PowerVR GE8320 devices (eg, Tecno Spark 3) advertise this extension, but
+    // fail to compile shaders that request it. (b/177473804)
+    if (ctxInfo.renderer() == GrGLRenderer::kPowerVRRogue) {
+        shaderCaps->fNoPerspectiveInterpolationSupport = false;
     }
 
     // It appears that Qualcomm drivers don't actually support

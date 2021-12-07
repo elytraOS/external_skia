@@ -19,12 +19,14 @@
 #import <Metal/Metal.h>
 
 namespace skgpu::mtl {
+class BlitCommandEncoder;
 class Gpu;
+class RenderCommandEncoder;
 
 class CommandBuffer final : public skgpu::CommandBuffer {
 public:
     static sk_sp<CommandBuffer> Make(const Gpu*);
-    ~CommandBuffer() override {}
+    ~CommandBuffer() override;
 
     bool isFinished() {
         return (*fCommandBuffer).status == MTLCommandBufferStatusCompleted ||
@@ -39,11 +41,29 @@ public:
     }
     bool commit();
 
+    void copyTextureToBuffer(sk_sp<skgpu::Texture>,
+                             SkIRect srcRect,
+                             sk_sp<skgpu::Buffer>,
+                             size_t bufferOffset,
+                             size_t bufferRowBytes) override;
+
 private:
-    CommandBuffer(sk_cfp<id<MTLCommandBuffer>> cmdBuffer)
-        : fCommandBuffer(std::move(cmdBuffer)) {}
+    CommandBuffer(sk_cfp<id<MTLCommandBuffer>> cmdBuffer, const Gpu* gpu);
+
+    void beginRenderPass(const RenderPassDesc&) override;
+    void endRenderPass() override;
+
+    void onSetRenderPipeline(sk_sp<skgpu::RenderPipeline>&) override;
+
+    void onDraw(PrimitiveType type, unsigned int vertexStart, unsigned int vertexCount) override;
+
+    BlitCommandEncoder* getBlitCommandEncoder();
 
     sk_cfp<id<MTLCommandBuffer>> fCommandBuffer;
+    sk_sp<RenderCommandEncoder> fActiveRenderCommandEncoder;
+    sk_sp<BlitCommandEncoder> fActiveBlitCommandEncoder;
+
+    const Gpu* fGpu;
 };
 
 } // namespace skgpu::mtl

@@ -7,11 +7,13 @@
 
 #include "experimental/graphite/src/Device.h"
 
-#include "experimental/graphite/include/Context.h"
 #include "experimental/graphite/include/SkStuff.h"
 #include "experimental/graphite/src/DrawContext.h"
 #include "experimental/graphite/src/DrawList.h"
+#include "experimental/graphite/src/Recorder.h"
+#include "experimental/graphite/src/geom/BoundsManager.h"
 #include "experimental/graphite/src/geom/Shape.h"
+#include "experimental/graphite/src/geom/Transform_graphite.h"
 
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
@@ -27,33 +29,44 @@ namespace {
 
 static const SkStrokeRec kFillStyle(SkStrokeRec::kFill_InitStyle);
 
+bool is_opaque(const PaintParams& paint) {
+    // TODO: implement this
+    return false;
+}
+
 } // anonymous namespace
 
-sk_sp<Device> Device::Make(sk_sp<Context> context, const SkImageInfo& ii) {
+sk_sp<Device> Device::Make(sk_sp<Recorder> recorder, const SkImageInfo& ii) {
     sk_sp<DrawContext> dc = DrawContext::Make(ii);
     if (!dc) {
         return nullptr;
     }
 
-    return sk_sp<Device>(new Device(std::move(context), std::move(dc)));
+    return sk_sp<Device>(new Device(std::move(recorder), std::move(dc)));
 }
 
-Device::Device(sk_sp<Context> context, sk_sp<DrawContext> dc)
+Device::Device(sk_sp<Recorder> recorder, sk_sp<DrawContext> dc)
         : SkBaseDevice(dc->imageInfo(), SkSurfaceProps())
-        , fContext(std::move(context))
-        , fDC(std::move(dc)) {
-    SkASSERT(SkToBool(fDC));
+        , fRecorder(std::move(recorder))
+        , fDC(std::move(dc))
+        , fColorDepthBoundsManager(std::make_unique<NaiveBoundsManager>())
+        , fMaxPaintOrder(0)
+        , fMaxZ(0)
+        , fDrawsOverlap(false) {
+    SkASSERT(SkToBool(fDC) && SkToBool(fRecorder));
 }
+
+Device::~Device() = default;
 
 SkBaseDevice* Device::onCreateDevice(const CreateInfo& info, const SkPaint*) {
     // TODO: Inspect the paint and create info to determine if there's anything that has to be
     // modified to support inline subpasses.
     // TODO: onCreateDevice really should return sk_sp<SkBaseDevice>...
-    return Make(fContext, info.fInfo).release();
+    return Make(fRecorder, info.fInfo).release();
 }
 
 sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps& /* props */) {
-    return MakeGraphite(fContext, ii);
+    return MakeGraphite(fRecorder, ii);
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int x, int y) {
@@ -131,6 +144,16 @@ void Device::drawShape(const Shape& shape,
                        const SkPaint& paint,
                        const SkStrokeRec& style,
                        Mask<DrawFlags> flags) {
+    // TODO: Device will cache the Transform or otherwise ensure it's computed once per change to
+    // its local-to-device matrix, but that requires updating SkDevice's virtuals. Right now we
+    // re-compute the Transform every draw, as well as any time we recurse on drawShape(), but that
+    // goes away with the caching.
+    Transform localToDevice(this->localToDevice44());
+    if (!localToDevice.valid()) {
+        // If the transform is not invertible or not finite then drawing isn't well defined.
+        return;
+    }
+
     // Heavy weight paint options like path effects, mask filters, and stroke-and-fill style are
     // applied on the CPU by generating a new shape and recursing on drawShape() with updated flags
     if (!(flags & DrawFlags::kIgnorePathEffect) && paint.getPathEffect()) {
@@ -138,11 +161,10 @@ void Device::drawShape(const Shape& shape,
         // TODO: If asADash() returns true and the base path matches the dashing fast path, then
         // that should be detected now as well. Maybe add dashPath to Device so canvas can handle it
         SkStrokeRec newStyle = style;
-        // FIXME: use matrix cache to get res scale for free
-        newStyle.setResScale(SkPaintPriv::ComputeResScaleForStroking(this->localToDevice()));
+        newStyle.setResScale(localToDevice.maxScaleFactor());
         SkPath dst;
         if (paint.getPathEffect()->filterPath(&dst, shape.asPath(), &newStyle,
-                                              nullptr, this->localToDevice())) {
+                                              nullptr, localToDevice)) {
             // Recurse using the path and new style, while disabling downstream path effect handling
             this->drawShape(Shape(dst), paint, newStyle, flags | DrawFlags::kIgnorePathEffect);
             return;
@@ -168,12 +190,9 @@ void Device::drawShape(const Shape& shape,
     SkASSERT(!SkToBool(paint.getPathEffect()) || (flags & DrawFlags::kIgnorePathEffect));
     SkASSERT(!SkToBool(paint.getMaskFilter()) || (flags & DrawFlags::kIgnoreMaskFilter));
 
-    // TODO: This will actually be a query to the matrix cache
-    const SkM44& localToDevice = this->localToDevice44();
-    // TODO: Need to track actual z value for painters order in addition to the compressed index,
-    // that might be done here, or as part of the applyClipToDraw() function.
-    auto [colorDepthOrder, scissor] = this->applyClipToDraw(localToDevice, shape, style);
-    if (scissor.isEmpty()) {
+    uint16_t drawZ = fMaxZ + 1;
+    ClipResult clip = this->applyClipToDraw(localToDevice, shape, style, drawZ);
+    if (clip.fDrawBounds.isEmptyNegativeOrNaN()) {
         // Clipped out, so don't record anything
         return;
     }
@@ -183,32 +202,71 @@ void Device::drawShape(const Shape& shape,
                         blendMode.has_value() ? *blendMode : SkBlendMode::kSrcOver,
                         paint.refShader()};
 
+    // If a draw is opaque, its ordering only depends on clipping; otherwise it must be drawn after
+    // the most recent draw it intersects with, in order to blend correctly.
+    const bool opaque = is_opaque(shading);
+    CompressedPaintersOrder prevDrawOrder =
+            fColorDepthBoundsManager->getMostRecentDraw(clip.fDrawBounds);
+    CompressedPaintersOrder drawOrder =
+            1 + (opaque ? clip.fOrder : std::max(clip.fOrder, prevDrawOrder));
+
     SkStrokeRec::Style styleType = style.getStyle();
     if (styleType == SkStrokeRec::kStroke_Style ||
         styleType == SkStrokeRec::kHairline_Style ||
         styleType == SkStrokeRec::kStrokeAndFill_Style) {
         // TODO: If DC supports stroked primitives, Device could choose one of those based on shape
         StrokeParams stroke(style.getWidth(), style.getMiter(), style.getJoin(), style.getCap());
-        fDC->strokePath(localToDevice, shape, stroke, scissor, colorDepthOrder, 0, &shading);
+        fDC->strokePath(localToDevice, shape, stroke, clip.fScissor,
+                        drawOrder, drawZ, &shading);
     }
     if (styleType == SkStrokeRec::kFill_Style ||
         styleType == SkStrokeRec::kStrokeAndFill_Style) {
         // TODO: If DC supports filled primitives, Device could choose one of those based on shape
         if (shape.convex()) {
-            fDC->fillConvexPath(localToDevice, shape, scissor, colorDepthOrder, 0, &shading);
+            fDC->fillConvexPath(localToDevice, shape, clip.fScissor,
+                                drawOrder, drawZ, &shading);
         } else {
-            // FIXME must determine stencil order
-            fDC->stencilAndFillPath(localToDevice, shape, scissor, colorDepthOrder, 0, 0, &shading);
+            // FIXME must determine stencil order; a separate bounds manager? a rect tree? defer?
+            fDC->stencilAndFillPath(localToDevice, shape, clip.fScissor,
+                                    drawOrder, 0, drawZ, &shading);
         }
     }
+
+    // Record the painters order and Z used for this draw
+    const bool fullyOpaque = opaque && shape.isRect() &&
+                             localToDevice.type() <= Transform::Type::kRectStaysRect;
+    fColorDepthBoundsManager->recordDraw(shape.bounds(), drawOrder, drawZ, fullyOpaque);
+    fMaxPaintOrder = std::max(fMaxPaintOrder, drawOrder);
+    fMaxZ = drawZ;
+    fDrawsOverlap |= (prevDrawOrder != 0);
 }
 
-std::pair<CompressedPaintersOrder, SkIRect>
-Device::applyClipToDraw(const SkM44& localToDevice,
-                        const Shape& shape,
-                        const SkStrokeRec& style) {
-    // TODO: actually implement this
-    return {0, this->devClipBounds()};
+Device::ClipResult Device::applyClipToDraw(const Transform& localToDevice,
+                                           const Shape& shape,
+                                           const SkStrokeRec& style,
+                                           uint16_t z) {
+    SkIRect scissor = this->devClipBounds();
+
+    Rect drawBounds = shape.bounds();
+    if (!style.isHairlineStyle()) {
+        float localStyleOutset = style.getInflationRadius();
+        drawBounds.outset(localStyleOutset);
+    }
+    drawBounds = localToDevice.mapRect(drawBounds);
+
+    // Hairlines get an extra pixel *after* transforming to device space
+    if (style.isHairlineStyle()) {
+        drawBounds.outset(0.5f);
+    }
+
+    drawBounds.intersect(SkRect::Make(scissor));
+    if (drawBounds.isEmptyNegativeOrNaN()) {
+        // Trivially clipped out, so return now
+        return {scissor, drawBounds, 0};
+    }
+
+    // TODO: iterate the clip stack and accumulate draw bounds into clip usage
+    return {scissor, drawBounds, 0};
 }
 
 sk_sp<SkSpecialImage> Device::makeSpecial(const SkBitmap&) {
