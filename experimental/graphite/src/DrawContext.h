@@ -11,7 +11,8 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 
-#include "experimental/graphite/include/GraphiteTypes.h"
+#include "experimental/graphite/src/DrawList.h"
+#include "experimental/graphite/src/DrawOrder.h"
 
 #include <vector>
 
@@ -21,12 +22,9 @@ class BoundsManager;
 class Shape;
 class Transform;
 
-class DrawList;
 class DrawPass;
 class Task;
-
-struct PaintParams;
-struct StrokeParams;
+class TextureProxy;
 
 /**
  * DrawContext records draw commands into a specific Surface, via a general task graph
@@ -34,35 +32,37 @@ struct StrokeParams;
  */
 class DrawContext final : public SkRefCnt {
 public:
-    static sk_sp<DrawContext> Make(const SkImageInfo&);
+    static sk_sp<DrawContext> Make(sk_sp<TextureProxy> target,
+                                   sk_sp<SkColorSpace> colorSpace,
+                                   SkColorType colorType,
+                                   SkAlphaType alphaType);
 
     ~DrawContext() override;
 
-    const SkImageInfo& imageInfo() { return fImageInfo; }
+    const SkImageInfo&  imageInfo() const { return fImageInfo;    }
+    const TextureProxy* target()    const { return fTarget.get(); }
+
+    int pendingDrawCount() const { return fPendingDraws->drawCount(); }
 
     // TODO: need color/depth clearing functions (so DCL will probably need those too)
 
     void stencilAndFillPath(const Transform& localToDevice,
                             const Shape& shape,
-                            const SkIRect& scissor,
-                            CompressedPaintersOrder colorDepthOrder,
-                            CompressedPaintersOrder stencilOrder,
-                            uint16_t depth,
+                            const Clip& clip,
+                            DrawOrder order,
                             const PaintParams* paint);
 
     void fillConvexPath(const Transform& localToDevice,
                         const Shape& shape,
-                        const SkIRect& scissor,
-                        CompressedPaintersOrder colorDepthOrder,
-                        uint16_t depth,
+                        const Clip& clip,
+                        DrawOrder order,
                         const PaintParams* paint);
 
     void strokePath(const Transform& localToDevice,
                     const Shape& shape,
                     const StrokeParams& stroke,
-                    const SkIRect& scissor,
-                    CompressedPaintersOrder colorDepthOrder,
-                    uint16_t depth,
+                    const Clip& clip,
+                    DrawOrder order,
                     const PaintParams* paint);
 
     // Ends the current DrawList being accumulated by the SDC, converting it into an optimized and
@@ -82,14 +82,15 @@ public:
 
     // Ends the current DrawList if needed, as in 'snapDrawPass', and moves the new DrawPass and all
     // prior accumulated DrawPasses into a RenderPassTask that can be drawn and depended on. The
-    // returned task will automatically depend on any previous snapped task of the SDC.
+    // caller is responsible for configuring the returned Tasks's dependencies.
     //
     // Returns null if there are no pending commands or draw passes to move into a task.
     sk_sp<Task> snapRenderPassTask(const BoundsManager* occlusionCuller);
 
 private:
-    DrawContext(const SkImageInfo&);
+    DrawContext(sk_sp<TextureProxy>, const SkImageInfo&);
 
+    sk_sp<TextureProxy> fTarget;
     SkImageInfo fImageInfo;
 
     // Stores the most immediately recorded draws into the SDC's surface. This list is mutable and
@@ -101,13 +102,10 @@ private:
     // list of DrawPasses is not final until there is an external dependency on the SDC's content
     // that requires it to be resolved as its own render pass (vs. inlining the SDC's passes into a
     // parent's render pass).
+    // TODO: It will be easier to debug/understand the DrawPass structure of a context if
+    // consecutive DrawPasses to the same target are stored in a DrawPassChain. A DrawContext with
+    // multiple DrawPassChains is then clearly accumulating subpasses across multiple targets.
     std::vector<std::unique_ptr<DrawPass>> fDrawPasses;
-
-    // TBD - Does the SDC even need to hold on to its tail task? Or when it finalizes its list of
-    // passes into a RenderPassTask it can send that back to the Recorder as part of a larger task
-    // graph? The only question then would be how to track the dependencies of that RenderPassTask
-    // since it would depend on the prior RenderPassTask and the SDC's of the DrawPasses.
-    sk_sp<Task> fTail;
 };
 
 } // namespace skgpu

@@ -9,6 +9,7 @@
 #define skgpu_CommandBuffer_DEFINED
 
 #include "experimental/graphite/include/private/GraphiteTypesPriv.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/private/SkTArray.h"
 
@@ -48,37 +49,56 @@ public:
 
     bool hasWork() { return fHasWork; }
 
-    virtual void beginRenderPass(const RenderPassDesc&) = 0;
+    void trackResource(sk_sp<SkRefCnt> resource) {
+        fTrackedResources.push_back(std::move(resource));
+    }
+
+    void beginRenderPass(const RenderPassDesc&);
     virtual void endRenderPass() = 0;
 
-    void setRenderPipeline(sk_sp<RenderPipeline> renderPipeline);
-
-    virtual void copyTextureToBuffer(sk_sp<Texture>,
-                                     SkIRect srcRect,
-                                     sk_sp<Buffer>,
-                                     size_t bufferOffset,
-                                     size_t bufferRowBytes) = 0;
+    //---------------------------------------------------------------
+    // Can only be used within renderpasses
+    //---------------------------------------------------------------
+    void bindRenderPipeline(sk_sp<RenderPipeline> renderPipeline);
+    void bindUniformBuffer(sk_sp<Buffer>, size_t bufferOffset);
+    void bindVertexBuffers(sk_sp<Buffer> vertexBuffer, sk_sp<Buffer> instanceBuffer);
 
     void draw(PrimitiveType type, unsigned int vertexStart, unsigned int vertexCount) {
         this->onDraw(type, vertexStart, vertexCount);
         fHasWork = true;
     }
 
+    //---------------------------------------------------------------
+    // Can only be used outside renderpasses
+    //---------------------------------------------------------------
+    void copyTextureToBuffer(sk_sp<Texture>,
+                             SkIRect srcRect,
+                             sk_sp<Buffer>,
+                             size_t bufferOffset,
+                             size_t bufferRowBytes);
+
 protected:
     CommandBuffer();
 
-    void trackResource(sk_sp<SkRefCnt> resource) {
-        fTrackedResources.push_back(std::move(resource));
-    }
+private:
     void releaseResources();
 
-    virtual void onSetRenderPipeline(sk_sp<RenderPipeline>&) = 0;
+    virtual void onBeginRenderPass(const RenderPassDesc&) = 0;
+
+    virtual void onBindRenderPipeline(const RenderPipeline*) = 0;
+    virtual void onBindUniformBuffer(const Buffer*, size_t bufferOffset) = 0;
+    virtual void onBindVertexBuffers(const Buffer* vertexBuffer, const Buffer* instanceBuffer) = 0;
 
     virtual void onDraw(PrimitiveType type, unsigned int vertexStart, unsigned int vertexCount) = 0;
 
+    virtual void onCopyTextureToBuffer(const Texture*,
+                                       SkIRect srcRect,
+                                       const Buffer*,
+                                       size_t bufferOffset,
+                                       size_t bufferRowBytes) = 0;
+
     bool fHasWork = false;
 
-private:
     inline static constexpr int kInitialTrackedResourcesCount = 32;
     SkSTArray<kInitialTrackedResourcesCount, sk_sp<SkRefCnt>> fTrackedResources;
 };

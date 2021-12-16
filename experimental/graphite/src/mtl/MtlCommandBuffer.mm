@@ -13,7 +13,6 @@
 #include "experimental/graphite/src/mtl/MtlRenderCommandEncoder.h"
 #include "experimental/graphite/src/mtl/MtlRenderPipeline.h"
 #include "experimental/graphite/src/mtl/MtlTexture.h"
-#include "include/core/SkRect.h"
 
 namespace skgpu::mtl {
 
@@ -49,7 +48,8 @@ CommandBuffer::CommandBuffer(sk_cfp<id<MTLCommandBuffer>> cmdBuffer, const Gpu* 
 CommandBuffer::~CommandBuffer() {}
 
 bool CommandBuffer::commit() {
-    // TODO: end any encoding
+    SkASSERT(!fActiveRenderCommandEncoder);
+    this->endBlitCommandEncoder();
     [(*fCommandBuffer) commit];
 
     // TODO: better error reporting
@@ -62,8 +62,9 @@ bool CommandBuffer::commit() {
     return ((*fCommandBuffer).status != MTLCommandBufferStatusError);
 }
 
-void CommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc) {
+void CommandBuffer::onBeginRenderPass(const RenderPassDesc& renderPassDesc) {
     SkASSERT(!fActiveRenderCommandEncoder);
+    this->endBlitCommandEncoder();
 
     auto& colorInfo = renderPassDesc.fColorAttachment;
 
@@ -103,28 +104,13 @@ void CommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc) {
     fActiveRenderCommandEncoder = RenderCommandEncoder::Make(fCommandBuffer.get(),
                                                              descriptor.get());
 
-    if (colorTexture) {
-        this->trackResource(std::move(colorInfo.fTexture));
-    }
     this->trackResource(fActiveRenderCommandEncoder);
-
-    if (colorInfo.fStoreOp == StoreOp::kStore) {
-        fHasWork = true;
-    }
 }
 
 void CommandBuffer::endRenderPass() {
     SkASSERT(fActiveRenderCommandEncoder);
     fActiveRenderCommandEncoder->endEncoding();
     fActiveRenderCommandEncoder.reset();
-}
-
-static bool check_max_blit_width(int widthInPixels) {
-    if (widthInPixels > 32767) {
-        SkASSERT(false); // surfaces should not be this wide anyway
-        return false;
-    }
-    return true;
 }
 
 BlitCommandEncoder* CommandBuffer::getBlitCommandEncoder() {
@@ -144,49 +130,47 @@ BlitCommandEncoder* CommandBuffer::getBlitCommandEncoder() {
     return fActiveBlitCommandEncoder.get();
 }
 
-void CommandBuffer::copyTextureToBuffer(sk_sp<skgpu::Texture> texture,
-                                        SkIRect srcRect,
-                                        sk_sp<skgpu::Buffer> buffer,
-                                        size_t bufferOffset,
-                                        size_t bufferRowBytes) {
-    SkASSERT(!fActiveRenderCommandEncoder);
-
-    if (!check_max_blit_width(srcRect.width())) {
-        return;
+void CommandBuffer::endBlitCommandEncoder() {
+    if (fActiveBlitCommandEncoder) {
+        fActiveBlitCommandEncoder->endEncoding();
+        fActiveBlitCommandEncoder.reset();
     }
-
-    id<MTLTexture> mtlTexture = static_cast<Texture*>(texture.get())->mtlTexture();
-    id<MTLBuffer> mtlBuffer = static_cast<Buffer*>(buffer.get())->mtlBuffer();
-
-    BlitCommandEncoder* blitCmdEncoder = this->getBlitCommandEncoder();
-
-#ifdef SK_ENABLE_MTL_DEBUG_INFO
-    blitCmdEncoder->pushDebugGroup(@"readOrTransferPixels");
-#endif
-    blitCmdEncoder->copyFromTexture(mtlTexture, srcRect, mtlBuffer, bufferOffset, bufferRowBytes);
-
-    if (fGpu->mtlCaps().isMac()) {
-#ifdef SK_BUILD_FOR_MAC
-        // Sync GPU data back to the CPU
-        blitCmdEncoder->synchronizeResource(mtlBuffer);
-#endif
-    }
-#ifdef SK_ENABLE_MTL_DEBUG_INFO
-    blitCmdEncoder->popDebugGroup();
-#endif
-
-    this->trackResource(std::move(texture));
-    this->trackResource(std::move(buffer));
-
-    fHasWork = true;
 }
 
-void CommandBuffer::onSetRenderPipeline(sk_sp<skgpu::RenderPipeline>& renderPipeline) {
+void CommandBuffer::onBindRenderPipeline(const skgpu::RenderPipeline* renderPipeline) {
     SkASSERT(fActiveRenderCommandEncoder);
 
     id<MTLRenderPipelineState> pipelineState =
-            static_cast<RenderPipeline*>(renderPipeline.get())->mtlPipelineState();
+            static_cast<const RenderPipeline*>(renderPipeline)->mtlPipelineState();
     fActiveRenderCommandEncoder->setRenderPipelineState(pipelineState);
+}
+
+void CommandBuffer::onBindUniformBuffer(const skgpu::Buffer* uniformBuffer,
+                                        size_t uniformOffset) {
+    SkASSERT(fActiveRenderCommandEncoder);
+
+    id<MTLBuffer> mtlBuffer = static_cast<const Buffer*>(uniformBuffer)->mtlBuffer();
+
+    fActiveRenderCommandEncoder->setVertexBuffer(mtlBuffer, uniformOffset,
+                                                 RenderPipeline::kUniformBufferIndex);
+    fActiveRenderCommandEncoder->setFragmentBuffer(mtlBuffer, uniformOffset,
+                                                   RenderPipeline::kUniformBufferIndex);
+}
+
+void CommandBuffer::onBindVertexBuffers(const skgpu::Buffer* vertexBuffer,
+                                        const skgpu::Buffer* instanceBuffer) {
+    SkASSERT(fActiveRenderCommandEncoder);
+
+    if (vertexBuffer) {
+        id<MTLBuffer> mtlBuffer = static_cast<const Buffer*>(vertexBuffer)->mtlBuffer();
+        fActiveRenderCommandEncoder->setVertexBuffer(mtlBuffer, 0,
+                                                     RenderPipeline::kVertexBufferIndex);
+    }
+    if (instanceBuffer) {
+        id<MTLBuffer> mtlBuffer = static_cast<const Buffer*>(vertexBuffer)->mtlBuffer();
+        fActiveRenderCommandEncoder->setVertexBuffer(mtlBuffer, 0,
+                                                     RenderPipeline::kInstanceBufferIndex);
+    }
 }
 
 static MTLPrimitiveType graphite_to_mtl_primitive(PrimitiveType primitiveType) {
@@ -210,5 +194,34 @@ void CommandBuffer::onDraw(PrimitiveType type, unsigned int vertexStart, unsigne
 
     fActiveRenderCommandEncoder->drawPrimitives(mtlPrimitiveType, vertexStart, vertexCount);
 }
+
+void CommandBuffer::onCopyTextureToBuffer(const skgpu::Texture* texture,
+                                          SkIRect srcRect,
+                                          const skgpu::Buffer* buffer,
+                                          size_t bufferOffset,
+                                          size_t bufferRowBytes) {
+    SkASSERT(!fActiveRenderCommandEncoder);
+
+    id<MTLTexture> mtlTexture = static_cast<const Texture*>(texture)->mtlTexture();
+    id<MTLBuffer> mtlBuffer = static_cast<const Buffer*>(buffer)->mtlBuffer();
+
+    BlitCommandEncoder* blitCmdEncoder = this->getBlitCommandEncoder();
+
+#ifdef SK_ENABLE_MTL_DEBUG_INFO
+    blitCmdEncoder->pushDebugGroup(@"readOrTransferPixels");
+#endif
+    blitCmdEncoder->copyFromTexture(mtlTexture, srcRect, mtlBuffer, bufferOffset, bufferRowBytes);
+
+    if (fGpu->mtlCaps().isMac()) {
+#ifdef SK_BUILD_FOR_MAC
+        // Sync GPU data back to the CPU
+        blitCmdEncoder->synchronizeResource(mtlBuffer);
+#endif
+    }
+#ifdef SK_ENABLE_MTL_DEBUG_INFO
+    blitCmdEncoder->popDebugGroup();
+#endif
+}
+
 
 } // namespace skgpu::mtl

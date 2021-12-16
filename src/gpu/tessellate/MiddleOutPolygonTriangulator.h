@@ -13,7 +13,7 @@
 #include "include/private/SkTemplates.h"
 #include "src/core/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
-#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/BufferWriter.h"
 #include "src/gpu/tessellate/PathXform.h"
 
 namespace skgpu {
@@ -49,8 +49,10 @@ public:
     // Writes out 3 SkPoints per triangle to "vertexWriter". Additionally writes out "pad32Count"
     // repetitions of "pad32Value" after each triangle. Set pad32Count to 0 if the triangles are
     // to be tightly packed.
-    MiddleOutPolygonTriangulator(GrVertexWriter&& vertexWriter, int pad32Count,
-                                 uint32_t pad32Value, int maxPushVertexCalls)
+    MiddleOutPolygonTriangulator(VertexWriter&& vertexWriter,
+                                 int pad32Count,
+                                 uint32_t pad32Value,
+                                 int maxPushVertexCalls)
             : fVertexWriter(std::move(vertexWriter))
             , fPad32Count(pad32Count)
             , fPad32Value(pad32Value) {
@@ -125,38 +127,7 @@ public:
         SkASSERT(fTop->fVertexIdxDelta == 0);  // Ensure we are in the initial stack state.
     }
 
-    GrVertexWriter detachVertexWriter() { return std::move(fVertexWriter); }
-
-    static GrVertexWriter WritePathInnerFan(GrVertexWriter&& vertexWriter,
-                                            int pad32Count,
-                                            uint32_t pad32Value,
-                                            const PathXform& pathXform,
-                                            const SkPath& path,
-                                            int* numTrianglesWritten) {
-        MiddleOutPolygonTriangulator middleOut(std::move(vertexWriter),
-                                                 pad32Count,
-                                                 pad32Value,
-                                                 path.countVerbs());
-        for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
-            switch (verb) {
-                SkPoint pt;
-                case SkPathVerb::kMove:
-                    middleOut.closeAndMove(pathXform.mapPoint(pts[0]));
-                    break;
-                case SkPathVerb::kLine:
-                case SkPathVerb::kQuad:
-                case SkPathVerb::kConic:
-                case SkPathVerb::kCubic:
-                    pt = pts[SkPathPriv::PtsInIter((unsigned)verb) - 1];
-                    middleOut.pushVertex(pathXform.mapPoint(pt));
-                    break;
-                case SkPathVerb::kClose:
-                    break;
-            }
-        }
-        *numTrianglesWritten = middleOut.close();
-        return middleOut.detachVertexWriter();
-    }
+    VertexWriter detachVertexWriter() { return std::move(fVertexWriter); }
 
 private:
     struct StackVertex {
@@ -190,7 +161,7 @@ private:
     }
 
     constexpr static int kStackPreallocCount = 32;
-    GrVertexWriter fVertexWriter;
+    VertexWriter fVertexWriter;
     const int fPad32Count;
     const uint32_t fPad32Value;
     SkAutoSTMalloc<kStackPreallocCount, StackVertex> fVertexStack;

@@ -5,43 +5,65 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrVertexWriter_DEFINED
-#define GrVertexWriter_DEFINED
+#ifndef BufferWriter_DEFINED
+#define BufferWriter_DEFINED
 
 #include "include/core/SkRect.h"
 #include "include/private/SkNx.h"
 #include "include/private/SkTemplates.h"
 #include <type_traits>
 
-/**
- * Helper for writing vertex data to a buffer. Usage:
- *  GrVertexWriter vertices{target->makeVertexSpace(...)};
- *  vertices << A0 << B0 << C0 << ...;
- *  vertices << A1 << B1 << C1 << ...;
- *
- * Each value must be POD (plain old data), or have a specialization of the "<<" operator.
- */
-struct GrVertexWriter {
-    inline constexpr static uint32_t kIEEE_32_infinity = 0x7f800000;
+namespace skgpu {
 
-    void* fPtr;
+struct BufferWriter {
+public:
+    operator bool() const { return fPtr != nullptr; }
 
-    GrVertexWriter() = default;
-    GrVertexWriter(void* ptr) : fPtr(ptr) {}
-    GrVertexWriter(const GrVertexWriter&) = delete;
-    GrVertexWriter(GrVertexWriter&& that) { *this = std::move(that); }
+protected:
+    BufferWriter() = default;
+    BufferWriter(void* ptr) : fPtr(ptr) {}
 
-    GrVertexWriter& operator=(const GrVertexWriter&) = delete;
-    GrVertexWriter& operator=(GrVertexWriter&& that) {
+    BufferWriter& operator=(const BufferWriter&) = delete;
+    BufferWriter& operator=(BufferWriter&& that) {
         fPtr = that.fPtr;
         that.fPtr = nullptr;
         return *this;
     }
 
-    bool operator==(const GrVertexWriter& that) const { return fPtr == that.fPtr; }
-    operator bool() const { return fPtr != nullptr; }
+protected:
+    void* fPtr;
+};
 
-    GrVertexWriter makeOffset(ptrdiff_t offsetInBytes) const {
+/**
+ * Helper for writing vertex data to a buffer. Usage:
+ *  VertexWriter vertices{target->makeVertexSpace(...)};
+ *  vertices << A0 << B0 << C0 << ...;
+ *  vertices << A1 << B1 << C1 << ...;
+ *
+ * Each value must be POD (plain old data), or have a specialization of the "<<" operator.
+ */
+struct VertexWriter : public BufferWriter {
+    inline constexpr static uint32_t kIEEE_32_infinity = 0x7f800000;
+
+    VertexWriter() = default;
+    VertexWriter(void* ptr) : BufferWriter(ptr) {}
+    VertexWriter(const VertexWriter&) = delete;
+    VertexWriter(VertexWriter&& that) { *this = std::move(that); }
+
+    VertexWriter& operator=(const VertexWriter&) = delete;
+    VertexWriter& operator=(VertexWriter&& that) {
+        BufferWriter::operator=(std::move(that));
+        return *this;
+    }
+
+    bool operator==(const VertexWriter& that) const { return fPtr == that.fPtr; }
+
+    // TODO: Remove this call. We want all users of VertexWriter to have to go through the vertex
+    // writer functions to write data. We do not want them to directly access fPtr and copy their
+    // own data.
+    void* ptr() const { return fPtr; }
+
+    VertexWriter makeOffset(ptrdiff_t offsetInBytes) const {
         return {SkTAddOffset<void>(fPtr, offsetInBytes)};
     }
 
@@ -83,11 +105,11 @@ struct GrVertexWriter {
      * - For any arguments where is_quad<Type>::value is true, a unique point will be written at
      *   each vertex. To make a custom type be emitted as a quad, declare:
      *
-     *       template<> struct GrVertexWriter::is_quad<MyQuadClass> : std::true_type {};
+     *       template<> struct VertexWriter::is_quad<MyQuadClass> : std::true_type {};
      *
      *   and define:
      *
-     *       MyQuadClass::writeVertex(int cornerIdx, GrVertexWriter&) const { ... }
+     *       MyQuadClass::writeVertex(int cornerIdx, VertexWriter&) const { ... }
      *
      * - For any arguments where is_quad<Type>::value is false, its value will be replicated at each
      *   vertex.
@@ -97,7 +119,7 @@ struct GrVertexWriter {
 
     template <typename T>
     struct TriStrip {
-        void writeVertex(int cornerIdx, GrVertexWriter& w) const {
+        void writeVertex(int cornerIdx, VertexWriter& w) const {
             switch (cornerIdx) {
                 case 0: w << l << t; return;
                 case 1: w << l << b; return;
@@ -119,7 +141,7 @@ struct GrVertexWriter {
 
     template <typename T>
     struct TriFan {
-        void writeVertex(int cornerIdx, GrVertexWriter& w) const {
+        void writeVertex(int cornerIdx, VertexWriter& w) const {
             switch (cornerIdx) {
                 case 0: w << l << t; return;
                 case 1: w << l << b; return;
@@ -144,8 +166,6 @@ struct GrVertexWriter {
     }
 
 private:
-    template<typename T> friend GrVertexWriter& operator<<(GrVertexWriter&, const T&);
-
     template <int kCornerIdx, typename T, typename... Args>
     std::enable_if_t<!is_quad<T>::value, void> writeQuadVertex(const T& val,
                                                                const Args&... remainder) {
@@ -162,10 +182,12 @@ private:
 
     template <int kCornerIdx>
     void writeQuadVertex() {}
+
+    template <typename T> friend VertexWriter& operator<<(VertexWriter& w, const T& val);
 };
 
 template <typename T>
-inline GrVertexWriter& operator<<(GrVertexWriter& w, const T& val) {
+inline VertexWriter& operator<<(VertexWriter& w, const T& val) {
     static_assert(std::is_pod<T>::value, "");
     memcpy(w.fPtr, &val, sizeof(T));
     w = w.makeOffset(sizeof(T));
@@ -173,7 +195,7 @@ inline GrVertexWriter& operator<<(GrVertexWriter& w, const T& val) {
 }
 
 template <typename T>
-inline GrVertexWriter& operator<<(GrVertexWriter& w, const GrVertexWriter::Conditional<T>& val) {
+inline VertexWriter& operator<<(VertexWriter& w, const VertexWriter::Conditional<T>& val) {
     static_assert(std::is_pod<T>::value, "");
     if (val.fCondition) {
         w << val.fValue;
@@ -182,22 +204,76 @@ inline GrVertexWriter& operator<<(GrVertexWriter& w, const GrVertexWriter::Condi
 }
 
 template <typename T>
-inline GrVertexWriter& operator<<(GrVertexWriter& w, const GrVertexWriter::Skip<T>& val) {
+inline VertexWriter& operator<<(VertexWriter& w, const VertexWriter::Skip<T>& val) {
     w = w.makeOffset(sizeof(T));
     return w;
 }
 
 template <>
-SK_MAYBE_UNUSED inline GrVertexWriter& operator<<(GrVertexWriter& w, const Sk4f& vector) {
+SK_MAYBE_UNUSED inline VertexWriter& operator<<(VertexWriter& w, const Sk4f& vector) {
     vector.store(w.fPtr);
     w = w.makeOffset(sizeof(vector));
     return w;
 }
 
 template <typename T>
-struct GrVertexWriter::is_quad<GrVertexWriter::TriStrip<T>> : std::true_type {};
+struct VertexWriter::is_quad<VertexWriter::TriStrip<T>> : std::true_type {};
 
 template <typename T>
-struct GrVertexWriter::is_quad<GrVertexWriter::TriFan<T>> : std::true_type {};
+struct VertexWriter::is_quad<VertexWriter::TriFan<T>> : std::true_type {};
 
-#endif
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct IndexWriter : public BufferWriter {
+    IndexWriter() = default;
+    IndexWriter(void* ptr) : BufferWriter(ptr) {}
+    IndexWriter(const IndexWriter&) = delete;
+    IndexWriter(IndexWriter&& that) { *this = std::move(that); }
+
+    IndexWriter& operator=(const IndexWriter&) = delete;
+    IndexWriter& operator=(IndexWriter&& that) {
+        BufferWriter::operator=(std::move(that));
+        return *this;
+    }
+
+    IndexWriter makeAdvance(int numIndices) const {
+        return {SkTAddOffset<void>(fPtr, numIndices * sizeof(uint16_t))};
+    }
+
+    void writeArray(const uint16_t* array, int count) {
+        memcpy(fPtr, array, count * sizeof(uint16_t));
+        fPtr = SkTAddOffset<void>(fPtr, count * sizeof(uint16_t));
+    }
+
+    friend IndexWriter& operator<<(IndexWriter& w, uint16_t val);
+};
+
+inline IndexWriter& operator<<(IndexWriter& w, uint16_t val) {
+    memcpy(w.fPtr, &val, sizeof(uint16_t));
+    w = w.makeAdvance(1);
+    return w;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct UniformWriter : public BufferWriter {
+    UniformWriter() = default;
+    UniformWriter(void* ptr) : BufferWriter(ptr) {}
+    UniformWriter(const UniformWriter&) = delete;
+    UniformWriter(UniformWriter&& that) { *this = std::move(that); }
+
+    UniformWriter& operator=(const UniformWriter&) = delete;
+    UniformWriter& operator=(UniformWriter&& that) {
+        BufferWriter::operator=(std::move(that));
+        return *this;
+    }
+
+    void write(const void* src, size_t bytes) {
+        memcpy(fPtr, src, bytes);
+        fPtr = SkTAddOffset<void>(fPtr, bytes);
+    }
+};
+
+}  // namespace skgpu
+
+#endif // BufferWriter_DEFINED

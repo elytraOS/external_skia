@@ -238,7 +238,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrUtil.h",
   "$_src/gpu/GrVertexChunkArray.cpp",
   "$_src/gpu/GrVertexChunkArray.h",
-  "$_src/gpu/GrVertexWriter.h",
   "$_src/gpu/GrVx.h",
   "$_src/gpu/GrWaitRenderTask.cpp",
   "$_src/gpu/GrWaitRenderTask.h",
@@ -325,7 +324,6 @@ skia_gpu_sources = [
 
   # tessellate
   "$_src/gpu/tessellate/CullTest.h",
-  "$_src/gpu/tessellate/MiddleOutPolygonTriangulator.h",
   "$_src/gpu/tessellate/PathCurveTessellator.cpp",
   "$_src/gpu/tessellate/PathCurveTessellator.h",
   "$_src/gpu/tessellate/PathTessellator.h",
@@ -825,4 +823,13 @@ skia_native_gpu_sources = [
   "$_src/gpu/gl/iOS/GrGLMakeNativeInterface_iOS.cpp",
   "$_src/gpu/gl/mac/GrGLMakeNativeInterface_mac.cpp",
   "$_src/gpu/gl/win/GrGLMakeNativeInterface_win.cpp",
+]
+
+skia_shared_gpu_sources = [
+  "$_src/gpu/BufferWriter.h",
+
+  # tessellate
+  "$_src/gpu/tessellate/MiddleOutPolygonTriangulator.h",
+  "$_src/gpu/tessellate/Tessellation.cpp",
+  "$_src/gpu/tessellate/Tessellation.h",
 ]

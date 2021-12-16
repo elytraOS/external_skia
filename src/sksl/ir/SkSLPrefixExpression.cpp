@@ -27,12 +27,22 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
                                                      const Expression& originalExpr) {
     const Expression* value = ConstantFolder::GetConstantValueForVariable(originalExpr);
     switch (value->kind()) {
-        case Expression::Kind::kLiteral:
+        case Expression::Kind::kLiteral: {
             // Convert -literal(1) to literal(-1).
-            return Literal::Make(originalExpr.fLine,
-                                 -value->as<Literal>().value(),
-                                 &value->type());
-
+            double negated = -value->as<Literal>().value();
+            // Don't simplify the expression if the type can't hold the negated value.
+            const Type& type = value->type();
+            if (type.isInteger()) {
+                if (negated < type.minimumValue() || negated > type.maximumValue()) {
+                    context.fErrors->error(originalExpr.fLine,
+                                           String("integer is out of range for type '") +
+                                           type.displayName().c_str() + "': -" +
+                                           to_string(value->as<Literal>().intValue()));
+                    return nullptr;
+                }
+            }
+            return Literal::Make(originalExpr.fLine, negated, &type);
+        }
         case Expression::Kind::kPrefix:
             if (context.fConfig->fSettings.fOptimize) {
                 // Convert `-(-expression)` into `expression`.
@@ -56,8 +66,11 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
             // Convert `-matrix(literal)` into `matrix(-literal)`.
             if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
                 const ConstructorDiagonalMatrix& ctor = value->as<ConstructorDiagonalMatrix>();
-                return ConstructorDiagonalMatrix::Make(context, originalExpr.fLine, ctor.type(),
-                                                      simplify_negation(context, *ctor.argument()));
+                if (std::unique_ptr<Expression> simplified = simplify_negation(context,
+                                                                               *ctor.argument())) {
+                    return ConstructorDiagonalMatrix::Make(context, originalExpr.fLine, ctor.type(),
+                                                           std::move(simplified));
+                }
             }
             break;
 
@@ -65,8 +78,11 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
             // Convert `-vector(literal)` into `vector(-literal)`.
             if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
                 const ConstructorSplat& ctor = value->as<ConstructorSplat>();
-                return ConstructorSplat::Make(context, originalExpr.fLine, ctor.type(),
-                                              simplify_negation(context, *ctor.argument()));
+                if (std::unique_ptr<Expression> simplified = simplify_negation(context,
+                                                                               *ctor.argument())) {
+                    return ConstructorSplat::Make(context, originalExpr.fLine, ctor.type(),
+                                                  std::move(simplified));
+                }
             }
             break;
 
@@ -200,6 +216,9 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
             if (baseType.isLiteral()) {
                 // The expression `~123` is no longer a literal; coerce to the actual type.
                 base = baseType.scalarTypeForLiteral().coerceExpression(std::move(base), context);
+                if (!base) {
+                    return nullptr;
+                }
             }
             break;
 
