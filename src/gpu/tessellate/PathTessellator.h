@@ -9,7 +9,7 @@
 #define tessellate_PathTessellator_DEFINED
 
 #include "src/core/SkPathPriv.h"
-#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/BufferWriter.h"
 #include "src/gpu/GrVx.h"
 #include "src/gpu/geometry/GrInnerFanTriangulator.h"
 

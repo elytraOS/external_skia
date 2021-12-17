@@ -41,23 +41,27 @@ public:
     }
     bool commit();
 
-    void copyTextureToBuffer(sk_sp<skgpu::Texture>,
-                             SkIRect srcRect,
-                             sk_sp<skgpu::Buffer>,
-                             size_t bufferOffset,
-                             size_t bufferRowBytes) override;
-
 private:
     CommandBuffer(sk_cfp<id<MTLCommandBuffer>> cmdBuffer, const Gpu* gpu);
 
-    void beginRenderPass(const RenderPassDesc&) override;
+    void onBeginRenderPass(const RenderPassDesc&) override;
     void endRenderPass() override;
 
-    void onSetRenderPipeline(sk_sp<skgpu::RenderPipeline>&) override;
+    void onBindRenderPipeline(const skgpu::RenderPipeline*) override;
+    void onBindUniformBuffer(const skgpu::Buffer*, size_t offset) override;
+    void onBindVertexBuffers(const skgpu::Buffer* vertexBuffer,
+                             const skgpu::Buffer* instanceBuffer) override;
 
     void onDraw(PrimitiveType type, unsigned int vertexStart, unsigned int vertexCount) override;
 
+    void onCopyTextureToBuffer(const skgpu::Texture*,
+                               SkIRect srcRect,
+                               const skgpu::Buffer*,
+                               size_t bufferOffset,
+                               size_t bufferRowBytes) override;
+
     BlitCommandEncoder* getBlitCommandEncoder();
+    void endBlitCommandEncoder();
 
     sk_cfp<id<MTLCommandBuffer>> fCommandBuffer;
     sk_sp<RenderCommandEncoder> fActiveRenderCommandEncoder;

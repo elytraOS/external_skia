@@ -31,10 +31,10 @@ void write_stringstream(const StringStream& s, OutputStream& out) {
     out.write(s.str().c_str(), s.str().size());
 }
 
-#if !defined(SKSL_STANDALONE)
+#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 bool type_to_grsltype(const Context& context, const Type& type, GrSLType* outType) {
     // If a new GrSL type is added, this function will need to be updated.
-    static_assert(kGrSLTypeCount == 49);
+    static_assert(kGrSLTypeCount == 41);
 
     if (type == *context.fTypes.fVoid    ) { *outType = kVoid_GrSLType;     return true; }
     if (type == *context.fTypes.fBool    ) { *outType = kBool_GrSLType;     return true; }

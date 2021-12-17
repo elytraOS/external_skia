@@ -16,9 +16,9 @@
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
-#include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/PathCurveTessellator.h"
 #include "src/gpu/tessellate/PathWedgeTessellator.h"
+#include "src/gpu/tessellate/Tessellation.h"
 #include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
 
 namespace {
@@ -242,17 +242,16 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
         // A single n-sided polygon is fanned by n-2 triangles. Multiple polygons with a combined
         // edge count of n are fanned by strictly fewer triangles.
         int maxTrianglesInFans = std::max(maxCombinedFanEdges - 2, 0);
-        GrVertexWriter triangleVertexWriter = vertexAlloc.lock<SkPoint>(maxTrianglesInFans * 3);
+        VertexWriter triangleVertexWriter = vertexAlloc.lock<SkPoint>(maxTrianglesInFans * 3);
         int fanTriangleCount = 0;
         for (auto [pathMatrix, path] : *fPathDrawList) {
             int numTrianglesWritten;
-            triangleVertexWriter = MiddleOutPolygonTriangulator::WritePathInnerFan(
-                    std::move(triangleVertexWriter),
-                    0,
-                    0,
-                    pathMatrix,
-                    path,
-                    &numTrianglesWritten);
+            triangleVertexWriter = WritePathMiddleOutInnerFan(std::move(triangleVertexWriter),
+                                                              0,
+                                                              0,
+                                                              pathMatrix,
+                                                              path,
+                                                              &numTrianglesWritten);
             fanTriangleCount += numTrianglesWritten;
         }
         SkASSERT(fanTriangleCount <= maxTrianglesInFans);
@@ -264,11 +263,10 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
 
     if (fCoverBBoxProgram) {
         size_t instanceStride = fCoverBBoxProgram->geomProc().instanceStride();
-        GrVertexWriter vertexWriter = flushState->makeVertexSpace(
-                instanceStride,
-                fPathCount,
-                &fBBoxBuffer,
-                &fBBoxBaseInstance);
+        VertexWriter vertexWriter = flushState->makeVertexSpace(instanceStride,
+                                                                fPathCount,
+                                                                &fBBoxBuffer,
+                                                                &fBBoxBaseInstance);
         SkDEBUGCODE(int pathCount = 0;)
         for (auto [pathMatrix, path] : *fPathDrawList) {
             SkDEBUGCODE(auto end = vertexWriter.makeOffset(instanceStride));
