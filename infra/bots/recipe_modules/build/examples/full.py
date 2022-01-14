@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+PYTHON_VERSION_COMPATIBILITY = "PY2+3"
 
 DEPS = [
   'build',
@@ -48,9 +49,6 @@ TEST_BUILDERS = [
   'Build-Debian10-Clang-x86_64-Debug-SwiftShader_MSAN',
   'Build-Debian10-Clang-x86_64-Debug-SwiftShader_TSAN',
   'Build-Debian10-Clang-x86_64-Debug-Tidy',
-  "Build-Debian10-Clang-x86_64-Debug-V1only",
-  "Build-Debian10-Clang-x86_64-Debug-V1andV2",
-  "Build-Debian10-Clang-x86_64-Debug-V2only",
   'Build-Debian10-Clang-x86_64-Debug-Wuffs',
   'Build-Debian10-Clang-x86_64-Release-ANGLE',
   'Build-Debian10-Clang-x86_64-Release-ASAN',
@@ -69,6 +67,7 @@ TEST_BUILDERS = [
   'Build-Mac-Clang-arm64-Debug-Android_Vulkan',
   'Build-Mac-Clang-arm64-Debug-iOS',
   "Build-Mac-Clang-arm64-Debug-Graphite",
+  "Build-Mac-Clang-arm64-Debug-Graphite_NoGpu",
   "Build-Mac-Clang-arm64-Release-Graphite",
   'Build-Mac-Xcode11.4.1-arm64-Debug-iOS',
   'Build-Mac-Clang-x86_64-Debug-ASAN',

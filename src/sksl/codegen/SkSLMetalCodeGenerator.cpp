@@ -108,19 +108,9 @@ String MetalCodeGenerator::typeName(const Type& type) {
                                   to_string(type.rows());
 
         case Type::TypeKind::kSampler:
-            return "texture2d<float>"; // FIXME - support other texture types
+            return "texture2d<half>"; // FIXME - support other texture types
 
         default:
-            // We currently only support full-precision types in MSL to avoid type coercion issues.
-            if (type == *fContext.fTypes.fHalf) {
-                return "float";
-            }
-            if (type == *fContext.fTypes.fShort) {
-                return "int";
-            }
-            if (type == *fContext.fTypes.fUShort) {
-                return "uint";
-            }
             return String(type.name());
     }
 }
@@ -717,8 +707,9 @@ bool MetalCodeGenerator::writeIntrinsicCall(const FunctionCall& c, IntrinsicKind
             return true;
         }
         case k_dFdy_IntrinsicKind: {
-            this->write(fRTFlipName + ".y*dfdy");
+            this->write("(" + fRTFlipName + ".y * dfdy");
             this->writeArgumentList(c.arguments());
+            this->write(")");
             return true;
         }
         case k_inverse_IntrinsicKind: {
@@ -1082,16 +1073,6 @@ String MetalCodeGenerator::getMatrixConstructHelper(const AnyConstructor& c) {
     return name;
 }
 
-bool MetalCodeGenerator::canCoerce(const Type& t1, const Type& t2) {
-    if (t1.columns() != t2.columns() || t1.rows() != t2.rows()) {
-        return false;
-    }
-    if (t1.columns() > 1) {
-        return this->canCoerce(t1.componentType(), t2.componentType());
-    }
-    return t1.isFloat() && t2.isFloat();
-}
-
 bool MetalCodeGenerator::matrixConstructHelperIsNeeded(const ConstructorCompound& c) {
     SkASSERT(c.type().isMatrix());
 
@@ -1298,15 +1279,6 @@ void MetalCodeGenerator::writeCastConstructor(const AnyConstructor& c,
                                               const char* leftBracket,
                                               const char* rightBracket,
                                               Precedence parentPrecedence) {
-    // If the type is coercible, emit it directly without the cast.
-    auto args = c.argumentSpan();
-    if (args.size() == 1) {
-        if (this->canCoerce(c.type(), args.front()->type())) {
-            this->writeExpression(*args.front(), parentPrecedence);
-            return;
-        }
-    }
-
     return this->writeAnyConstructor(c, leftBracket, rightBracket, parentPrecedence);
 }
 
@@ -1560,7 +1532,7 @@ thread bool operator!=(thread const %s& left, thread const %s& right);
 
         const char* separator = "";
         for (const Type::Field& field : type.fields()) {
-            fExtraFunctions.printf("%s(left.%.*s == right.%.*s)",
+            fExtraFunctions.printf("%sall(left.%.*s == right.%.*s)",
                                    separator,
                                    (int)field.fName.size(), field.fName.data(),
                                    (int)field.fName.size(), field.fName.data());
@@ -1733,13 +1705,18 @@ void MetalCodeGenerator::writeLiteral(const Literal& l) {
     const Type& type = l.type();
     if (type.isFloat()) {
         this->write(to_string(l.floatValue()));
+        if (!l.type().highPrecision()) {
+            this->write("h");
+        }
         return;
     }
     if (type.isInteger()) {
         if (type == *fContext.fTypes.fUInt) {
-            this->write(to_string(l.intValue() & 0xffffffff) + "u");
+            this->write(to_string(l.intValue() & 0xffffffff));
+            this->write("u");
         } else if (type == *fContext.fTypes.fUShort) {
-            this->write(to_string(l.intValue() & 0xffff) + "u");
+            this->write(to_string(l.intValue() & 0xffff));
+            this->write("u");
         } else {
             this->write(to_string(l.intValue()));
         }
@@ -1860,7 +1837,7 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
                         fContext.fErrors->error(decls.fLine, "Unsupported texture dimensions");
                         return false;
                     }
-                    this->write(", texture2d<float> ");
+                    this->write(", texture2d<half> ");
                     this->writeName(var.var().name());
                     this->write("[[texture(");
                     this->write(to_string(var.var().modifiers().fLayout.fBinding));
@@ -2352,7 +2329,7 @@ void MetalCodeGenerator::writeOutputStruct() {
     if (fProgram.fConfig->fKind == ProgramKind::kVertex) {
         this->write("    float4 sk_Position [[position]];\n");
     } else if (fProgram.fConfig->fKind == ProgramKind::kFragment) {
-        this->write("    float4 sk_FragColor [[color(0)]];\n");
+        this->write("    half4 sk_FragColor [[color(0)]];\n");
     }
     for (const ProgramElement* e : fProgram.elements()) {
         if (e->is<GlobalVarDeclaration>()) {

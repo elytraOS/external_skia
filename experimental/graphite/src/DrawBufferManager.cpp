@@ -29,11 +29,17 @@ static bool can_fit(size_t requestedSize,
                     Buffer* buffer,
                     size_t currentOffset,
                     size_t alignment) {
-    size_t startOffset = AlignTo(currentOffset, alignment);
+    size_t startOffset = SkAlignTo(currentOffset, alignment);
     return requestedSize <= (buffer->size() - startOffset);
 }
 
 std::tuple<VertexWriter, BindBufferInfo> DrawBufferManager::getVertexWriter(size_t requiredBytes) {
+    if (!requiredBytes) {
+        BindBufferInfo bindInfo;
+        bindInfo.fBuffer = nullptr;
+        bindInfo.fOffset = 0;
+        return {VertexWriter(nullptr), bindInfo};
+    }
     if (fCurrentVertexBuffer &&
         !can_fit(requiredBytes, fCurrentVertexBuffer.get(), fVertexOffset, /*alignment=*/1)) {
         fUsedBuffers.push_back(std::move(fCurrentVertexBuffer));
@@ -57,6 +63,12 @@ std::tuple<VertexWriter, BindBufferInfo> DrawBufferManager::getVertexWriter(size
 }
 
 std::tuple<IndexWriter, BindBufferInfo> DrawBufferManager::getIndexWriter(size_t requiredBytes) {
+    if (!requiredBytes) {
+        BindBufferInfo bindInfo;
+        bindInfo.fBuffer = nullptr;
+        bindInfo.fOffset = 0;
+        return {IndexWriter(nullptr), bindInfo};
+    }
     if (fCurrentIndexBuffer &&
         !can_fit(requiredBytes, fCurrentIndexBuffer.get(), fIndexOffset, /*alignment=*/1)) {
         fUsedBuffers.push_back(std::move(fCurrentIndexBuffer));
@@ -81,6 +93,12 @@ std::tuple<IndexWriter, BindBufferInfo> DrawBufferManager::getIndexWriter(size_t
 
 std::tuple<UniformWriter, BindBufferInfo> DrawBufferManager::getUniformWriter(
         size_t requiredBytes) {
+    if (!requiredBytes) {
+        BindBufferInfo bindInfo;
+        bindInfo.fBuffer = nullptr;
+        bindInfo.fOffset = 0;
+        return {UniformWriter(nullptr), bindInfo};
+    }
     if (fCurrentUniformBuffer &&
         !can_fit(requiredBytes,
                  fCurrentUniformBuffer.get(),
@@ -99,7 +117,7 @@ std::tuple<UniformWriter, BindBufferInfo> DrawBufferManager::getUniformWriter(
             return {UniformWriter(), BindBufferInfo()};
         }
     }
-    fUniformOffset = AlignTo(fUniformOffset, fUniformStartAlignment);
+    fUniformOffset = SkAlignTo(fUniformOffset, fUniformStartAlignment);
     BindBufferInfo bindInfo;
     bindInfo.fBuffer = fCurrentUniformBuffer.get();
     bindInfo.fOffset = fUniformOffset;

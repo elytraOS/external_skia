@@ -10,8 +10,8 @@
 
 #include "src/core/SkDevice.h"
 
-#include "experimental/graphite/include/private/GraphiteTypesPriv.h"
 #include "experimental/graphite/src/DrawOrder.h"
+#include "experimental/graphite/src/EnumBitMask.h"
 #include "experimental/graphite/src/geom/Rect.h"
 
 class SkStrokeRec;
@@ -40,9 +40,9 @@ protected:
     void onRestore() override {}
 
     bool onClipIsAA() const override { return false; }
-    bool onClipIsWideOpen() const override { return false; }
-    ClipType onGetClipType() const override { return ClipType::kEmpty; }
-    SkIRect onDevClipBounds() const override { return {}; }
+    bool onClipIsWideOpen() const override { return true; }
+    ClipType onGetClipType() const override { return ClipType::kRect; }
+    SkIRect onDevClipBounds() const override;
 
     void onClipRect(const SkRect& rect, SkClipOp, bool aa) override {}
     void onClipRRect(const SkRRect& rrect, SkClipOp, bool aa) override {}

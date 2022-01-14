@@ -9,12 +9,17 @@
 
 #include "experimental/graphite/include/Context.h"
 #include "experimental/graphite/include/SkStuff.h"
+#include "experimental/graphite/src/Buffer.h"
 #include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/ContextPriv.h"
+#include "experimental/graphite/src/CopyTask.h"
 #include "experimental/graphite/src/DrawContext.h"
 #include "experimental/graphite/src/DrawList.h"
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/Recorder.h"
+#include "experimental/graphite/src/Recording.h"
+#include "experimental/graphite/src/ResourceProvider.h"
+#include "experimental/graphite/src/Texture.h"
 #include "experimental/graphite/src/TextureProxy.h"
 #include "experimental/graphite/src/geom/BoundsManager.h"
 #include "experimental/graphite/src/geom/Shape.h"
@@ -24,6 +29,7 @@
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkStrokeRec.h"
 
+#include "src/core/SkConvertPixels.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkSpecialImage.h"
@@ -82,13 +88,67 @@ sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int x, int y) {
+    // TODO: Support more formats that we can read back into
+    if (pm.colorType() != kRGBA_8888_SkColorType) {
+        return false;
+    }
+
+    auto context = fRecorder->context();
+    auto resourceProvider = context->priv().resourceProvider();
+
+    TextureProxy* srcProxy = fDC->target();
+    if(!srcProxy->instantiate(resourceProvider)) {
+        return false;
+    }
+    sk_sp<Texture> srcTexture = srcProxy->refTexture();
+    SkASSERT(srcTexture);
+
+    size_t rowBytes = pm.rowBytes();
+    size_t size = rowBytes * pm.height();
+    sk_sp<Buffer> dstBuffer = resourceProvider->findOrCreateBuffer(size,
+                                                                   BufferType::kXferGpuToCpu,
+                                                                   PrioritizeGpuReads::kNo);
+    if (!dstBuffer) {
+        return false;
+    }
+
+    SkIRect srcRect = SkIRect::MakeXYWH(x, y, pm.width(), pm.height());
+    sk_sp<CopyTextureToBufferTask> task =
+            CopyTextureToBufferTask::Make(std::move(srcTexture),
+                                          srcRect,
+                                          dstBuffer,
+                                          /*bufferOffset=*/0,
+                                          rowBytes);
+    if (!task) {
+        return false;
+    }
+
     this->flushPendingWorkToRecorder();
-    // TODO: actually do a read back
-    pm.erase(SK_ColorGREEN);
+    fRecorder->add(std::move(task));
+
+    // TODO: Can snapping ever fail?
+    context->insertRecording(fRecorder->snap());
+    context->submit(SyncToCpu::kYes);
+
+    void* mappedMemory = dstBuffer->map();
+
+    memcpy(pm.writable_addr(), mappedMemory, size);
+
     return true;
 }
 
+SkIRect Device::onDevClipBounds() const {
+    auto target = fDC->target();
+    return SkIRect::MakeSize(target->dimensions());
+}
+
 void Device::drawPaint(const SkPaint& paint) {
+    // TODO: check paint params as well
+     if (this->clipIsWideOpen()) {
+        // do fullscreen clear
+        fDC->clear(paint.getColor4f());
+        return;
+    }
     SkRect deviceBounds = SkRect::Make(this->devClipBounds());
     // TODO: Should be able to get the inverse from the matrix cache
     SkM44 devToLocal;
@@ -145,7 +205,7 @@ void Device::drawPoints(SkCanvas::PointMode mode, size_t count,
         SkStrokeRec stroke(paint, SkPaint::kStroke_Style);
         size_t inc = (mode == SkCanvas::kLines_PointMode) ? 2 : 1;
         for (size_t i = 0; i < count; i += inc) {
-            this->drawShape(Shape(points[i], points[i + 1]), paint, stroke);
+            this->drawShape(Shape(points[i], points[(i + 1) % count]), paint, stroke);
         }
     }
 }
@@ -303,7 +363,7 @@ void Device::flushPendingWorkToRecorder() {
 
     // TODO: iterate the clip stack and issue a depth-only draw for every clip element that has
     // a non-empty usage bounds, using that bounds as the scissor.
-    auto drawTask = fDC->snapRenderPassTask(fColorDepthBoundsManager.get());
+    auto drawTask = fDC->snapRenderPassTask(fRecorder.get(), fColorDepthBoundsManager.get());
     if (drawTask) {
         fRecorder->add(std::move(drawTask));
     }

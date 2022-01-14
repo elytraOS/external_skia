@@ -10,7 +10,6 @@
 
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkShader.h"
 #include "include/private/SkTOptional.h"
 #include "src/core/SkTBlockList.h"
 
@@ -21,11 +20,14 @@
 #include <limits>
 
 class SkPath;
+class SkShader;
 struct SkIRect;
 
 namespace skgpu {
 
+struct IndexWriter;
 class Renderer;
+struct VertexWriter;
 
 // TBD: If occlusion culling is eliminated as a phase, we can easily move the paint conversion
 // back to Device when the command is recorded (similar to SkPaint -> GrPaint), and then
@@ -35,18 +37,16 @@ class Renderer;
 // assumed to be anti-aliased.
 class PaintParams {
 public:
-    PaintParams(const SkColor4f& color,
-                SkBlendMode blendMode,
-                sk_sp<SkShader> shader)
-            : fColor(color)
-            , fBlendMode(blendMode)
-            , fShader(std::move(shader)) {}
+    PaintParams(const SkColor4f& color, SkBlendMode, sk_sp<SkShader>);
+    PaintParams(const PaintParams&);
+    ~PaintParams();
 
-    PaintParams(const PaintParams&) = default;
+    PaintParams& operator=(const PaintParams&);
 
-    SkColor4f   color()     const { return fColor;        }
-    SkBlendMode blendMode() const { return fBlendMode;    }
-    SkShader*   shader()    const { return fShader.get(); }
+    SkColor4f color() const { return fColor; }
+    SkBlendMode blendMode() const { return fBlendMode; }
+    SkShader* shader() const { return fShader.get(); }
+    sk_sp<SkShader> refShader() const;
 
 private:
     SkColor4f       fColor;
@@ -70,6 +70,8 @@ public:
             , fCap(cap) {}
 
     StrokeParams(const StrokeParams&) = default;
+
+    StrokeParams& operator=(const StrokeParams&) = default;
 
     bool isMiterJoin() const { return fJoinLimit > 0.f;  }
     bool isBevelJoin() const { return fJoinLimit == 0.f; }
@@ -212,6 +214,11 @@ private:
                 , fOrder(order)
                 , fPaintParams(paint ? skstd::optional<PaintParams>(*paint) : skstd::nullopt)
                 , fStrokeParams(stroke ? skstd::optional<StrokeParams>(*stroke) : skstd::nullopt) {}
+
+        size_t requiredVertexSpace(int renderStep) const;
+        size_t requiredIndexSpace(int renderStep) const;
+
+        void writeVertices(VertexWriter, IndexWriter, int renderStep) const;
     };
 
     // The returned Transform reference remains valid for the lifetime of the DrawList.

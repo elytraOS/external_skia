@@ -8,7 +8,6 @@
 #include "tests/Test.h"
 
 #include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/private/GraphiteTypesPriv.h"
 #include "experimental/graphite/src/ContextUtils.h"
 #include "experimental/graphite/src/Recorder.h"
 #include "experimental/graphite/src/Uniform.h"
@@ -55,6 +54,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformCacheTest, reporter, context) {
         result1 = cache->findOrCreate(ud1);
         REPORTER_ASSERT(reporter, result1->id() != UniformData::kInvalidUniformID);
         REPORTER_ASSERT(reporter, ud1->id() == result1->id());
+        sk_sp<UniformData> lookup = cache->lookup(result1->id());
+        REPORTER_ASSERT(reporter, lookup->id() == result1->id());
 
         REPORTER_ASSERT(reporter, cache->count() == 1);
     }
@@ -66,6 +67,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformCacheTest, reporter, context) {
         REPORTER_ASSERT(reporter, result2->id() != UniformData::kInvalidUniformID);
         REPORTER_ASSERT(reporter, ud2->id() == UniformData::kInvalidUniformID);
         REPORTER_ASSERT(reporter, result2->id() == result1->id());
+        sk_sp<UniformData> lookup = cache->lookup(result2->id());
+        REPORTER_ASSERT(reporter, lookup->id() == result2->id());
 
         REPORTER_ASSERT(reporter, cache->count() == 1);
     }
@@ -77,6 +80,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformCacheTest, reporter, context) {
         REPORTER_ASSERT(reporter, result3->id() != UniformData::kInvalidUniformID);
         REPORTER_ASSERT(reporter, ud3->id() == result3->id());
         REPORTER_ASSERT(reporter, result3->id() != result1->id());
+        sk_sp<UniformData> lookup = cache->lookup(result3->id());
+        REPORTER_ASSERT(reporter, lookup->id() == result3->id());
 
         REPORTER_ASSERT(reporter, cache->count() == 2);
     }

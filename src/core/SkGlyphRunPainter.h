@@ -139,23 +139,23 @@ class SkGlyphRunPainterInterface {
 public:
     virtual ~SkGlyphRunPainterInterface() = default;
 
-#if SK_GPU_V1
     virtual void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                    const SkStrikeSpec& strikeSpec) = 0;
+                                    sk_sp<SkStrike>&& strike) = 0;
 
     virtual void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                    const SkStrikeSpec& strikeSpec) = 0;
+                                    sk_sp<SkStrike>&& strike,
+                                    SkScalar strikeToSourceScale) = 0;
 
     virtual void processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                     const SkFont& runFont,
-                                    const SkStrikeSpec& strikeSpec) = 0;
+                                    SkScalar strikeToSourceScale) = 0;
 
     virtual void processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                                   const SkStrikeSpec& strikeSpec,
+                                   sk_sp<SkStrike>&& strike,
+                                   SkScalar strikeToSourceScale,
                                    const SkFont& runFont,
                                    SkScalar minScale,
                                    SkScalar maxScale) = 0;
-#endif // SK_GPU_V1
 };
 
 #endif  // SkGlyphRunPainter_DEFINED

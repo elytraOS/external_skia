@@ -427,7 +427,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
     // of per-vertex colors.
     std::unique_ptr<GrFragmentProcessor> paintFP;
     if (!primColorMode || blend_requires_shader(*primColorMode)) {
-        fpArgs.fInputColorIsOpaque = origColor.isOpaque();
         if (shaderProcessor) {
             paintFP = std::move(*shaderProcessor);
         } else {
@@ -468,7 +467,24 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
                         std::move(paintFP), {paintAlpha, paintAlpha, paintAlpha, paintAlpha});
             }
         } else {
-            grPaint->setColor4f(origColor.premul());
+            float paintAlpha = skPaint.getColor4f().fA;
+            if (paintAlpha != 1.0f) {
+                // This invokes the shader's FP tree with an opaque version of the paint color,
+                // then multiplies the final result by the incoming (paint) alpha.
+                // We're actually putting the *unpremul* paint color on the GrPaint. This is okay,
+                // because the shader is supposed to see the original (opaque) RGB from the paint.
+                // ApplyPaintAlpha then creates a valid premul color by applying the paint alpha.
+                // Think of this as equivalent to (but faster than) putting origColor.premul() on
+                // the GrPaint, and ApplyPaintAlpha unpremuling it before passing it to the child.
+                paintFP = GrFragmentProcessor::ApplyPaintAlpha(std::move(paintFP));
+                grPaint->setColor4f({origColor.fR, origColor.fG, origColor.fB, origColor.fA});
+            } else {
+                // paintFP will ignore its input color, so we must disable coverage-as-alpha.
+                // TODO(skbug:11942): The alternative would be to always use ApplyPaintAlpha, but
+                // we'd need to measure the cost of that shader math against the CAA benefit.
+                paintFP = GrFragmentProcessor::DisableCoverageAsAlpha(std::move(paintFP));
+                grPaint->setColor4f(origColor.premul());
+            }
         }
     } else {
         if (primColorMode) {
@@ -519,8 +535,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
 
     SkMaskFilterBase* maskFilter = as_MFB(skPaint.getMaskFilter());
     if (maskFilter) {
-        // We may have set this before passing to the SkShader.
-        fpArgs.fInputColorIsOpaque = false;
         if (auto mfFP = maskFilter->asFragmentProcessor(fpArgs)) {
             grPaint->setCoverageFragmentProcessor(std::move(mfFP));
         }
