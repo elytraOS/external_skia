@@ -7,12 +7,12 @@
 
 #include "experimental/graphite/src/CommandBuffer.h"
 
-#include "experimental/graphite/include/private/GraphiteTypesPriv.h"
-#include "experimental/graphite/src/RenderPipeline.h"
+#include "experimental/graphite/src/GraphicsPipeline.h"
 #include "src/core/SkTraceEvent.h"
 
 #include "experimental/graphite/src/Buffer.h"
 #include "experimental/graphite/src/Texture.h"
+#include "experimental/graphite/src/TextureProxy.h"
 
 namespace skgpu {
 
@@ -28,17 +28,17 @@ void CommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc) {
     this->onBeginRenderPass(renderPassDesc);
 
     auto& colorInfo = renderPassDesc.fColorAttachment;
-    if (colorInfo.fTexture) {
-        this->trackResource(std::move(colorInfo.fTexture));
+    if (colorInfo.fTextureProxy) {
+        this->trackResource(colorInfo.fTextureProxy->refTexture());
     }
     if (colorInfo.fStoreOp == StoreOp::kStore) {
         fHasWork = true;
     }
 }
 
-void CommandBuffer::bindRenderPipeline(sk_sp<RenderPipeline> renderPipeline) {
-    this->onBindRenderPipeline(renderPipeline.get());
-    this->trackResource(std::move(renderPipeline));
+void CommandBuffer::bindGraphicsPipeline(sk_sp<GraphicsPipeline> graphicsPipeline) {
+    this->onBindGraphicsPipeline(graphicsPipeline.get());
+    this->trackResource(std::move(graphicsPipeline));
     fHasWork = true;
 }
 
@@ -48,13 +48,23 @@ void CommandBuffer::bindUniformBuffer(sk_sp<Buffer> uniformBuffer, size_t offset
     fHasWork = true;
 }
 
-void CommandBuffer::bindVertexBuffers(sk_sp<Buffer> vertexBuffer, sk_sp<Buffer> instanceBuffer) {
-    this->onBindVertexBuffers(vertexBuffer.get(), instanceBuffer.get());
+void CommandBuffer::bindVertexBuffers(sk_sp<Buffer> vertexBuffer, size_t vertexOffset,
+                                      sk_sp<Buffer> instanceBuffer, size_t instanceOffset) {
+    this->onBindVertexBuffers(vertexBuffer.get(), vertexOffset,
+                              instanceBuffer.get(), instanceOffset);
     if (vertexBuffer) {
         this->trackResource(std::move(vertexBuffer));
     }
     if (instanceBuffer) {
         this->trackResource(std::move(instanceBuffer));
+    }
+    fHasWork = true;
+}
+
+void CommandBuffer::bindIndexBuffer(sk_sp<Buffer> indexBuffer, size_t bufferOffset) {
+    this->onBindIndexBuffer(indexBuffer.get(), bufferOffset);
+    if (indexBuffer) {
+        this->trackResource(std::move(indexBuffer));
     }
     fHasWork = true;
 }

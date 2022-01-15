@@ -23,7 +23,13 @@ Texture::Texture(SkISize dimensions,
 sk_sp<Texture> Texture::Make(const Gpu* gpu,
                              SkISize dimensions,
                              const skgpu::TextureInfo& info) {
+    // TODO: get this from Caps
+    if (dimensions.width() > 16384 || dimensions.height() > 16384) {
+        return nullptr;
+    }
+
     const TextureSpec& mtlSpec = info.mtlTextureSpec();
+    SkASSERT(!mtlSpec.fFramebufferOnly);
 
     sk_cfp<MTLTextureDescriptor*> desc([[MTLTextureDescriptor alloc] init]);
     (*desc).textureType = (info.numSamples() > 1) ? MTLTextureType2DMultisample : MTLTextureType2D;

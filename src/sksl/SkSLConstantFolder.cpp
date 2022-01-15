@@ -118,8 +118,7 @@ static std::unique_ptr<Expression> simplify_vector(const Context& context,
     ExpressionArray args;
     args.reserve_back(type.columns());
     for (int i = 0; i < type.columns(); i++) {
-        double value = foldFn(left.getConstantSubexpression(i)->as<Literal>().value(),
-                              right.getConstantSubexpression(i)->as<Literal>().value());
+        double value = foldFn(*left.getConstantValue(i), *right.getConstantValue(i));
         if (value < minimumValue || value > maximumValue) {
             return nullptr;
         }
@@ -134,10 +133,7 @@ static std::unique_ptr<Expression> cast_expression(const Context& context,
                                                    const Type& type) {
     ExpressionArray ctorArgs;
     ctorArgs.push_back(expr.clone());
-    std::unique_ptr<Expression> ctor = Constructor::Convert(context, expr.fLine, type,
-                                                            std::move(ctorArgs));
-    SkASSERT(ctor);
-    return ctor;
+    return Constructor::Convert(context, expr.fLine, type, std::move(ctorArgs));
 }
 
 bool ConstantFolder::GetConstantInt(const Expression& value, SKSL_INT* out) {
@@ -158,16 +154,11 @@ bool ConstantFolder::GetConstantValue(const Expression& value, double* out) {
     return true;
 }
 
-static bool is_constant_scalar_value(const Expression& inExpr, double match) {
-    const Expression* expr = ConstantFolder::GetConstantValueForVariable(inExpr);
-    return (expr->is<Literal>() && expr->as<Literal>().value() == match);
-}
-
 static bool contains_constant_zero(const Expression& expr) {
     int numSlots = expr.type().slotCount();
     for (int index = 0; index < numSlots; ++index) {
-        const Expression* subexpr = expr.getConstantSubexpression(index);
-        if (subexpr && is_constant_scalar_value(*subexpr, 0.0)) {
+        skstd::optional<double> slotVal = expr.getConstantValue(index);
+        if (slotVal.has_value() && *slotVal == 0.0) {
             return true;
         }
     }
@@ -177,16 +168,16 @@ static bool contains_constant_zero(const Expression& expr) {
 static bool is_constant_value(const Expression& expr, double value) {
     int numSlots = expr.type().slotCount();
     for (int index = 0; index < numSlots; ++index) {
-        const Expression* subexpr = expr.getConstantSubexpression(index);
-        if (!subexpr || !is_constant_scalar_value(*subexpr, value)) {
+        skstd::optional<double> slotVal = expr.getConstantValue(index);
+        if (!slotVal.has_value() || *slotVal != value) {
             return false;
         }
     }
     return true;
 }
 
-bool ConstantFolder::ErrorOnDivideByZero(const Context& context, int line, Operator op,
-                                         const Expression& right) {
+static bool error_on_divide_by_zero(const Context& context, int line, Operator op,
+                                    const Expression& right) {
     switch (op.kind()) {
         case Token::Kind::TK_SLASH:
         case Token::Kind::TK_SLASHEQ:
@@ -272,8 +263,9 @@ static std::unique_ptr<Expression> simplify_no_op_arithmetic(const Context& cont
                 return cast_expression(context, left, resultType);
             }
             if (is_constant_value(left, 0.0)) {   // 0 - x (to `-x`)
-                return PrefixExpression::Make(context, Token::Kind::TK_MINUS,
-                                              cast_expression(context, right, resultType));
+                if (std::unique_ptr<Expression> val = cast_expression(context, right, resultType)) {
+                    return PrefixExpression::Make(context, Token::Kind::TK_MINUS, std::move(val));
+                }
             }
             break;
 
@@ -286,18 +278,20 @@ static std::unique_ptr<Expression> simplify_no_op_arithmetic(const Context& cont
         case Token::Kind::TK_PLUSEQ:
         case Token::Kind::TK_MINUSEQ:
             if (is_constant_value(right, 0.0)) {  // x += 0, x -= 0
-                std::unique_ptr<Expression> result = cast_expression(context, left, resultType);
-                Analysis::UpdateVariableRefKind(result.get(), VariableRefKind::kRead);
-                return result;
+                if (std::unique_ptr<Expression> var = cast_expression(context, left, resultType)) {
+                    Analysis::UpdateVariableRefKind(var.get(), VariableRefKind::kRead);
+                    return var;
+                }
             }
             break;
 
         case Token::Kind::TK_STAREQ:
         case Token::Kind::TK_SLASHEQ:
             if (is_constant_value(right, 1.0)) {  // x *= 1, x /= 1
-                std::unique_ptr<Expression> result = cast_expression(context, left, resultType);
-                Analysis::UpdateVariableRefKind(result.get(), VariableRefKind::kRead);
-                return result;
+                if (std::unique_ptr<Expression> var = cast_expression(context, left, resultType)) {
+                    Analysis::UpdateVariableRefKind(var.get(), VariableRefKind::kRead);
+                    return var;
+                }
             }
             break;
 
@@ -342,16 +336,9 @@ std::unique_ptr<Expression> ConstantFolder::Simplify(const Context& context,
                                                      Operator op,
                                                      const Expression& rightExpr,
                                                      const Type& resultType) {
-    // When optimization is enabled, replace constant variables with trivial initial-values.
-    const Expression* left;
-    const Expression* right;
-    if (context.fConfig->fSettings.fOptimize) {
-        left = GetConstantValueForVariable(leftExpr);
-        right = GetConstantValueForVariable(rightExpr);
-    } else {
-        left = &leftExpr;
-        right = &rightExpr;
-    }
+    // Replace constant variables with their literal values.
+    const Expression* left = GetConstantValueForVariable(leftExpr);
+    const Expression* right = GetConstantValueForVariable(rightExpr);
 
     // If this is the comma operator, the left side is evaluated but not otherwise used in any way.
     // So if the left side has no side effects, it can just be eliminated entirely.
@@ -411,7 +398,7 @@ std::unique_ptr<Expression> ConstantFolder::Simplify(const Context& context,
         return Literal::MakeBool(context, leftExpr.fLine, /*value=*/false);
     }
 
-    if (ErrorOnDivideByZero(context, line, op, *right)) {
+    if (error_on_divide_by_zero(context, line, op, *right)) {
         return nullptr;
     }
 

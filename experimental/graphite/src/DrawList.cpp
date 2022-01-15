@@ -8,8 +8,33 @@
 #include "experimental/graphite/src/DrawList.h"
 
 #include "experimental/graphite/src/Renderer.h"
+#include "include/core/SkShader.h"
+#include "src/gpu/BufferWriter.h"
 
 namespace skgpu {
+
+PaintParams::PaintParams(const SkColor4f& color,
+                         SkBlendMode blendMode,
+                         sk_sp<SkShader> shader)
+        : fColor(color)
+        , fBlendMode(blendMode)
+        , fShader(std::move(shader)) {
+}
+PaintParams::PaintParams(const PaintParams& other)
+        : fColor(other.fColor)
+        , fBlendMode(other.fBlendMode)
+        , fShader(other.fShader) {
+}
+PaintParams::~PaintParams() {}
+
+PaintParams& PaintParams::operator=(const PaintParams& other) {
+    fColor = other.fColor;
+    fBlendMode = other.fBlendMode;
+    fShader = other.fShader;
+    return *this;
+}
+
+sk_sp<SkShader> PaintParams::refShader() const { return fShader; }
 
 const Transform& DrawList::deduplicateTransform(const Transform& localToDevice) {
     // TODO: This is a pretty simple deduplication strategy and doesn't take advantage of the stack
@@ -62,6 +87,25 @@ void DrawList::strokePath(const Transform& localToDevice,
     //                   this->deduplicateTransform(localToDevice),
     //                   shape, clip, ordering, paint, stroke});
     // fRenderStepCount += Renderer::StrokePath().numRenderSteps();
+}
+
+size_t DrawList::Draw::requiredVertexSpace(int renderStep) const {
+    SkASSERT(renderStep < fRenderer.numRenderSteps());
+    return fRenderer.steps()[renderStep]->requiredVertexSpace(fShape);
+}
+
+size_t DrawList::Draw::requiredIndexSpace(int renderStep) const {
+    SkASSERT(renderStep < fRenderer.numRenderSteps());
+    return fRenderer.steps()[renderStep]->requiredIndexSpace(fShape);
+}
+
+void DrawList::Draw::writeVertices(VertexWriter vertexWriter,
+                                   IndexWriter indexWriter,
+                                   int renderStep) const {
+    SkASSERT(renderStep < fRenderer.numRenderSteps());
+    fRenderer.steps()[renderStep]->writeVertices(std::move(vertexWriter),
+                                                 std::move(indexWriter),
+                                                 fShape);
 }
 
 } // namespace skgpu

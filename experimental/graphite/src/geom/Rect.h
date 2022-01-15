@@ -8,7 +8,7 @@
 #ifndef skgpu_geom_Rect_DEFINED
 #define skgpu_geom_Rect_DEFINED
 
-#include "experimental/graphite/include/private/GraphiteTypesPriv.h"
+#include "experimental/graphite/src/geom/VectorTypes.h"
 #include "include/core/SkRect.h"
 
 namespace skgpu {
@@ -48,6 +48,15 @@ public:
     }
     AI static Rect FromVals(float4 vals) {  // vals.zw must already be negated.
         return Rect(vals);
+    }
+
+    // Constructs a Rect with ltrb = [-inf, -inf, inf, inf], useful for accumulating intersections
+    AI static Rect Infinite() {
+        return FromVals(float4{SK_FloatNegativeInfinity});
+    }
+    // Constructs a negative Rect with ltrb = [inf, inf, -inf, -inf], useful for accumulating unions
+    AI static Rect InfiniteInverted() {
+        return FromVals(float4{SK_FloatInfinity});
     }
 
     AI bool operator==(Rect rect) const { return all(fVals == rect.fVals); }

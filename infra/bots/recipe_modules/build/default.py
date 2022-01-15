@@ -263,18 +263,11 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_use_fontconfig'] = 'false'
   if 'ASAN' in extra_tokens:
     args['skia_enable_spirv_validation'] = 'false'
-  if 'V1only' in extra_tokens:
-    args['skia_enable_skgpu_v1'] = 'true'
-    args['skia_enable_skgpu_v2'] = 'false'
-  if 'V1andV2' in extra_tokens:
-    args['skia_enable_skgpu_v1'] = 'true'
-    args['skia_enable_skgpu_v2'] = 'true'
-  if 'V2only' in extra_tokens:
-    args['skia_enable_skgpu_v1'] = 'false'
-    args['skia_enable_skgpu_v2'] = 'true'
   if 'Graphite' in extra_tokens:
     args['skia_enable_graphite'] = 'true'
     args['skia_use_metal'] = 'true'
+    if 'NoGpu' in extra_tokens:
+      args['skia_enable_gpu'] = 'false'
   if 'NoDEPS' in extra_tokens:
     args.update({
       'is_official_build':             'true',
@@ -341,7 +334,7 @@ def compile_fn(api, checkout_root, out_dir):
     'target_os': 'ios' if 'iOS' in extra_tokens else '',
     'win_sdk': win_toolchain + '/win_sdk' if 'Win' in os else '',
     'win_vc': win_toolchain + '/VC' if 'Win' in os else '',
-  }.iteritems():
+  }.items():
     if v:
       args[k] = '"%s"' % v
   if extra_cflags:
@@ -349,7 +342,7 @@ def compile_fn(api, checkout_root, out_dir):
   if extra_ldflags:
     args['extra_ldflags'] = repr(extra_ldflags).replace("'", '"')
 
-  gn_args = ' '.join('%s=%s' % (k,v) for (k,v) in sorted(args.iteritems()))
+  gn_args = ' '.join('%s=%s' % (k,v) for (k,v) in sorted(args.items()))
   gn = skia_dir.join('bin', 'gn')
 
   with api.context(cwd=skia_dir):

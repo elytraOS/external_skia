@@ -7,13 +7,12 @@
 
 #include "src/gpu/tessellate/StrokeHardwareTessellator.h"
 
-#include "src/core/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
 #include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/geometry/GrPathUtils.h"
-#include "src/gpu/tessellate/CullTest.h"
 #include "src/gpu/tessellate/WangsFormula.h"
+#include "src/gpu/tessellate/shaders/GrTessellationShader.h"
 
 #if SK_GPU_V1
 #include "src/gpu/GrOpFlushState.h"
@@ -49,8 +48,6 @@ float2 pow4(float2 x) {
 
 class PatchWriter {
 public:
-    using ShaderFlags = StrokeTessellator::ShaderFlags;
-
     enum class JoinType {
         kMiter = SkPaint::kMiter_Join,
         kRound = SkPaint::kRound_Join,
@@ -58,11 +55,14 @@ public:
         kBowtie = SkPaint::kLast_Join + 1  // Double sided round join.
     };
 
-    PatchWriter(ShaderFlags shaderFlags, GrMeshDrawTarget* target,
-                const SkRect& strokeCullBounds, const SkMatrix& viewMatrix, float matrixMaxScale,
-                GrVertexChunkArray* patchChunks, size_t patchStride, int minPatchesPerChunk)
-            : fShaderFlags(shaderFlags)
-            , fCullTest(strokeCullBounds, viewMatrix)
+    PatchWriter(PatchAttribs attribs,
+                GrMeshDrawTarget* target,
+                const SkMatrix& viewMatrix,
+                float matrixMaxScale,
+                GrVertexChunkArray* patchChunks,
+                size_t patchStride,
+                int minPatchesPerChunk)
+            : fAttribs(attribs)
             , fChunkBuilder(target, patchChunks, patchStride, minPatchesPerChunk)
             // Subtract 2 because the tessellation shader chops every cubic at two locations, and
             // each chop has the potential to introduce an extra segment.
@@ -139,13 +139,13 @@ public:
     }
 
     void updateDynamicStroke(const SkStrokeRec& stroke) {
-        SkASSERT(fShaderFlags & ShaderFlags::kDynamicStroke);
+        SkASSERT(fAttribs & PatchAttribs::kStrokeParams);
         fDynamicStroke.set(stroke);
     }
 
     void updateDynamicColor(const SkPMColor4f& color) {
-        SkASSERT(fShaderFlags & ShaderFlags::kDynamicColor);
-        bool wideColor = fShaderFlags & ShaderFlags::kWideColor;
+        SkASSERT(fAttribs & PatchAttribs::kColor);
+        bool wideColor = fAttribs & PatchAttribs::kWideColorIfEnabled;
         SkASSERT(wideColor || color.fitsInBytes());
         fDynamicColor.set(color, wideColor);
     }
@@ -356,11 +356,6 @@ private:
     // tessellation patches.
     void internalConicPatchesTo(JoinType prevJoinType, const SkPoint p[3], float w,
                                 int maxDepth = -1) {
-        if (!fCullTest.areVisible3(p)) {
-            // The stroke is out of view. Discard it.
-            this->discardStroke(p, 3);
-            return;
-        }
         // Zero-length paths need special treatment because they are spec'd to behave differently.
         // If the control point is colocated on an endpoint then this might end up being the case.
         // Fall back on a lineTo and let it make the final check.
@@ -440,11 +435,6 @@ private:
     // tessellation patches. The cubic must be convex and must not rotate more than 180 degrees.
     void internalCubicConvex180PatchesTo(JoinType prevJoinType, const SkPoint p[4],
                                          int maxDepth = -1) {
-        if (!fCullTest.areVisible4(p)) {
-            // The stroke is out of view. Discard it.
-            this->discardStroke(p, 4);
-            return;
-        }
         // The stroke tessellation shader assigns special meaning to p0==p1==p2 and p1==p2==p3. If
         // this is the case then we need to rewrite the cubic.
         if (p[1] == p[2] && (p[1] == p[0] || p[1] == p[3])) {
@@ -607,12 +597,13 @@ private:
     }
 
     SK_ALWAYS_INLINE void writeDynamicAttribs(VertexWriter* patchWriter) {
-        if (fShaderFlags & ShaderFlags::kDynamicStroke) {
+        if (fAttribs & PatchAttribs::kStrokeParams) {
             *patchWriter << fDynamicStroke;
         }
-        if (fShaderFlags & ShaderFlags::kDynamicColor) {
+        if (fAttribs & PatchAttribs::kColor) {
             *patchWriter << fDynamicColor;
         }
+        SkASSERT(!(fAttribs & PatchAttribs::kExplicitCurveType));
     }
 
     void discardStroke(const SkPoint p[], int numPoints) {
@@ -628,8 +619,7 @@ private:
         fLastControlPoint = p[numPoints - 1];
     }
 
-    const ShaderFlags fShaderFlags;
-    const CullTest fCullTest;
+    const PatchAttribs fAttribs;
     GrVertexChunkBuilder fChunkBuilder;
 
     // The maximum number of tessellation segments the hardware can emit for a single patch.
@@ -667,7 +657,7 @@ private:
     SkPoint fLastControlPoint;
 
     // Values for the current dynamic state (if any) that will get written out with each patch.
-    GrStrokeTessellationShader::DynamicStroke fDynamicStroke;
+    StrokeParams fDynamicStroke;
     GrVertexColor fDynamicColor;
 };
 
@@ -706,32 +696,29 @@ SK_ALWAYS_INLINE bool cubic_has_cusp(const SkPoint p[4]) {
 }  // namespace
 
 
-StrokeHardwareTessellator::StrokeHardwareTessellator(const GrShaderCaps& shaderCaps,
-                                                     ShaderFlags shaderFlags,
-                                                     const SkMatrix& viewMatrix,
-                                                     PathStrokeList* pathStrokeList,
-                                                     std::array<float,2> matrixMinMaxScales,
-                                                     const SkRect& strokeCullBounds)
-        : StrokeTessellator(shaderCaps, GrStrokeTessellationShader::Mode::kHardwareTessellation,
-                            shaderFlags, SkNextLog2(shaderCaps.maxTessellationSegments()),
-                            viewMatrix, pathStrokeList, matrixMinMaxScales, strokeCullBounds) {
-}
-
-void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombinedVerbCnt) {
+int StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target,
+                                       const SkMatrix& shaderMatrix,
+                                       std::array<float,2> matrixMinMaxScales,
+                                       PathStrokeList* pathStrokeList,
+                                       int totalCombinedVerbCnt) {
     using JoinType = PatchWriter::JoinType;
 
     // Over-allocate enough patches for 1 in 4 strokes to chop and for 8 extra caps.
     int strokePreallocCount = totalCombinedVerbCnt * 5/4;
     int capPreallocCount = 8;
     int minPatchesPerChunk = strokePreallocCount + capPreallocCount;
-    PatchWriter patchWriter(fShader.flags(), target, fStrokeCullBounds, fShader.viewMatrix(),
-                            fMatrixMinMaxScales[1], &fPatchChunks, fShader.vertexStride(),
+    PatchWriter patchWriter(fAttribs,
+                            target,
+                            shaderMatrix,
+                            matrixMinMaxScales[1],
+                            &fPatchChunks,
+                            sizeof(SkPoint) * 5 + PatchAttribsStride(fAttribs),
                             minPatchesPerChunk);
 
-    if (!fShader.hasDynamicStroke()) {
+    if (!(fAttribs & PatchAttribs::kStrokeParams)) {
         // Strokes are static. Calculate tolerances once.
-        const SkStrokeRec& stroke = fPathStrokeList->fStroke;
-        float localStrokeWidth = StrokeTolerances::GetLocalStrokeWidth(fMatrixMinMaxScales.data(),
+        const SkStrokeRec& stroke = pathStrokeList->fStroke;
+        float localStrokeWidth = StrokeTolerances::GetLocalStrokeWidth(matrixMinMaxScales.data(),
                                                                        stroke.getWidth());
         float numRadialSegmentsPerRadian = StrokeTolerances::CalcNumRadialSegmentsPerRadian(
                 patchWriter.parametricPrecision(), localStrokeWidth);
@@ -742,15 +729,15 @@ void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombi
     // have dynamic strokes.
     StrokeToleranceBuffer toleranceBuffer(patchWriter.parametricPrecision());
 
-    for (PathStrokeList* pathStroke = fPathStrokeList; pathStroke; pathStroke = pathStroke->fNext) {
+    for (PathStrokeList* pathStroke = pathStrokeList; pathStroke; pathStroke = pathStroke->fNext) {
         const SkStrokeRec& stroke = pathStroke->fStroke;
-        if (fShader.hasDynamicStroke()) {
+        if (fAttribs & PatchAttribs::kStrokeParams) {
             // Strokes are dynamic. Update tolerances with every new stroke.
             patchWriter.updateTolerances(toleranceBuffer.fetchRadialSegmentsPerRadian(pathStroke),
                                          stroke.getJoin());
             patchWriter.updateDynamicStroke(stroke);
         }
-        if (fShader.hasDynamicColor()) {
+        if (fAttribs & PatchAttribs::kColor) {
             patchWriter.updateDynamicColor(pathStroke->fColor);
         }
 
@@ -766,13 +753,13 @@ void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombi
                     // "A subpath ... consisting of a single moveto shall not be stroked."
                     // https://www.w3.org/TR/SVG11/painting.html#StrokeProperties
                     if (!contourIsEmpty) {
-                        patchWriter.writeCaps(p[-1], fShader.viewMatrix(), stroke);
+                        patchWriter.writeCaps(p[-1], shaderMatrix, stroke);
                     }
                     patchWriter.moveTo(p[0]);
                     contourIsEmpty = true;
                     continue;
                 case SkPathVerb::kClose:
-                    patchWriter.writeClose(p[0], fShader.viewMatrix(), stroke);
+                    patchWriter.writeClose(p[0], shaderMatrix, stroke);
                     contourIsEmpty = true;
                     continue;
                 case SkPathVerb::kLine:
@@ -894,9 +881,10 @@ void StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCombi
         }
         if (!contourIsEmpty) {
             const SkPoint* p = SkPathPriv::PointData(path);
-            patchWriter.writeCaps(p[path.countPoints() - 1], fShader.viewMatrix(), stroke);
+            patchWriter.writeCaps(p[path.countPoints() - 1], shaderMatrix, stroke);
         }
     }
+    return 0;
 }
 
 #if SK_GPU_V1

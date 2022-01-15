@@ -23,18 +23,18 @@ GR_NORETAIN_BEGIN
 static uint32_t grsltype_to_alignment_mask(GrSLType type) {
     switch(type) {
         case kInt_GrSLType:
-        case kUint_GrSLType:
+        case kUInt_GrSLType:
         case kFloat_GrSLType:
             return 0x3;
         case kInt2_GrSLType:
-        case kUint2_GrSLType:
+        case kUInt2_GrSLType:
         case kFloat2_GrSLType:
             return 0x7;
         case kInt3_GrSLType:
-        case kUint3_GrSLType:
+        case kUInt3_GrSLType:
         case kFloat3_GrSLType:
         case kInt4_GrSLType:
-        case kUint4_GrSLType:
+        case kUInt4_GrSLType:
         case kFloat4_GrSLType:
             return 0xF;
 
@@ -45,8 +45,6 @@ static uint32_t grsltype_to_alignment_mask(GrSLType type) {
         case kFloat4x4_GrSLType:
             return 0xF;
 
-/*
-        // TODO(skia:12339): Enable these once MetalCodeGenerator supports half-precision types.
         case kShort_GrSLType:
         case kUShort_GrSLType:
         case kHalf_GrSLType:
@@ -69,30 +67,6 @@ static uint32_t grsltype_to_alignment_mask(GrSLType type) {
             return 0x7;
         case kHalf4x4_GrSLType:
             return 0x7;
-*/
-        // TODO(skia:12339): Remove these once MetalCodeGenerator supports half-precision types.
-        case kShort_GrSLType:
-        case kUShort_GrSLType:
-        case kHalf_GrSLType:
-            return 0x3;
-        case kShort2_GrSLType:
-        case kUShort2_GrSLType:
-        case kHalf2_GrSLType:
-            return 0x7;
-        case kShort3_GrSLType:
-        case kShort4_GrSLType:
-        case kUShort3_GrSLType:
-        case kUShort4_GrSLType:
-        case kHalf3_GrSLType:
-        case kHalf4_GrSLType:
-            return 0xF;
-
-        case kHalf2x2_GrSLType:
-            return 0x7;
-        case kHalf3x3_GrSLType:
-            return 0xF;
-        case kHalf4x4_GrSLType:
-            return 0xF;
 
         // This query is only valid for certain types.
         case kVoid_GrSLType:
@@ -115,18 +89,18 @@ static uint32_t grsltype_to_alignment_mask(GrSLType type) {
 static inline uint32_t grsltype_to_mtl_size(GrSLType type) {
     switch(type) {
         case kInt_GrSLType:
-        case kUint_GrSLType:
+        case kUInt_GrSLType:
         case kFloat_GrSLType:
             return 4;
         case kInt2_GrSLType:
-        case kUint2_GrSLType:
+        case kUInt2_GrSLType:
         case kFloat2_GrSLType:
             return 8;
         case kInt3_GrSLType:
-        case kUint3_GrSLType:
+        case kUInt3_GrSLType:
         case kFloat3_GrSLType:
         case kInt4_GrSLType:
-        case kUint4_GrSLType:
+        case kUInt4_GrSLType:
         case kFloat4_GrSLType:
             return 16;
 
@@ -137,8 +111,6 @@ static inline uint32_t grsltype_to_mtl_size(GrSLType type) {
         case kFloat4x4_GrSLType:
             return 64;
 
-/*
-        // TODO(skia:12339): Enable these once MetalCodeGenerator supports half-precision types.
         case kShort_GrSLType:
         case kUShort_GrSLType:
         case kHalf_GrSLType:
@@ -161,30 +133,6 @@ static inline uint32_t grsltype_to_mtl_size(GrSLType type) {
             return 24;
         case kHalf4x4_GrSLType:
             return 32;
-*/
-        // TODO(skia:12339): Remove these once MetalCodeGenerator supports half-precision types.
-        case kShort_GrSLType:
-        case kUShort_GrSLType:
-        case kHalf_GrSLType:
-            return 4;
-        case kShort2_GrSLType:
-        case kUShort2_GrSLType:
-        case kHalf2_GrSLType:
-            return 8;
-        case kShort3_GrSLType:
-        case kShort4_GrSLType:
-        case kUShort3_GrSLType:
-        case kUShort4_GrSLType:
-        case kHalf3_GrSLType:
-        case kHalf4_GrSLType:
-            return 16;
-
-        case kHalf2x2_GrSLType:
-            return 16;
-        case kHalf3x3_GrSLType:
-            return 48;
-        case kHalf4x4_GrSLType:
-            return 64;
 
         // This query is only valid for certain types.
         case kVoid_GrSLType:

@@ -268,6 +268,18 @@ export interface CanvasKit {
     MakeRenderTarget(ctx: GrDirectContext, info: ImageInfo): Surface | null;
 
     /**
+     * Returns a texture-backed image based on the content in src. It assumes the image is
+     * RGBA_8888, unpremul and SRGB. This image can be re-used across multiple surfaces.
+     *
+     * Not available for software-backed surfaces.
+     * @param src - CanvasKit will take ownership of the TextureSource and clean it up when
+     *              the image is destroyed.
+     * @param info - If provided, will be used to determine the width/height/format of the
+     *               source image. If not, sensible defaults will be used.
+     */
+    MakeLazyImageFromTextureSource(src: TextureSource, info?: ImageInfo | PartialImageInfo): Image;
+
+    /**
      * Deletes the associated WebGLContext. Function not available on the CPU version.
      * @param ctx
      */
@@ -2620,14 +2632,18 @@ export interface Surface extends EmbindObject<Surface> {
      * Returns a texture-backed image based on the content in src. It uses RGBA_8888, unpremul
      * and SRGB - for more control, use makeImageFromTexture.
      *
+     * The underlying texture for this image will be created immediately from src, so
+     * it can be disposed of after this call. This image will *only* be usable for this
+     * surface (because WebGL textures are not transferable to other WebGL contexts).
+     * For an image that can be used across multiple surfaces, at the cost of being lazily
+     * loaded, see MakeLazyImageFromTextureSource.
+     *
      * Not available for software-backed surfaces.
      * @param src
-     * @param width - If provided, will be used as the width of src. Otherwise, the natural
-     *                width of src (if available) will be used.
-     * @param height - If provided, will be used as the height of src. Otherwise, the natural
-     *                height of src (if available) will be used.
+     * @param info - If provided, will be used to determine the width/height/format of the
+     *               source image. If not, sensible defaults will be used.
      */
-    makeImageFromTextureSource(src: TextureSource, width?: number, height?: number): Image | null;
+    makeImageFromTextureSource(src: TextureSource, info?: ImageInfo | PartialImageInfo): Image | null;
 
     /**
      * Returns current contents of the surface as an Image. This image will be optimized to be
@@ -3775,6 +3791,7 @@ export type InputFlattenedRSXFormArray = MallocObj | Float32Array | number[];
 export type InputVector3 = MallocObj | Vector3 | Float32Array;
 /**
  * These are the types that webGL's texImage2D supports as a way to get data from as a texture.
+ * Not listed, but also supported are https://developer.mozilla.org/en-US/docs/Web/API/VideoFrame
  */
 export type TextureSource = TypedArray | HTMLImageElement | HTMLVideoElement | ImageData | ImageBitmap;
 

@@ -32,30 +32,22 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
             double negated = -value->as<Literal>().value();
             // Don't simplify the expression if the type can't hold the negated value.
             const Type& type = value->type();
-            if (type.isInteger()) {
-                if (negated < type.minimumValue() || negated > type.maximumValue()) {
-                    context.fErrors->error(originalExpr.fLine,
-                                           String("integer is out of range for type '") +
-                                           type.displayName().c_str() + "': -" +
-                                           to_string(value->as<Literal>().intValue()));
-                    return nullptr;
-                }
+            if (type.checkForOutOfRangeLiteral(context, negated, value->fLine)) {
+                return nullptr;
             }
             return Literal::Make(originalExpr.fLine, negated, &type);
         }
-        case Expression::Kind::kPrefix:
-            if (context.fConfig->fSettings.fOptimize) {
-                // Convert `-(-expression)` into `expression`.
-                const PrefixExpression& prefix = value->as<PrefixExpression>();
-                if (prefix.getOperator().kind() == Token::Kind::TK_MINUS) {
-                    return prefix.operand()->clone();
-                }
+        case Expression::Kind::kPrefix: {
+            // Convert `-(-expression)` into `expression`.
+            const PrefixExpression& prefix = value->as<PrefixExpression>();
+            if (prefix.getOperator().kind() == Token::Kind::TK_MINUS) {
+                return prefix.operand()->clone();
             }
             break;
-
+        }
         case Expression::Kind::kConstructorArray:
             // Convert `-array[N](literal, ...)` into `array[N](-literal, ...)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorArray& ctor = value->as<ConstructorArray>();
                 return ConstructorArray::Make(context, originalExpr.fLine, ctor.type(),
                                               negate_operands(context, ctor.arguments()));
@@ -64,7 +56,7 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
 
         case Expression::Kind::kConstructorDiagonalMatrix:
             // Convert `-matrix(literal)` into `matrix(-literal)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorDiagonalMatrix& ctor = value->as<ConstructorDiagonalMatrix>();
                 if (std::unique_ptr<Expression> simplified = simplify_negation(context,
                                                                                *ctor.argument())) {
@@ -76,7 +68,7 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
 
         case Expression::Kind::kConstructorSplat:
             // Convert `-vector(literal)` into `vector(-literal)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorSplat& ctor = value->as<ConstructorSplat>();
                 if (std::unique_ptr<Expression> simplified = simplify_negation(context,
                                                                                *ctor.argument())) {
@@ -88,7 +80,7 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
 
         case Expression::Kind::kConstructorCompound:
             // Convert `-vecN(literal, ...)` into `vecN(-literal, ...)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorCompound& ctor = value->as<ConstructorCompound>();
                 return ConstructorCompound::Make(context, originalExpr.fLine, ctor.type(),
                                                  negate_operands(context, ctor.arguments()));
@@ -137,16 +129,14 @@ static std::unique_ptr<Expression> logical_not_operand(const Context& context,
             const Literal& b = value->as<Literal>();
             return Literal::MakeBool(operand->fLine, !b.boolValue(), &operand->type());
         }
-        case Expression::Kind::kPrefix:
-            if (context.fConfig->fSettings.fOptimize) {
-                // Convert `!(!expression)` into `expression`.
-                PrefixExpression& prefix = operand->as<PrefixExpression>();
-                if (prefix.getOperator().kind() == Token::Kind::TK_LOGICALNOT) {
-                    return std::move(prefix.operand());
-                }
+        case Expression::Kind::kPrefix: {
+            // Convert `!(!expression)` into `expression`.
+            PrefixExpression& prefix = operand->as<PrefixExpression>();
+            if (prefix.getOperator().kind() == Token::Kind::TK_LOGICALNOT) {
+                return std::move(prefix.operand());
             }
             break;
-
+        }
         default:
             break;
     }

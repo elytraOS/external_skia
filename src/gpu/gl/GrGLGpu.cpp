@@ -19,6 +19,7 @@
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
+#include "src/core/SkScopeExit.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrCpuBuffer.h"
@@ -1196,19 +1197,31 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
     rtIDs->fSingleSampleFBOID = 0;
     rtIDs->fTotalMemorySamplesPerPixel = 0;
 
+    SkScopeExit cleanupOnFail([&] {
+        if (rtIDs->fMSColorRenderbufferID) {
+            GL_CALL(DeleteRenderbuffers(1, &rtIDs->fMSColorRenderbufferID));
+        }
+        if (rtIDs->fMultisampleFBOID != rtIDs->fSingleSampleFBOID) {
+            this->deleteFramebuffer(rtIDs->fMultisampleFBOID);
+        }
+        if (rtIDs->fSingleSampleFBOID) {
+            this->deleteFramebuffer(rtIDs->fSingleSampleFBOID);
+        }
+    });
+
     GrGLenum colorRenderbufferFormat = 0; // suppress warning
 
     if (desc.fFormat == GrGLFormat::kUnknown) {
-        goto FAILED;
+        return false;
     }
 
     if (sampleCount > 1 && GrGLCaps::kNone_MSFBOType == this->glCaps().msFBOType()) {
-        goto FAILED;
+        return false;
     }
 
     GL_CALL(GenFramebuffers(1, &rtIDs->fSingleSampleFBOID));
     if (!rtIDs->fSingleSampleFBOID) {
-        goto FAILED;
+        return false;
     }
 
     // If we are using multisampling we will create two FBOS. We render to one and then resolve to
@@ -1223,14 +1236,20 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
     } else {
         GL_CALL(GenFramebuffers(1, &rtIDs->fMultisampleFBOID));
         if (!rtIDs->fMultisampleFBOID) {
-            goto FAILED;
+            return false;
         }
         GL_CALL(GenRenderbuffers(1, &rtIDs->fMSColorRenderbufferID));
         if (!rtIDs->fMSColorRenderbufferID) {
-            goto FAILED;
+            return false;
         }
         colorRenderbufferFormat = this->glCaps().getRenderbufferInternalFormat(desc.fFormat);
     }
+
+#if defined(__has_feature)
+#define IS_TSAN __has_feature(thread_sanitizer)
+#else
+#define IS_TSAN 0
+#endif
 
     // below here we may bind the FBO
     fHWBoundRenderTargetUniqueID.makeInvalid();
@@ -1239,37 +1258,70 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
         GL_CALL(BindRenderbuffer(GR_GL_RENDERBUFFER, rtIDs->fMSColorRenderbufferID));
         if (!this->renderbufferStorageMSAA(*fGLContext, sampleCount, colorRenderbufferFormat,
                                            desc.fSize.width(), desc.fSize.height())) {
-            goto FAILED;
+            return false;
         }
         this->bindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs->fMultisampleFBOID);
         GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
                                         GR_GL_COLOR_ATTACHMENT0,
                                         GR_GL_RENDERBUFFER,
                                         rtIDs->fMSColorRenderbufferID));
+// See skbug.com/12644
+#if !IS_TSAN
+        if (!this->glCaps().skipErrorChecks()) {
+            GrGLenum status;
+            GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
+            if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
+                return false;
+            }
+            if (this->glCaps().rebindColorAttachmentAfterCheckFramebufferStatus()) {
+                GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                                GR_GL_COLOR_ATTACHMENT0,
+                                                GR_GL_RENDERBUFFER,
+                                                0));
+                GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                                GR_GL_COLOR_ATTACHMENT0,
+                                                GR_GL_RENDERBUFFER,
+                                                rtIDs->fMSColorRenderbufferID));
+            }
+        }
+#endif
         rtIDs->fTotalMemorySamplesPerPixel += sampleCount;
     }
-
     this->bindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs->fSingleSampleFBOID);
     GL_CALL(FramebufferTexture2D(GR_GL_FRAMEBUFFER,
                                  GR_GL_COLOR_ATTACHMENT0,
                                  desc.fTarget,
                                  desc.fID,
                                  0));
+// See skbug.com/12644
+#if !IS_TSAN
+    if (!this->glCaps().skipErrorChecks()) {
+        GrGLenum status;
+        GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
+        if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
+            return false;
+        }
+        if (this->glCaps().rebindColorAttachmentAfterCheckFramebufferStatus()) {
+            GL_CALL(FramebufferTexture2D(GR_GL_FRAMEBUFFER,
+                                         GR_GL_COLOR_ATTACHMENT0,
+                                         desc.fTarget,
+                                         0,
+                                         0));
+            GL_CALL(FramebufferTexture2D(GR_GL_FRAMEBUFFER,
+                                         GR_GL_COLOR_ATTACHMENT0,
+                                         desc.fTarget,
+                                         desc.fID,
+                                         0));
+        }
+    }
+#endif
+
+#undef IS_TSAN
     ++rtIDs->fTotalMemorySamplesPerPixel;
 
+    // We did it!
+    cleanupOnFail.clear();
     return true;
-
-FAILED:
-    if (rtIDs->fMSColorRenderbufferID) {
-        GL_CALL(DeleteRenderbuffers(1, &rtIDs->fMSColorRenderbufferID));
-    }
-    if (rtIDs->fMultisampleFBOID != rtIDs->fSingleSampleFBOID) {
-        this->deleteFramebuffer(rtIDs->fMultisampleFBOID);
-    }
-    if (rtIDs->fSingleSampleFBOID) {
-        this->deleteFramebuffer(rtIDs->fSingleSampleFBOID);
-    }
-    return false;
 }
 
 // good to set a break-point here to know when createTexture fails
@@ -2214,7 +2266,9 @@ void GrGLGpu::flushRenderTargetNoColorWrites(GrGLRenderTarget* target, bool useM
         // lots of repeated command buffer flushes when the compositor is
         // rendering with Ganesh, which is really slow; even too slow for
         // Debug mode.
-        if (!this->glCaps().skipErrorChecks()) {
+        // Also don't do this when we know glCheckFramebufferStatus() may have side effects.
+        if (!this->glCaps().skipErrorChecks() &&
+            !this->glCaps().rebindColorAttachmentAfterCheckFramebufferStatus()) {
             GrGLenum status;
             GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
             if (status != GR_GL_FRAMEBUFFER_COMPLETE) {

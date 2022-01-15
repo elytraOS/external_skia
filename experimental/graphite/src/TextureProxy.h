@@ -30,6 +30,8 @@ public:
     const TextureInfo& textureInfo() const { return fInfo; }
 
     bool instantiate(ResourceProvider*);
+    sk_sp<Texture> refTexture() const;
+    const Texture* texture() const;
 
 private:
 #ifdef SK_DEBUG

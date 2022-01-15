@@ -15,6 +15,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkImageInfoPriv.h"
+#include "include/private/SkMacros.h"
 
 class GrBackendFormat;
 class GrCaps;
@@ -34,14 +35,6 @@ using GrStdSteadyClock = std::chrono::steady_clock;
  */
 
 static inline constexpr size_t GrSizeDivRoundUp(size_t x, size_t y) { return (x + (y - 1)) / y; }
-
-/**
- *  align up to a power of 2
- */
-static inline constexpr size_t GrAlignTo(size_t x, size_t alignment) {
-    SkASSERT(alignment && SkIsPow2(alignment));
-    return (x + alignment - 1) & ~(alignment - 1);
-}
 
 /**
  * Geometric primitives used for drawing.
@@ -330,10 +323,10 @@ enum GrSLType {
     kInt2_GrSLType,
     kInt3_GrSLType,
     kInt4_GrSLType,
-    kUint_GrSLType,
-    kUint2_GrSLType,
-    kUint3_GrSLType,
-    kUint4_GrSLType,
+    kUInt_GrSLType,
+    kUInt2_GrSLType,
+    kUInt3_GrSLType,
+    kUInt4_GrSLType,
     kTexture2DSampler_GrSLType,
     kTextureExternalSampler_GrSLType,
     kTexture2DRectSampler_GrSLType,
@@ -373,7 +366,7 @@ enum GrShaderFlags {
     kTessEvaluation_GrShaderFlag = 1 << 2,
     kFragment_GrShaderFlag       = 1 << 3
 };
-GR_MAKE_BITFIELD_OPS(GrShaderFlags)
+SK_MAKE_BITFIELD_OPS(GrShaderFlags)
 
 /** Is the shading language type float (including vectors/matrices)? */
 static constexpr bool GrSLTypeIsFloatType(GrSLType type) {
@@ -414,10 +407,10 @@ static constexpr bool GrSLTypeIsFloatType(GrSLType type) {
         case kInt2_GrSLType:
         case kInt3_GrSLType:
         case kInt4_GrSLType:
-        case kUint_GrSLType:
-        case kUint2_GrSLType:
-        case kUint3_GrSLType:
-        case kUint4_GrSLType:
+        case kUInt_GrSLType:
+        case kUInt2_GrSLType:
+        case kUInt3_GrSLType:
+        case kUInt4_GrSLType:
         case kTexture2D_GrSLType:
         case kSampler_GrSLType:
         case kInput_GrSLType:
@@ -441,10 +434,10 @@ static constexpr bool GrSLTypeIsIntegralType(GrSLType type) {
         case kInt2_GrSLType:
         case kInt3_GrSLType:
         case kInt4_GrSLType:
-        case kUint_GrSLType:
-        case kUint2_GrSLType:
-        case kUint3_GrSLType:
-        case kUint4_GrSLType:
+        case kUInt_GrSLType:
+        case kUInt2_GrSLType:
+        case kUInt3_GrSLType:
+        case kUInt4_GrSLType:
             return true;
 
         case kFloat_GrSLType:
@@ -494,7 +487,7 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
         case kShort_GrSLType:
         case kUShort_GrSLType:
         case kInt_GrSLType:
-        case kUint_GrSLType:
+        case kUInt_GrSLType:
             return 1;
 
         case kFloat2_GrSLType:
@@ -503,7 +496,7 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
         case kShort2_GrSLType:
         case kUShort2_GrSLType:
         case kInt2_GrSLType:
-        case kUint2_GrSLType:
+        case kUInt2_GrSLType:
             return 2;
 
         case kFloat3_GrSLType:
@@ -512,7 +505,7 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
         case kShort3_GrSLType:
         case kUShort3_GrSLType:
         case kInt3_GrSLType:
-        case kUint3_GrSLType:
+        case kUInt3_GrSLType:
             return 3;
 
         case kFloat4_GrSLType:
@@ -521,7 +514,7 @@ static constexpr int GrSLTypeVecLength(GrSLType type) {
         case kShort4_GrSLType:
         case kUShort4_GrSLType:
         case kInt4_GrSLType:
-        case kUint4_GrSLType:
+        case kUInt4_GrSLType:
             return 4;
 
         case kFloat2x2_GrSLType:
@@ -597,10 +590,10 @@ static constexpr bool GrSLTypeIsCombinedSamplerType(GrSLType type) {
         case kInt2_GrSLType:
         case kInt3_GrSLType:
         case kInt4_GrSLType:
-        case kUint_GrSLType:
-        case kUint2_GrSLType:
-        case kUint3_GrSLType:
-        case kUint4_GrSLType:
+        case kUInt_GrSLType:
+        case kUInt2_GrSLType:
+        case kUInt3_GrSLType:
+        case kUInt4_GrSLType:
         case kBool_GrSLType:
         case kBool2_GrSLType:
         case kBool3_GrSLType:
@@ -658,7 +651,7 @@ enum GrVertexAttribType {
     kUShort2_norm_GrVertexAttribType, // vector of 2 unsigned shorts. 0 -> 0.0f, 65535 -> 1.0f.
 
     kInt_GrVertexAttribType,
-    kUint_GrVertexAttribType,
+    kUInt_GrVertexAttribType,
 
     kUShort_norm_GrVertexAttribType,
 

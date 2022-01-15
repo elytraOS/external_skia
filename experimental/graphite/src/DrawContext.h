@@ -13,12 +13,14 @@
 
 #include "experimental/graphite/src/DrawList.h"
 #include "experimental/graphite/src/DrawOrder.h"
+#include "experimental/graphite/src/DrawTypes.h"
 
 #include <vector>
 
 namespace skgpu {
 
 class BoundsManager;
+class Recorder;
 class Shape;
 class Transform;
 
@@ -40,11 +42,14 @@ public:
     ~DrawContext() override;
 
     const SkImageInfo&  imageInfo() const { return fImageInfo;    }
+    TextureProxy* target()                { return fTarget.get(); }
     const TextureProxy* target()    const { return fTarget.get(); }
 
     int pendingDrawCount() const { return fPendingDraws->drawCount(); }
 
     // TODO: need color/depth clearing functions (so DCL will probably need those too)
+
+    void clear(const SkColor4f& clearColor);
 
     void stencilAndFillPath(const Transform& localToDevice,
                             const Shape& shape,
@@ -74,7 +79,7 @@ public:
     // DrawPass.
     // TBD - should this also return the task so the caller can point to it with its own
     // dependencies? Or will that be mostly automatic based on draws and proxy refs?
-    void snapDrawPass(const BoundsManager* occlusionCuller);
+    void snapDrawPass(Recorder*, const BoundsManager* occlusionCuller);
 
     // TBD: snapRenderPassTask() might not need to be public, and could be spec'ed to require that
     // snapDrawPass() must have been called first. A lot of it will depend on how the task graph is
@@ -85,7 +90,7 @@ public:
     // caller is responsible for configuring the returned Tasks's dependencies.
     //
     // Returns null if there are no pending commands or draw passes to move into a task.
-    sk_sp<Task> snapRenderPassTask(const BoundsManager* occlusionCuller);
+    sk_sp<Task> snapRenderPassTask(Recorder*, const BoundsManager* occlusionCuller);
 
 private:
     DrawContext(sk_sp<TextureProxy>, const SkImageInfo&);
@@ -96,6 +101,10 @@ private:
     // Stores the most immediately recorded draws into the SDC's surface. This list is mutable and
     // can be appended to, or have its commands rewritten if they are inlined into a parent SDC.
     std::unique_ptr<DrawList> fPendingDraws;
+    // Load and store information for the current pending draws.
+    LoadOp fPendingLoadOp = LoadOp::kLoad;
+    StoreOp fPendingStoreOp = StoreOp::kStore;
+    std::array<float, 4> fPendingClearColor = { 0, 0, 0, 0 };
 
     // Stores previously snapped DrawPasses of this SDC, or inlined child SDCs whose content
     // couldn't have been copied directly to fPendingDraws. While each DrawPass is immutable, the
