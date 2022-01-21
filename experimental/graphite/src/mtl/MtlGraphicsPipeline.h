@@ -24,26 +24,32 @@ class Gpu;
 
 class GraphicsPipeline final : public skgpu::GraphicsPipeline {
 public:
-    inline static constexpr unsigned int kUniformBufferIndex = 0;
-    inline static constexpr unsigned int kVertexBufferIndex = 1;
-    inline static constexpr unsigned int kInstanceBufferIndex = 2;
+    inline static constexpr unsigned int kIntrinsicUniformBufferIndex = 0;
+    inline static constexpr unsigned int kRenderStepUniformBufferIndex = 1;
+    inline static constexpr unsigned int kPaintUniformBufferIndex = 2;
+    inline static constexpr unsigned int kVertexBufferIndex = 3;
+    inline static constexpr unsigned int kInstanceBufferIndex = 4;
 
     static sk_sp<GraphicsPipeline> Make(const Gpu*, const skgpu::GraphicsPipelineDesc&);
     ~GraphicsPipeline() override {}
 
     id<MTLRenderPipelineState> mtlPipelineState() const { return fPipelineState.get(); }
+    id<MTLDepthStencilState> mtlDepthStencilState() const { return fDepthStencilState; }
     size_t vertexStride() const { return fVertexStride; }
     size_t instanceStride() const { return fInstanceStride; }
 
 private:
     GraphicsPipeline(sk_cfp<id<MTLRenderPipelineState>> pso,
+                     id<MTLDepthStencilState> dss,
                      size_t vertexStride,
                      size_t instanceStride)
         : fPipelineState(std::move(pso))
+        , fDepthStencilState(dss)
         , fVertexStride(vertexStride)
         , fInstanceStride(instanceStride) {}
 
     sk_cfp<id<MTLRenderPipelineState>> fPipelineState;
+    id<MTLDepthStencilState> fDepthStencilState;
     size_t fVertexStride = 0;
     size_t fInstanceStride = 0;
 };

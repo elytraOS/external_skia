@@ -16,6 +16,7 @@
 
 namespace skgpu {
 
+class BackendTexture;
 class Buffer;
 class Gpu;
 class GraphicsPipeline;
@@ -31,6 +32,7 @@ public:
     sk_sp<GraphicsPipeline> findOrCreateGraphicsPipeline(const GraphicsPipelineDesc&);
 
     sk_sp<Texture> findOrCreateTexture(SkISize, const TextureInfo&);
+    virtual sk_sp<Texture> createWrappedTexture(const BackendTexture&) = 0;
 
     sk_sp<Buffer> findOrCreateBuffer(size_t size, BufferType type, PrioritizeGpuReads);
 
@@ -55,13 +57,9 @@ private:
     private:
         struct Entry;
 
-        struct DescHash {
-            uint32_t operator()(const GraphicsPipelineDesc& desc) const {
-                return SkOpts::hash_fn(desc.asKey(), desc.keyLength(), 0);
-            }
-        };
-
-        SkLRUCache<const GraphicsPipelineDesc, std::unique_ptr<Entry>, DescHash> fMap;
+        SkLRUCache<const GraphicsPipelineDesc,
+                   std::unique_ptr<Entry>,
+                   GraphicsPipelineDesc::Hash> fMap;
 
         ResourceProvider* fResourceProvider;
     };

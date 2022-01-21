@@ -498,7 +498,7 @@ void SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memor
             }
         }
         this->writeInstruction(SpvOpMemberName, resultId, i, field.fName, fNameBuffer);
-        this->writeLayout(fieldLayout, resultId, i);
+        this->writeFieldLayout(fieldLayout, resultId, i);
         if (field.fModifiers.fLayout.fBuiltin < 0) {
             this->writeInstruction(SpvOpMemberDecorate, resultId, (SpvId) i, SpvDecorationOffset,
                                    (SpvId) offset, fDecorationBuffer);
@@ -2950,22 +2950,31 @@ SpvId SPIRVCodeGenerator::writeFunction(const FunctionDefinition& f, OutputStrea
     return result;
 }
 
-void SPIRVCodeGenerator::writeLayout(const Layout& layout, SpvId target) {
+void SPIRVCodeGenerator::writeLayout(const Layout& layout, SpvId target, int line) {
+    bool isPushConstant = (layout.fFlags & Layout::kPushConstant_Flag);
     if (layout.fLocation >= 0) {
         this->writeInstruction(SpvOpDecorate, target, SpvDecorationLocation, layout.fLocation,
                                fDecorationBuffer);
     }
     if (layout.fBinding >= 0) {
-        this->writeInstruction(SpvOpDecorate, target, SpvDecorationBinding, layout.fBinding,
-                               fDecorationBuffer);
+        if (isPushConstant) {
+            fContext.fErrors->error(line, "Can't apply 'binding' to push constants");
+        } else {
+            this->writeInstruction(SpvOpDecorate, target, SpvDecorationBinding, layout.fBinding,
+                                   fDecorationBuffer);
+        }
     }
     if (layout.fIndex >= 0) {
         this->writeInstruction(SpvOpDecorate, target, SpvDecorationIndex, layout.fIndex,
                                fDecorationBuffer);
     }
     if (layout.fSet >= 0) {
-        this->writeInstruction(SpvOpDecorate, target, SpvDecorationDescriptorSet, layout.fSet,
-                               fDecorationBuffer);
+        if (isPushConstant) {
+            fContext.fErrors->error(line, "Can't apply 'set' to push constants");
+        } else {
+            this->writeInstruction(SpvOpDecorate, target, SpvDecorationDescriptorSet, layout.fSet,
+                                   fDecorationBuffer);
+        }
     }
     if (layout.fInputAttachmentIndex >= 0) {
         this->writeInstruction(SpvOpDecorate, target, SpvDecorationInputAttachmentIndex,
@@ -2978,22 +2987,17 @@ void SPIRVCodeGenerator::writeLayout(const Layout& layout, SpvId target) {
     }
 }
 
-void SPIRVCodeGenerator::writeLayout(const Layout& layout, SpvId target, int member) {
+void SPIRVCodeGenerator::writeFieldLayout(const Layout& layout, SpvId target, int member) {
+    // 'binding' and 'set' can not be applied to struct members
+    SkASSERT(layout.fBinding == -1);
+    SkASSERT(layout.fSet == -1);
     if (layout.fLocation >= 0) {
         this->writeInstruction(SpvOpMemberDecorate, target, member, SpvDecorationLocation,
                                layout.fLocation, fDecorationBuffer);
     }
-    if (layout.fBinding >= 0) {
-        this->writeInstruction(SpvOpMemberDecorate, target, member, SpvDecorationBinding,
-                               layout.fBinding, fDecorationBuffer);
-    }
     if (layout.fIndex >= 0) {
         this->writeInstruction(SpvOpMemberDecorate, target, member, SpvDecorationIndex,
                                layout.fIndex, fDecorationBuffer);
-    }
-    if (layout.fSet >= 0) {
-        this->writeInstruction(SpvOpMemberDecorate, target, member, SpvDecorationDescriptorSet,
-                               layout.fSet, fDecorationBuffer);
     }
     if (layout.fInputAttachmentIndex >= 0) {
         this->writeInstruction(SpvOpDecorate, target, member, SpvDecorationInputAttachmentIndex,
@@ -3039,8 +3043,9 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
                             fContext.fTypes.fFloat2.get());
         {
             AutoAttachPoolToThread attach(fProgram.fPool.get());
-            const Type* rtFlipStructType = fProgram.fSymbols->takeOwnershipOfSymbol(
-                    Type::MakeStructType(type.fLine, type.name(), std::move(fields)));
+            const Type* rtFlipStructType =
+                    fProgram.fSymbols->takeOwnershipOfSymbol(Type::MakeStructType(
+                            type.fLine, type.name(), std::move(fields), /*interfaceBlock=*/true));
             const Variable* modifiedVar = fProgram.fSymbols->takeOwnershipOfSymbol(
                     std::make_unique<Variable>(intfVar.fLine,
                                                &intfVar.modifiers(),
@@ -3072,10 +3077,10 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
     this->writeInstruction(SpvOpTypePointer, ptrType, storageClass, typeId, fConstantBuffer);
     this->writeInstruction(SpvOpVariable, ptrType, result, storageClass, fConstantBuffer);
     Layout layout = intfModifiers.fLayout;
-    if (intfModifiers.fFlags & Modifiers::kUniform_Flag && layout.fSet == -1) {
-        layout.fSet = 0;
+    if (storageClass == SpvStorageClassUniform && layout.fSet < 0) {
+        layout.fSet = fProgram.fConfig->fSettings.fDefaultUniformSet;
     }
-    this->writeLayout(layout, result);
+    this->writeLayout(layout, result, intfVar.fLine);
     fVariableMap[&intfVar] = result;
     return result;
 }
@@ -3132,7 +3137,7 @@ void SPIRVCodeGenerator::writeGlobalVar(ProgramKind kind, const VarDeclaration& 
         this->writeInstruction(SpvOpStore, id, value, fGlobalInitializersBuffer);
         fCurrentBlock = 0;
     }
-    this->writeLayout(layout, id);
+    this->writeLayout(layout, id, var.fLine);
     if (var.modifiers().fFlags & Modifiers::kFlat_Flag) {
         this->writeInstruction(SpvOpDecorate, id, SpvDecorationFlat, fDecorationBuffer);
     }
@@ -3439,8 +3444,8 @@ void SPIRVCodeGenerator::writeUniformBuffer(std::shared_ptr<SymbolTable> topLeve
         fTopLevelUniformMap[var] = (int)fields.size();
         fields.emplace_back(var->modifiers(), var->name(), &var->type());
     }
-    fUniformBuffer.fStruct = Type::MakeStructType(/*line=*/-1, kUniformBufferName,
-                                                 std::move(fields));
+    fUniformBuffer.fStruct = Type::MakeStructType(
+            /*line=*/-1, kUniformBufferName, std::move(fields), /*interfaceBlock=*/true);
 
     // Create a global variable to contain this struct.
     Layout layout;
@@ -3484,17 +3489,20 @@ void SPIRVCodeGenerator::addRTFlipUniform(int line) {
                         SKSL_RTFLIP_NAME,
                         fContext.fTypes.fFloat2.get());
     skstd::string_view name = "sksl_synthetic_uniforms";
-    const Type* intfStruct =
-            fSynthetics.takeOwnershipOfSymbol(Type::MakeStructType(/*line=*/-1, name, fields));
-    int binding = fProgram.fConfig->fSettings.fRTFlipBinding;
-    if (binding == -1) {
-        fContext.fErrors->error(line, "layout(binding=...) is required in SPIR-V");
-    }
-    int set = fProgram.fConfig->fSettings.fRTFlipSet;
-    if (set == -1) {
-        fContext.fErrors->error(line, "layout(set=...) is required in SPIR-V");
-    }
+    const Type* intfStruct = fSynthetics.takeOwnershipOfSymbol(
+            Type::MakeStructType(/*line=*/-1, name, fields, /*interfaceBlock=*/true));
     bool usePushConstants = fProgram.fConfig->fSettings.fUsePushConstants;
+    int binding = -1, set = -1;
+    if (!usePushConstants) {
+        binding = fProgram.fConfig->fSettings.fRTFlipBinding;
+        if (binding == -1) {
+            fContext.fErrors->error(line, "layout(binding=...) is required in SPIR-V");
+        }
+        set = fProgram.fConfig->fSettings.fRTFlipSet;
+        if (set == -1) {
+            fContext.fErrors->error(line, "layout(set=...) is required in SPIR-V");
+        }
+    }
     int flags = usePushConstants ? Layout::Flag::kPushConstant_Flag : 0;
     const Modifiers* modsPtr;
     {

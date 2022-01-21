@@ -33,6 +33,9 @@
 #include "src/image/SkImage_Base.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 #include "src/utils/SkPatchUtils.h"
+#if SK_SUPPORT_GPU
+#include "include/private/chromium/GrSlug.h"
+#endif
 
 SkBaseDevice::SkBaseDevice(const SkImageInfo& info, const SkSurfaceProps& surfaceProps)
         : SkMatrixProvider(/* localToDevice = */ SkMatrix::I())
@@ -159,12 +162,13 @@ void SkBaseDevice::drawDRRect(const SkRRect& outer,
 }
 
 void SkBaseDevice::drawPatch(const SkPoint cubics[12], const SkColor colors[4],
-                             const SkPoint texCoords[4], SkBlendMode bmode, const SkPaint& paint) {
+                             const SkPoint texCoords[4], sk_sp<SkBlender> blender,
+                             const SkPaint& paint) {
     SkISize lod = SkPatchUtils::GetLevelOfDetail(cubics, &this->localToDevice());
     auto vertices = SkPatchUtils::MakeVertices(cubics, colors, texCoords, lod.width(), lod.height(),
                                                this->imageInfo().colorSpace());
     if (vertices) {
-        this->drawVertices(vertices.get(), bmode, paint);
+        this->drawVertices(vertices.get(), std::move(blender), paint);
     }
 }
 
@@ -212,7 +216,7 @@ void SkBaseDevice::drawAtlas(const SkRSXform xform[],
                              const SkRect tex[],
                              const SkColor colors[],
                              int quadCount,
-                             SkBlendMode mode,
+                             sk_sp<SkBlender> blender,
                              const SkPaint& paint) {
     const int triCount = quadCount << 1;
     const int vertexCount = triCount * 3;
@@ -238,7 +242,7 @@ void SkBaseDevice::drawAtlas(const SkRSXform xform[],
             vCol += 6;
         }
     }
-    this->drawVertices(builder.detach().get(), mode, paint);
+    this->drawVertices(builder.detach().get(), std::move(blender), paint);
 }
 
 void SkBaseDevice::drawEdgeAAQuad(const SkRect& r, const SkPoint clip[4], SkCanvas::QuadAAFlags aa,
@@ -487,6 +491,18 @@ void SkBaseDevice::simplifyGlyphRunRSXFormAndRedraw(const SkGlyphRunList& glyphR
         }
     }
 }
+
+#if SK_SUPPORT_GPU
+sk_sp<GrSlug> SkBaseDevice::convertGlyphRunListToSlug(
+        const SkGlyphRunList& glyphRunList,
+        const SkPaint& paint) const {
+    return nullptr;
+}
+
+void SkBaseDevice::drawSlug(GrSlug* slug) {
+    SK_ABORT("GrSlug drawing not supported.");
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////
 

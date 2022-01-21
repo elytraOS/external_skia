@@ -28,6 +28,7 @@
 class GrRecordingContext;
 class SkFilterColorProgram;
 class SkImage;
+class SkRuntimeImageFilter;
 
 namespace SkSL {
 class FunctionDefinition;
@@ -380,7 +381,11 @@ protected:
     SkRuntimeEffectBuilder() = delete;
     explicit SkRuntimeEffectBuilder(sk_sp<SkRuntimeEffect> effect)
             : fEffect(std::move(effect))
-            , fUniforms(SkData::MakeUninitialized(fEffect->uniformSize()))
+            , fUniforms(SkData::MakeZeroInitialized(fEffect->uniformSize()))
+            , fChildren(fEffect->children().size()) {}
+    explicit SkRuntimeEffectBuilder(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> uniforms)
+            : fEffect(std::move(effect))
+            , fUniforms(std::move(uniforms))
             , fChildren(fEffect->children().size()) {}
 
     SkRuntimeEffectBuilder(SkRuntimeEffectBuilder&&) = default;
@@ -442,6 +447,11 @@ public:
 
 private:
     using INHERITED = SkRuntimeEffectBuilder;
+
+    explicit SkRuntimeShaderBuilder(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> uniforms)
+            : INHERITED(std::move(effect), std::move(uniforms)) {}
+
+    friend class SkRuntimeImageFilter;
 };
 
 /**

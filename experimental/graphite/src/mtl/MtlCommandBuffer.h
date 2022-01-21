@@ -50,14 +50,24 @@ public:
 private:
     CommandBuffer(sk_cfp<id<MTLCommandBuffer>> cmdBuffer, const Gpu* gpu);
 
-    void onBeginRenderPass(const RenderPassDesc&) override;
+    void onBeginRenderPass(const RenderPassDesc&,
+                           const skgpu::Texture* colorTexture,
+                           const skgpu::Texture* resolveTexture,
+                           const skgpu::Texture* depthStencilTexture) override;
     void endRenderPass() override;
 
     void onBindGraphicsPipeline(const skgpu::GraphicsPipeline*) override;
-    void onBindUniformBuffer(const skgpu::Buffer*, size_t offset) override;
+    void onBindUniformBuffer(UniformSlot, const skgpu::Buffer*, size_t offset) override;
     void onBindVertexBuffers(const skgpu::Buffer* vertexBuffer, size_t vertexOffset,
                              const skgpu::Buffer* instanceBuffer, size_t instanceOffset) override;
     void onBindIndexBuffer(const skgpu::Buffer* indexBuffer, size_t offset) override;
+
+    void onSetScissor(unsigned int left, unsigned int top,
+                      unsigned int width, unsigned int height) override;
+    void onSetViewport(float x, float y, float width, float height,
+                       float minDepth, float maxDepth) override;
+    void onSetStencilReference(unsigned int referenceValue) override;
+    void onSetBlendConstants(std::array<float, 4> blendConstants) override;
 
     void onDraw(PrimitiveType type, unsigned int baseVertex, unsigned int vertexCount) override;
     void onDrawIndexed(PrimitiveType type, unsigned int baseIndex, unsigned int indexCount,

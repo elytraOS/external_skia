@@ -5,36 +5,32 @@
  * found in the LICENSE file.
  */
 
-#include "experimental/graphite/src/Recorder.h"
+#include "experimental/graphite/include/Recorder.h"
 
 #include "experimental/graphite/include/Context.h"
+#include "experimental/graphite/include/Recording.h"
+#include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
 #include "experimental/graphite/src/ContextPriv.h"
 #include "experimental/graphite/src/DrawBufferManager.h"
 #include "experimental/graphite/src/Gpu.h"
-#include "experimental/graphite/src/ProgramCache.h"
-#include "experimental/graphite/src/Recording.h"
 #include "experimental/graphite/src/ResourceProvider.h"
 #include "experimental/graphite/src/UniformCache.h"
 
 namespace skgpu {
 
 Recorder::Recorder(sk_sp<Context> context)
-    : fContext(std::move(context))
-    , fProgramCache(new ProgramCache)
-    , fUniformCache(new UniformCache)
-    // TODO: Is '4' the correct initial alignment?
-    , fDrawBufferManager(new DrawBufferManager(fContext->priv().gpu()->resourceProvider(), 4)) {
+        : fContext(std::move(context))
+        , fUniformCache(new UniformCache)
+        , fDrawBufferManager(new DrawBufferManager(
+                fContext->priv().gpu()->resourceProvider(),
+                fContext->priv().gpu()->caps()->requiredUniformBufferAlignment())) {
 }
 
 Recorder::~Recorder() {}
 
 Context* Recorder::context() const {
     return fContext.get();
-}
-
-ProgramCache* Recorder::programCache() {
-    return fProgramCache.get();
 }
 
 UniformCache* Recorder::uniformCache() {

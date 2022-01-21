@@ -84,7 +84,9 @@ public:
 
     virtual void fillVertexData(
             void* vertexDst, int offset, int count,
-            GrColor color, const SkMatrix& positionMatrix,
+            GrColor color,
+            const SkMatrix& drawMatrix,
+            SkPoint drawOrigin,
             SkIRect clip) const = 0;
 
     virtual void testingOnly_packedGlyphIDToGrGlyph(GrStrikeCache* cache) = 0;
@@ -93,6 +95,18 @@ public:
     // is single threaded.
     virtual std::tuple<bool, int> regenerateAtlas(
             int begin, int end, GrMeshDrawTarget* target) const = 0;
+};
+
+class GrDrawableSubRun {
+public:
+    virtual ~GrDrawableSubRun() = default;
+
+    // Produce GPU ops for this subRun.
+    virtual void draw(const GrClip*,
+                      const SkMatrixProvider& viewMatrix,
+                      SkPoint drawOrigin,
+                      const SkPaint&,
+                      skgpu::v1::SurfaceDrawContext*) const = 0;
 };
 
 // -- GrSubRun -------------------------------------------------------------------------------------
@@ -105,20 +119,11 @@ public:
 //   * SDFTSubRun - use signed distance fields to draw largish glyphs to the screen.
 class GrSubRun;
 using GrSubRunOwner = std::unique_ptr<GrSubRun, GrSubRunAllocator::Destroyer>;
-class GrSubRun {
+class GrSubRun : public GrDrawableSubRun {
 public:
-    virtual ~GrSubRun() = default;
-
-    // Produce GPU ops for this subRun.
-    virtual void draw(const GrClip*,
-                      const SkMatrixProvider& viewMatrix,
-                      const SkGlyphRunList&,
-                      const SkPaint&,
-                      skgpu::v1::SurfaceDrawContext*) const = 0;
-
     // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
     // position.
-    virtual bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const = 0;
+    virtual bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const = 0;
 
     // Return the underlying atlas SubRun if it exists. Otherwise, return nullptr.
     // * Don't use this API. It is only to support testing.
@@ -201,7 +206,7 @@ public:
         SkPixelGeometry fPixelGeometry;
         SkMaskFilterBase::BlurRec fBlurRec;
         uint32_t fScalerContextFlags;
-        SkMatrix fDrawMatrix;
+        SkMatrix fPositionMatrix;
         // Below here fields are of size 1 byte.
         uint8_t fSetOfDrawingTypes;
         bool fHasBlur;
@@ -216,7 +221,7 @@ public:
     // Make a GrTextBlob and its sub runs.
     static sk_sp<GrTextBlob> Make(const SkGlyphRunList& glyphRunList,
                                   const SkPaint& paint,
-                                  const SkMatrix& drawMatrix,
+                                  const SkMatrix& positionMatrix,
                                   const GrSDFTControl& control,
                                   SkGlyphRunListPainter* painter);
 
@@ -232,10 +237,10 @@ public:
 
     void addKey(const Key& key);
     bool hasPerspective() const;
-    const SkMatrix& initialMatrix() const { return fInitialMatrix; }
+    const SkMatrix& initialPositionMatrix() const { return fInitialPositionMatrix; }
 
     std::tuple<SkScalar, SkScalar> scaleBounds() const { return {fMaxMinScale, fMinMaxScale}; }
-    bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const;
+    bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const;
 
     const Key& key() const;
     size_t size() const;
@@ -243,7 +248,7 @@ public:
     const GrSubRunList& subRunList() const { return fSubRunList; }
 
 private:
-    GrTextBlob(int allocSize, const SkMatrix& drawMatrix, SkColor initialLuminance);
+    GrTextBlob(int allocSize, const SkMatrix& positionMatrix, SkColor initialLuminance);
 
     template<typename AddSingleMaskFormat>
     void addMultiMaskFormat(
@@ -280,7 +285,7 @@ private:
 
     // The initial view matrix combined with the initial origin. Used to determine if a cached
     // subRun can be used in this draw situation.
-    const SkMatrix fInitialMatrix;
+    const SkMatrix fInitialPositionMatrix;
 
     const SkColor fInitialLuminance;
 

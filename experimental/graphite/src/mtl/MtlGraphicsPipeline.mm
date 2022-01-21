@@ -7,135 +7,179 @@
 
 #include "experimental/graphite/src/mtl/MtlGraphicsPipeline.h"
 
+#include "experimental/graphite/include/TextureInfo.h"
 #include "experimental/graphite/src/GraphicsPipelineDesc.h"
+#include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/mtl/MtlGpu.h"
+#include "experimental/graphite/src/mtl/MtlResourceProvider.h"
 #include "experimental/graphite/src/mtl/MtlUtils.h"
+#include "include/core/SkSpan.h"
 #include "include/private/SkSLString.h"
 
 namespace skgpu::mtl {
 
-static const char* kTestingOnlyShaders[] = {
-    // clear viewport to blue
-    "#include <metal_stdlib>\n"
-    "#include <simd/simd.h>\n"
-    "using namespace metal;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float4 position [[position]];\n"
-    "} VertexOutput;\n"
-    "\n"
-    "vertex VertexOutput vertexMain(uint vertexID [[vertex_id]]) {\n"
-    "    VertexOutput out;\n"
-    "    float2 position = float2(float(vertexID >> 1), float(vertexID & 1));\n"
-    "    out.position.xy = position * 2 - 1;\n"
-    "    out.position.zw = float2(0.0, 1.0);\n"
-    "    return out;\n"
-    "}\n"
-    "\n"
-    "fragment float4 fragmentMain(VertexOutput in [[stage_in]]) {\n"
-    "    return float4(0.0, 0.0, 1.0, 1.0);\n"
-    "}",
+namespace {
 
-    // clear subarea to given color, using uniform buffer
-    "#include <metal_stdlib>\n"
-    "#include <simd/simd.h>\n"
-    "using namespace metal;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float4 position [[position]];\n"
-    "} VertexOutput;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float4 uPosXform;\n"
-    "    float4 uColor;\n"
-    "} UniformData;\n"
-    "\n"
-    "vertex VertexOutput vertexMain(constant UniformData& uniforms [[buffer(0)]],\n"
-    "                               uint vertexID [[vertex_id]]) {\n"
-    "    VertexOutput out;\n"
-    "    float2 position = float2(float(vertexID >> 1), float(vertexID & 1));\n"
-    "    out.position.xy = position * uniforms.uPosXform.xy + uniforms.uPosXform.zw;\n"
-    "    out.position.zw = float2(0.0, 1.0);\n"
-    "    return out;\n"
-    "}\n"
-    "\n"
-    "fragment float4 fragmentMain(constant UniformData& uniforms [[buffer(0)]],\n"
-    "                             VertexOutput in [[stage_in]]) {\n"
-    "    return uniforms.uColor;\n"
-    "}",
+SkSL::String emit_MSL_uniform_struct(const char* structName, SkSpan<const Uniform> uniforms) {
+    SkSL::String result;
 
-    // draw triangles with given color, using uniform buffer and vertex data
-    "#include <metal_stdlib>\n"
-    "#include <simd/simd.h>\n"
-    "using namespace metal;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float2 position [[attribute(0)]];\n"
-    "} VertexInput;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float4 position [[position]];\n"
-    "} VertexOutput;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float4 uPosXform;\n"
-    "    float4 uColor;\n"
-    "} UniformData;\n"
-    "\n"
-    "vertex VertexOutput vertexMain(VertexInput in [[stage_in]],\n"
-    "                               constant UniformData& uniforms [[buffer(0)]],\n"
-    "                               uint vertexID [[vertex_id]]) {\n"
-    "    VertexOutput out;\n"
-    "    float2 position = in.position;\n"
-    "    out.position.xy = position * uniforms.uPosXform.xy + uniforms.uPosXform.zw;\n"
-    "    out.position.zw = float2(0.0, 1.0);\n"
-    "    return out;\n"
-    "}\n"
-    "\n"
-    "fragment float4 fragmentMain(constant UniformData& uniforms [[buffer(0)]],\n"
-    "                             VertexOutput in [[stage_in]]) {\n"
-    "    return uniforms.uColor;\n"
-    "}",
+    result.appendf("struct %s {\n", structName);
+    for (auto u : uniforms) {
+        // TODO: this is sufficient for the sprint but should be changed to use SkSL's
+        // machinery
+        result.append("    ");
+        switch (u.type()) {
+            case SLType::kFloat4:
+                result.append("float4");
+                break;
+            case SLType::kFloat2:
+                result.append("float2");
+                break;
+            case SLType::kFloat:
+                result.append("float");
+                break;
+            case SLType::kFloat4x4:
+                result.append("float4x4");
+                break;
+            case SLType::kHalf4:
+                result.append("half4");
+                break;
+            default:
+                SkASSERT(0);
+        }
 
-    // draw triangles with vertex ID and instance buffer
-    "#include <metal_stdlib>\n"
-    "#include <simd/simd.h>\n"
-    "using namespace metal;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float2 position [[attribute(0)]];\n"
-    "    float2 dims [[attribute(1)]];\n"
-    "    float4 color [[attribute(2)]];\n"
-    "} InstanceInput;\n"
-    "\n"
-    "typedef struct {\n"
-    "    float4 position [[position]];\n"
-    "    float4 color;\n"
-    "} VertexOutput;\n"
-    "\n"
-    "vertex VertexOutput vertexMain(InstanceInput in [[stage_in]],\n"
-    "                               uint vertexID [[vertex_id]]) {\n"
-    "    VertexOutput out;\n"
-    "    float2 position = float2(float(vertexID >> 1), float(vertexID & 1));\n"
-    "    out.position.xy = position * in.dims + in.position;\n"
-    "    out.position.zw = float2(0.0, 1.0);\n"
-    "    out.color = in.color;"
-    "    return out;\n"
-    "}\n"
-    "\n"
-    "fragment float4 fragmentMain(VertexOutput in [[stage_in]]) {\n"
-    "    return in.color;\n"
-    "}",
-};
+        result.append(" ");
+        result.append(u.name());
+        if (u.count()) {
+            result.append("[");
+            result.append(std::to_string(u.count()));
+            result.append("]");
+        }
+        result.append(";\n");
+    }
+    result.append("};\n\n");
+    return result;
+}
 
-static constexpr NSString* kTestingOnlyShaderLabels[]  = {
-    @"Clear viewport to blue",
-    @"Clear rect with uniforms",
-    @"Draw triangles with uniform color",
-    @"Draw triangles with instance buffer"
-};
+SkSL::String emit_MSL_vertex_struct(const char* structName,
+                                    SkSpan<const Attribute> vertexAttrs,
+                                    SkSpan<const Attribute> instanceAttrs) {
+    SkSL::String result;
 
-static inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type) {
+    int attr = 0;
+    auto add_attrs = [&](SkSpan<const Attribute> attrs) {
+        for (auto a : attrs) {
+            // TODO: this is sufficient for the sprint but should be changed to use SkSL's
+            // machinery
+            result.append("    ");
+            switch (a.gpuType()) {
+                case SLType::kFloat4:
+                    result.append("float4");
+                    break;
+                case SLType::kFloat2:
+                    result.append("float2");
+                    break;
+                case SLType::kFloat:
+                    result.append("float");
+                    break;
+                case SLType::kHalf4:
+                    result.append("half4");
+                    break;
+                default:
+                    SkASSERT(0);
+            }
+
+            result.appendf(" %s [[attribute(%d)]];\n", a.name(), attr++);
+        }
+    };
+
+    result.appendf("struct %s {\n", structName);
+    if (!vertexAttrs.empty()) {
+        result.append("    // vertex attrs\n");
+        add_attrs(vertexAttrs);
+    }
+    if (!instanceAttrs.empty()) {
+        result.append("    // instance attrs\n");
+        add_attrs(instanceAttrs);
+    }
+
+    result.append("};\n\n");
+    return result;
+}
+
+SkSL::String get_msl(const GraphicsPipelineDesc& desc) {
+    const RenderStep* step = desc.renderStep();
+    // TODO: To more completely support end-to-end rendering, this will need to be updated so that
+    // the RenderStep shader snippet can produce a device coord, a local coord, and depth.
+    // If the paint combination doesn't need the local coord it can be ignored, otherwise we need
+    // a varying for it. The fragment function's output will need to be updated to have a color and
+    // the depth, or when there's no combination, just the depth. Lastly, we also should add the
+    // static/intrinsic uniform binding point so that we can handle normalizing the device position
+    // produced by the RenderStep automatically.
+
+    // Fixed program header
+    SkSL::String msl =
+            "#include <metal_stdlib>\n"
+            "#include <simd/simd.h>\n"
+            "using namespace metal;\n"
+            "\n"
+            "typedef struct {\n"
+            "    float4 rtAdjust;\n"
+            "} Intrinsics;\n"
+            "typedef struct {\n"
+            "    float4 position [[position]];\n"
+            "} VertexOutput;\n"
+            "typedef struct {\n"
+            "    float4 color [[color(0)]];\n"
+            "} FragmentOutput;\n"
+            "\n";
+
+    // Typedefs needed by RenderStep
+    if (step->numUniforms() > 0) {
+        msl += emit_MSL_uniform_struct("StepUniforms", step->uniforms());
+    }
+    if (step->numVertexAttributes() > 0 || step->numInstanceAttributes() > 0) {
+        msl += emit_MSL_vertex_struct("VertexAttrs",
+                                      step->vertexAttributes(),
+                                      step->instanceAttributes());
+    }
+
+    // Vertex shader function declaration
+    msl += "vertex VertexOutput vertexMain(uint vertexID [[vertex_id]],\n"
+           "                               uint instanceID [[instance_id]],\n"
+           "                               constant Intrinsics& intrinsics [[buffer(0)]]";
+    if (step->numVertexAttributes() > 0 || step->numInstanceAttributes() > 0) {
+        msl += ",\n                        VertexAttrs vtx [[stage_in]]";
+    }
+    if (step->numUniforms() > 0) {
+        msl += ",\n                        constant StepUniforms& uniforms [[buffer(1)]]";
+    }
+    msl += ") {\n";
+
+    // Vertex shader body
+    msl += "    VertexOutput out;\n";
+    msl += step->vertexMSL();
+    msl += "    out.position.xy = out.position.xy * intrinsics.rtAdjust.xy + intrinsics.rtAdjust.zw;\n";
+    msl += "    return out;\n"
+           "}\n";
+
+    // Typedefs needed for painting
+    auto paintUniforms = GetUniforms(desc.shaderCombo().fShaderType);
+    if (!paintUniforms.empty()) {
+        msl += emit_MSL_uniform_struct("FragUniforms", paintUniforms);
+    }
+
+    msl += "fragment FragmentOutput fragmentMain(VertexOutput interpolated [[stage_in]],\n"
+           "                                     constant FragUniforms& uniforms [[buffer(2)]]) {\n"
+           "    FragmentOutput out;\n";
+    msl += GetShaderMSL(desc.shaderCombo().fShaderType);
+    msl += "    return out;\n"
+           "}\n";
+
+    return msl;
+}
+
+inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type) {
     switch (type) {
         case VertexAttribType::kFloat:
             return MTLVertexFormatFloat;
@@ -213,13 +257,13 @@ static inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type)
     SK_ABORT("Unknown vertex attribute type");
 }
 
-static MTLVertexDescriptor* create_vertex_descriptor(const GraphicsPipelineDesc& desc) {
+MTLVertexDescriptor* create_vertex_descriptor(const RenderStep* step) {
     auto vertexDescriptor = [[MTLVertexDescriptor alloc] init];
     int attributeIndex = 0;
 
-    int vertexAttributeCount = desc.numVertexAttributes();
+    int vertexAttributeCount = step->numVertexAttributes();
     size_t vertexAttributeOffset = 0;
-    for (const auto& attribute : desc.vertexAttributes()) {
+    for (const auto& attribute : step->vertexAttributes()) {
         MTLVertexAttributeDescriptor* mtlAttribute = vertexDescriptor.attributes[attributeIndex];
         MTLVertexFormat format = attribute_type_to_mtlformat(attribute.cpuType());
         SkASSERT(MTLVertexFormatInvalid != format);
@@ -230,7 +274,7 @@ static MTLVertexDescriptor* create_vertex_descriptor(const GraphicsPipelineDesc&
         vertexAttributeOffset += attribute.sizeAlign4();
         attributeIndex++;
     }
-    SkASSERT(vertexAttributeOffset == desc.vertexStride());
+    SkASSERT(vertexAttributeOffset == step->vertexStride());
 
     if (vertexAttributeCount) {
         MTLVertexBufferLayoutDescriptor* vertexBufferLayout =
@@ -240,9 +284,9 @@ static MTLVertexDescriptor* create_vertex_descriptor(const GraphicsPipelineDesc&
         vertexBufferLayout.stride = vertexAttributeOffset;
     }
 
-    int instanceAttributeCount = desc.numInstanceAttributes();
+    int instanceAttributeCount = step->numInstanceAttributes();
     size_t instanceAttributeOffset = 0;
-    for (const auto& attribute : desc.instanceAttributes()) {
+    for (const auto& attribute : step->instanceAttributes()) {
         MTLVertexAttributeDescriptor* mtlAttribute = vertexDescriptor.attributes[attributeIndex];
         MTLVertexFormat format = attribute_type_to_mtlformat(attribute.cpuType());
         SkASSERT(MTLVertexFormatInvalid != format);
@@ -253,7 +297,7 @@ static MTLVertexDescriptor* create_vertex_descriptor(const GraphicsPipelineDesc&
         instanceAttributeOffset += attribute.sizeAlign4();
         attributeIndex++;
     }
-    SkASSERT(instanceAttributeOffset == desc.instanceStride());
+    SkASSERT(instanceAttributeOffset == step->instanceStride());
 
     if (instanceAttributeCount) {
         MTLVertexBufferLayoutDescriptor* instanceBufferLayout =
@@ -265,21 +309,18 @@ static MTLVertexDescriptor* create_vertex_descriptor(const GraphicsPipelineDesc&
     return vertexDescriptor;
 }
 
+} // anonymous namespace
+
 sk_sp<GraphicsPipeline> GraphicsPipeline::Make(const Gpu* gpu,
                                                const skgpu::GraphicsPipelineDesc& desc) {
     sk_cfp<MTLRenderPipelineDescriptor*> psoDescriptor([[MTLRenderPipelineDescriptor alloc] init]);
 
-    // Temp pipeline for now that just fills the viewport with blue
-    int shaderIndex = desc.testingOnlyShaderIndex();
-    SkSL::String shaderText;
-    shaderText.append(kTestingOnlyShaders[shaderIndex]);
-
-    auto metallib = CompileShaderLibrary(gpu, shaderText);
+    auto metallib = CompileShaderLibrary(gpu, get_msl(desc));
     if (!metallib) {
         return nullptr;
     }
 
-    (*psoDescriptor).label = kTestingOnlyShaderLabels[shaderIndex];
+    (*psoDescriptor).label = @(desc.renderStep()->name());
 
     (*psoDescriptor).vertexFunction =
             [*metallib newFunctionWithName: @"vertexMain"];
@@ -287,7 +328,7 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(const Gpu* gpu,
             [*metallib newFunctionWithName: @"fragmentMain"];
 
     // TODO: I *think* this gets cleaned up by the pipelineDescriptor?
-    (*psoDescriptor).vertexDescriptor = create_vertex_descriptor(desc);
+    (*psoDescriptor).vertexDescriptor = create_vertex_descriptor(desc.renderStep());
 
     // TODO: I *think* this gets cleaned up by the pipelineDescriptor as well?
     auto mtlColorAttachment = [[MTLRenderPipelineColorAttachmentDescriptor alloc] init];
@@ -297,7 +338,19 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(const Gpu* gpu,
     mtlColorAttachment.writeMask = MTLColorWriteMaskAll;
 
     (*psoDescriptor).colorAttachments[0] = mtlColorAttachment;
-    (*psoDescriptor).sampleCount = 1;
+
+    DepthStencilType depthStencilType = desc.renderStep()->requiresStencil()
+                                      ? DepthStencilType::kDepthStencil
+                                      : DepthStencilType::kDepthOnly;
+    skgpu::TextureInfo texInfo = gpu->caps()->getDefaultDepthStencilTextureInfo(depthStencilType,
+                                                                                1 /*sampleCount*/,
+                                                                                Protected::kNo);
+    mtl::TextureInfo mtlTexInfo;
+    texInfo.getMtlTextureInfo(&mtlTexInfo);
+    if (depthStencilType != DepthStencilType::kDepthOnly) {
+        (*psoDescriptor).stencilAttachmentPixelFormat = (MTLPixelFormat)mtlTexInfo.fFormat;
+    }
+    (*psoDescriptor).depthAttachmentPixelFormat = (MTLPixelFormat)mtlTexInfo.fFormat;
 
     NSError* error;
     sk_cfp<id<MTLRenderPipelineState>> pso(
@@ -308,8 +361,15 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(const Gpu* gpu,
         SkDebugf("Errors:\n%s", error.debugDescription.UTF8String);
         return nullptr;
     }
-    return sk_sp<GraphicsPipeline>(new GraphicsPipeline(std::move(pso), desc.vertexStride(),
-                                                        desc.instanceStride()));
+
+    auto resourceProvider = (skgpu::mtl::ResourceProvider*) gpu->resourceProvider();
+    id<MTLDepthStencilState> dss = resourceProvider->findOrCreateCompatibleDepthStencilState(
+            desc.renderStep()->depthStencilSettings());
+
+    return sk_sp<GraphicsPipeline>(new GraphicsPipeline(std::move(pso),
+                                                        dss,
+                                                        desc.renderStep()->vertexStride(),
+                                                        desc.renderStep()->instanceStride()));
 }
 
 } // namespace skgpu::mtl
