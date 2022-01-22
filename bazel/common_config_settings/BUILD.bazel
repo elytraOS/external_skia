@@ -1,4 +1,4 @@
-load(":defs.bzl", "string_flag_with_values")
+load(":defs.bzl", "bool_flag", "string_flag_with_values")
 
 # @platforms is found at https://github.com/bazelbuild/platforms
 package(default_visibility = ["//:__subpackages__"])
@@ -98,18 +98,52 @@ string_flag_with_values(
     flag_name = "fontmgr_factory",
     values = [
         "empty_fontmgr_factory",
-        "custom_directory_fontmgr_factory",
+        "custom_embedded_fontmgr_factory",
     ],
 )
 
 string_flag_with_values(
-    flag_name = "include_codec",
+    flag_name = "include_fontmgr",
     multiple = True,
     values = [
-        "gif_codec",
-        "jpeg_codec",
-        "png_codec",
-        "raw_codec",
-        "webp_codec",
+        "custom_directory_fontmgr",
+        "custom_embedded_fontmgr",
+        "custom_empty_fontmgr",
     ],
+)
+
+string_flag_with_values(
+    flag_name = "include_decoder",
+    multiple = True,
+    values = [
+        "gif_decode_codec",
+        "jpeg_decode_codec",
+        "png_decode_codec",
+        "raw_decode_codec",
+        "webp_decode_codec",
+    ],
+)
+
+string_flag_with_values(
+    flag_name = "include_encoder",
+    multiple = True,
+    values = [
+        "jpeg_encode_codec",
+        "png_encode_codec",
+        "webp_encode_codec",
+    ],
+)
+
+string_flag_with_values(
+    flag_name = "shaper_backend",
+    multiple = True,
+    values = [
+        "harfbuzz_shaper",
+        "coretext_shaper",
+    ],
+)
+
+bool_flag(
+    default = False,
+    flag_name = "use_icu",
 )

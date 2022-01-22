@@ -8,6 +8,7 @@
 #include "modules/skottie/src/effects/Effects.h"
 
 #include "include/effects/SkRuntimeEffect.h"
+#include "include/private/SkMalloc.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottieValue.h"
@@ -99,43 +100,131 @@ public:
 
 private:
     void onSync() override {
-        this->node()->setShader(buildEffectShader());
+        if (!fEffect) {
+            return;
+        }
+        sk_sp<SkShader> shader = fEffect->makeShader(buildUniformData(), {/* TODO: child support */}, &SkMatrix::I(), false);
+        this->node()->setShader(std::move(shader));
     }
 
-    sk_sp<SkShader> buildEffectShader() const {
-        if (!fEffect) {
-            return nullptr;
-        }
-        // TODO: consider dumping builder and work with lower level API
-        SkRuntimeShaderBuilder builder = SkRuntimeShaderBuilder(fEffect);
+    sk_sp<SkData> buildUniformData() const {
+        auto uniformData = SkData::MakeUninitialized(fEffect->uniformSize());
+        SkASSERT(uniformData);
+        sk_bzero(uniformData->writable_data(), uniformData->size());
         for (const auto& uniform : fUniforms) {
             const auto& name = std::get<0>(uniform);
             const auto& data = std::get<1>(uniform);
             auto metadata = fEffect->findUniform(name.c_str());
-            // TODO: build SkData from SkRuntimeEffect::Uniform data
-            switch (metadata->type) {
-                case SkRuntimeEffect::Uniform::Type::kFloat:
-                    builder.uniform(name.c_str()) = data->at(0); break;
-                default:
-                    printf("!!! %s\n", "uniform data type not supported");
+            if (metadata && metadata->count == static_cast<int>(data->size())) {
+                auto dst = reinterpret_cast<uint8_t*>(uniformData->writable_data()) + metadata->offset;
+                memcpy(reinterpret_cast<void*>(dst), data->data(), data->size() * sizeof(float));
+            } else {
+                SkDebugf("cannot set malformed uniform: %s", name.c_str());
             }
         }
-        return builder.makeShader(&SkMatrix::I(), false);
+        return uniformData;
     }
     sk_sp<SkRuntimeEffect> fEffect;
     std::vector<std::tuple<SkString, std::unique_ptr<VectorValue>>> fUniforms;
     using INHERITED = DiscardableAdapterBase<SkSLEffectAdapter, SkSLShaderNode>;
 };
 
+class SkSLColorFilterAdapter final : public DiscardableAdapterBase<SkSLColorFilterAdapter,
+                                                             sksg::ExternalColorFilter> {
+public:
+    SkSLColorFilterAdapter(const skjson::ArrayValue& jprops,
+                      const AnimationBuilder& abuilder,
+                      sk_sp<sksg::ExternalColorFilter> node)
+        : INHERITED(std::move(node))
+    {
+        enum : size_t {
+            kSkSL_index = 0,
+            kFirstUniform_index = 1,
+        };
+        if (jprops.size() < 1) {
+            return;
+        }
+        const skjson::ObjectValue* jSkSL = jprops[kSkSL_index];
+        if (!jSkSL) {
+            return;
+        }
+        const skjson::StringValue* jShader = (*jSkSL)["sh"];
+        if (!jShader) {
+            return;
+        }
+        SkString skSL = SkString(jShader->begin(), jShader->size());
+        auto result = SkRuntimeEffect::MakeForColorFilter(skSL, {});
+        if (!result.effect) {
+            abuilder.log(Logger::Level::kError, nullptr, "Failed to parse SkSL color filter: %s",
+               result.errorText.c_str());
+            return;
+        }
+        fEffect = std::move(result.effect);
+
+        // construct dynamic uniform list from jprops, skip SkSL property
+        for (size_t i = kFirstUniform_index; i < jprops.size(); i++) {
+            const skjson::ObjectValue* jprop = jprops[i];
+            if (!jprop) { continue; }
+            const skjson::StringValue* uniformName = (*jprop)["nm"];
+            if (!uniformName) { continue; }
+            auto uniformTuple = std::make_tuple(SkString(uniformName->begin(),
+                                                         uniformName->size()),
+                                                std::make_unique<VectorValue>());
+            fUniforms.push_back(std::move(uniformTuple));
+            this->bind(abuilder, (*jprop)["v"], std::get<1>(fUniforms.back()).get());
+        }
+    }
+
+private:
+    void onSync() override {
+        if (!fEffect) {
+            return;
+        }
+        auto cf = fEffect->makeColorFilter(buildUniformData());
+        this->node()->setColorFilter(std::move(cf));
+    }
+
+    sk_sp<SkData> buildUniformData() const {
+        auto uniformData = SkData::MakeUninitialized(fEffect->uniformSize());
+        SkASSERT(uniformData);
+        sk_bzero(uniformData->writable_data(), uniformData->size());
+        for (const auto& uniform : fUniforms) {
+            const auto& name = std::get<0>(uniform);
+            const auto& data = std::get<1>(uniform);
+            auto metadata = fEffect->findUniform(name.c_str());
+            if (metadata && metadata->count == static_cast<int>(data->size())) {
+                auto dst = reinterpret_cast<uint8_t*>(uniformData->writable_data()) + metadata->offset;
+                memcpy(reinterpret_cast<void*>(dst), data->data(), data->size() * sizeof(float));
+            } else {
+                SkDebugf("cannot set malformed uniform: %s", name.c_str());
+            }
+        }
+        return uniformData;
+    }
+    sk_sp<SkRuntimeEffect> fEffect;
+    std::vector<std::tuple<SkString, std::unique_ptr<VectorValue>>> fUniforms;
+    using INHERITED = DiscardableAdapterBase<SkSLColorFilterAdapter, sksg::ExternalColorFilter>;
+};
+
 } // namespace
 
 #endif  // SK_ENABLE_SKSL
 
-sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLEffect(const skjson::ArrayValue& jprops,
-                                                             sk_sp<sksg::RenderNode> layer) const {
+sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLShader(const skjson::ArrayValue& jprops,
+                                                        sk_sp<sksg::RenderNode> layer) const {
 #ifdef SK_ENABLE_SKSL
     auto shaderNode = sk_make_sp<SkSLShaderNode>(std::move(layer));
-    return fBuilder->attachDiscardableAdapter<SkSLEffectAdapter>(jprops, *fBuilder, shaderNode);
+    return fBuilder->attachDiscardableAdapter<SkSLEffectAdapter>(jprops, *fBuilder, std::move(shaderNode));
+#else
+    return layer;
+#endif
+}
+
+sk_sp<sksg::RenderNode> EffectBuilder::attachSkSLColorFilter(const skjson::ArrayValue& jprops,
+                                                             sk_sp<sksg::RenderNode> layer) const {
+#ifdef SK_ENABLE_SKSL
+    auto cfNode = sksg::ExternalColorFilter::Make(std::move(layer));
+    return fBuilder->attachDiscardableAdapter<SkSLColorFilterAdapter>(jprops, *fBuilder, std::move(cfNode));
 #else
     return layer;
 #endif

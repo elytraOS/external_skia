@@ -8,6 +8,7 @@
 #include "include/core/SkM44.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
+#include "src/sksl/codegen/SkVMDebugInfo.h"
 #include "src/sksl/ir/SkSLExternalFunction.h"
 #include "src/utils/SkJSON.h"
 
@@ -33,7 +34,7 @@ struct ProgramBuilder {
     operator bool() const { return fProgram != nullptr; }
     SkSL::Program& operator*() { return *fProgram; }
 
-    GrShaderCaps fCaps;
+    SkSL::ShaderCaps fCaps;
     SkSL::Compiler fCompiler;
     std::unique_ptr<SkSL::Program> fProgram;
 };
@@ -623,7 +624,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 }
 
 static void expect_failure(skiatest::Reporter* r, const char* src) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     auto program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
@@ -891,7 +892,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalFunction, r) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src = "float main() { return externalSqrt(25); }";
@@ -945,7 +946,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalTable, r) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src =
@@ -972,4 +973,106 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
     REPORTER_ASSERT(r, out[1] == 1.0);
     REPORTER_ASSERT(r, out[2] == 2.0);
     REPORTER_ASSERT(r, out[3] == 4.0);
+}
+
+DEF_TEST(SkSLInterpreterTrace, r) {
+    SkSL::ShaderCaps caps;
+    SkSL::Compiler compiler(&caps);
+    SkSL::Program::Settings settings;
+    settings.fOptimize = false;
+
+    constexpr const char kSrc[] =
+R"(bool less_than(float left, int right) {
+    bool comparison = left < float(right);
+    if (comparison) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+int main() {
+    for (float loop = 10; loop <= 30; loop += 10) {
+        bool function_result = less_than(loop, 20);
+    }
+    return 40;
+}
+)";
+    skvm::Builder b;
+    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
+                                                                     SkSL::String(kSrc), settings);
+    REPORTER_ASSERT(r, program);
+
+    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    SkSL::SkVMDebugInfo debugInfo;
+    SkSL::ProgramToSkVM(*program, *main, &b, &debugInfo, /*uniforms=*/{});
+    skvm::Program p = b.done();
+    REPORTER_ASSERT(r, p.nargs() == 1);
+
+    int result;
+    p.eval(1, &result);
+
+    SkDynamicMemoryWStream streamDump;
+    debugInfo.dump(&streamDump);
+
+    sk_sp<SkData> dataDump = streamDump.detachAsData();
+    skstd::string_view trace{static_cast<const char*>(dataDump->data()), dataDump->size()};
+
+    REPORTER_ASSERT(r, result == 40);
+    REPORTER_ASSERT(r, trace ==
+R"($0 = [main].result (int, L10)
+$1 = loop (float, L11)
+$2 = function_result (bool, L12)
+$3 = [less_than].result (bool, L1)
+$4 = left (float, L1)
+$5 = right (int, L1)
+$6 = comparison (bool, L2)
+F0 = int main()
+F1 = bool less_than(float left, int right)
+
+enter int main()
+  line 11
+  loop = 10
+  line 12
+  enter bool less_than(float left, int right)
+    left = 10
+    right = 20
+    line 2
+    comparison = true
+    line 3
+    line 4
+    [less_than].result = true
+  exit bool less_than(float left, int right)
+  function_result = true
+  line 11
+  loop = 20
+  line 12
+  enter bool less_than(float left, int right)
+    left = 20
+    right = 20
+    line 2
+    comparison = false
+    line 3
+    line 6
+    [less_than].result = false
+  exit bool less_than(float left, int right)
+  function_result = false
+  line 11
+  loop = 30
+  line 12
+  enter bool less_than(float left, int right)
+    left = 30
+    right = 20
+    line 2
+    comparison = false
+    line 3
+    line 6
+    [less_than].result = false
+  exit bool less_than(float left, int right)
+  function_result = false
+  line 11
+  line 14
+  [main].result = 40
+exit int main()
+)", "Trace output does not match expectation:\n%.*s\n", (int)trace.size(), trace.data());
 }

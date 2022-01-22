@@ -129,33 +129,33 @@ bazel_gms_release:
 	# unit, by letting the cache be used (and not dropped from the sandbox), which gets expensive.
 	# Local testing showed using the local strategy sped up a clean build from 9.5 minutes
 	# to 1 minute. https://docs.bazel.build/versions/main/user-manual.html#strategy-options
-	bazelisk build :gm-bindings-wasm --compilation_mode opt --spawn_strategy=local \
-		--gpu_backend=gl_backend --with_gl_standard=webgl_standard \
-		--included_codec=jpeg_codec --included_codec=png_codec --include_codec=webp_codec \
-		--include_codec=gif_codec
+	bazelisk build :gm_bindings_wasm --compilation_mode opt --spawn_strategy=local
 	- rm -rf build/
 	mkdir build
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.js build/gm-bindings.js
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.wasm build/gm-bindings.wasm
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.js build/gm_bindings.js
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.wasm build/gm_bindings.wasm
 
 bazel_gms_debug:
 	# See above note about spawn_strategy
-	bazelisk build :gm-bindings-wasm --compilation_mode dbg --spawn_strategy=local \
-		--gpu_backend=gl_backend --with_gl_standard=webgl_standard \
-		--include_codec=jpeg_codec --include_codec=png_codec --include_codec=webp_codec \
-		--include_codec=gif_codec
+	bazelisk build :gm_bindings_wasm --compilation_mode dbg --spawn_strategy=local
 	- rm -rf build/
 	mkdir build
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.js build/gm-bindings.js
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.wasm build/gm-bindings.wasm
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.js build/gm_bindings.js
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.wasm build/gm_bindings.wasm
 
 bazel_canvaskit_debug:
 	# See above note about spawn_strategy
-	bazelisk build :canvaskit-wasm --compilation_mode dbg --spawn_strategy=local \
-		--gpu_backend=gl_backend --with_gl_standard=webgl_standard \
-		--include_codec=jpeg_codec --include_codec=png_codec --include_codec=webp_codec \
-		--include_codec=gif_codec
+	bazelisk build :canvaskit_wasm --compilation_mode dbg --spawn_strategy=local
 	- rm -rf build/
 	mkdir build
-	cp ../../bazel-bin/modules/canvaskit/canvaskit-wasm/canvaskit.js build/canvaskit.js
-	cp ../../bazel-bin/modules/canvaskit/canvaskit-wasm/canvaskit.wasm build/canvaskit.wasm
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.js build/canvaskit.js
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.wasm build/canvaskit.wasm
+
+bazel_canvaskit_release:
+	# See above note about spawn_strategy
+	bazelisk build :canvaskit_wasm --compilation_mode opt --spawn_strategy=local
+	- rm -rf build/
+	mkdir build
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.js build/canvaskit.js
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.wasm build/canvaskit.wasm
+	ls -l build

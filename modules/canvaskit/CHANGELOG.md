@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+ - `Canvas.drawVertices` and `Canvas.drawPatch` treat the default blend mode differently.
+   See https://bugs.chromium.org/p/skia/issues/detail?id=12662.
+
+## [0.31.0] - 2021-11-16
+
 ### Added
  - `CanvasKit.MakeLazyImageFromTextureSource`, which is similar to
    `Surface.makeImageFromTextureSource`, but can be re-used across different WebGL contexts.

@@ -8,7 +8,9 @@
 #ifndef skgpu_MtlResourceProvider_DEFINED
 #define skgpu_MtlResourceProvider_DEFINED
 
+#include "experimental/graphite/src/DrawTypes.h"
 #include "experimental/graphite/src/ResourceProvider.h"
+#include "include/private/SkTHash.h"
 
 #import <Metal/Metal.h>
 
@@ -25,6 +27,11 @@ public:
     ResourceProvider(const skgpu::Gpu* gpu);
     ~ResourceProvider() override {}
 
+    sk_sp<skgpu::Texture> createWrappedTexture(const BackendTexture&) override;
+
+    // Finds or creates a compatible DepthStencilState based on the enum
+    id<MTLDepthStencilState> findOrCreateCompatibleDepthStencilState(const DepthStencilSettings&);
+
 private:
     const Gpu* mtlGpu();
 
@@ -32,6 +39,8 @@ private:
     sk_sp<skgpu::GraphicsPipeline> onCreateGraphicsPipeline(const GraphicsPipelineDesc&) override;
     sk_sp<skgpu::Texture> createTexture(SkISize, const skgpu::TextureInfo&) override;
     sk_sp<skgpu::Buffer> createBuffer(size_t size, BufferType type, PrioritizeGpuReads) override;
+
+    SkTHashMap<DepthStencilSettings, sk_cfp<id<MTLDepthStencilState>>> fDepthStencilStates;
 };
 
 } // namespace skgpu::mtl
