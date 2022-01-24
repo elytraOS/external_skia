@@ -552,7 +552,9 @@ optional("fontmgr_win") {
     "src/fonts/SkFontMgr_indirect.cpp",
     "src/ports/SkFontMgr_win_dw.cpp",
     "src/ports/SkScalerContext_win_dw.cpp",
+    "src/ports/SkScalerContext_win_dw.h",
     "src/ports/SkTypeface_win_dw.cpp",
+    "src/ports/SkTypeface_win_dw.h",
   ]
 }
 optional("fontmgr_win_factory") {
@@ -625,6 +627,7 @@ if (skia_compile_sksl_tests) {
     defines = [
       "SKSL_STANDALONE",
       "SK_DISABLE_TRACING",
+      "SK_ENABLE_SPIRV_CROSS",
       "SK_ENABLE_SPIRV_VALIDATION",
     ]
     sources = [
@@ -645,13 +648,13 @@ if (skia_compile_sksl_tests) {
       "src/core/SkUtils.cpp",
       "src/core/SkVM.cpp",
       "src/gpu/GrMemoryPool.cpp",
-      "src/gpu/GrShaderUtils.cpp",
       "src/ports/SkMemory_malloc.cpp",
       "src/ports/SkOSFile_stdio.cpp",
       "src/sksl/SkSLMain.cpp",
       "src/utils/SkJSON.cpp",
       "src/utils/SkJSONWriter.cpp",
       "src/utils/SkParse.cpp",
+      "src/utils/SkShaderUtils.cpp",
       "src/utils/SkUTF.cpp",
     ]
     if (is_win) {
@@ -666,6 +669,7 @@ if (skia_compile_sksl_tests) {
       ":run_sksllex",
       "//third_party/externals/spirv-tools:spvtools",
       "//third_party/externals/spirv-tools:spvtools_val",
+      "//third_party/spirv-cross:spirv_cross",
     ]
   }
 
@@ -949,7 +953,10 @@ optional("gpu") {
   }
 
   if (skia_use_direct3d) {
-    public_defines += [ "SK_DIRECT3D" ]
+    public_defines += [
+      "SK_DIRECT3D",
+      "SK_ENABLE_SPIRV_CROSS",
+    ]
     deps += [
       "//third_party/d3d12allocator",
       "//third_party/spirv-cross:spirv_cross",
@@ -2803,6 +2810,8 @@ if (skia_enable_tools) {
         "tools/viewer/SampleSlide.h",
         "tools/viewer/SkRiveSlide.cpp",
         "tools/viewer/SkRiveSlide.h",
+        "tools/viewer/SkSLDebuggerSlide.cpp",
+        "tools/viewer/SkSLDebuggerSlide.h",
         "tools/viewer/SkSLSlide.cpp",
         "tools/viewer/SkSLSlide.h",
         "tools/viewer/SkottieSlide.cpp",

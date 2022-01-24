@@ -36,6 +36,10 @@
     #endif
 #endif
 
+#if !defined(SK_BUILD_FOR_WIN)
+#include <unistd.h>
+#endif
+
 // #define SKVM_LLVM_WAIT_FOR_COMPILATION
 
 bool gSkVMAllowJIT{false};
@@ -3006,6 +3010,11 @@ namespace skvm {
             fImpl->llvm_compiling.wait();
         }
     #endif
+    }
+
+    bool Program::hasTraceHooks() const {
+        // Identifies a program which has been instrumented for debugging.
+        return !fImpl->traceHooks.empty();
     }
 
     bool Program::hasJIT() const {
