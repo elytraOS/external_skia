@@ -975,16 +975,6 @@
         "Upload-Perf-Android-Clang-GalaxyS9-GPU-MaliG72-arm64-Release-All-Android_Vulkan"
       ]
     },
-    "Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android": {
-      "tasks": [
-        "Upload-Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android"
-      ]
-    },
-    "Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android": {
-      "tasks": [
-        "Upload-Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android"
-      ]
-    },
     "Perf-Android-Clang-Nexus7-GPU-Tegra3-arm-Release-All-Android": {
       "tasks": [
         "Upload-Perf-Android-Clang-Nexus7-GPU-Tegra3-arm-Release-All-Android"
@@ -1698,26 +1688,6 @@
     "Test-Android-Clang-GalaxyS9-GPU-MaliG72-arm64-Release-All-Android_Vulkan": {
       "tasks": [
         "Test-Android-Clang-GalaxyS9-GPU-MaliG72-arm64-Release-All-Android_Vulkan"
-      ]
-    },
-    "Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Debug-All-Android": {
-      "tasks": [
-        "Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Debug-All-Android"
-      ]
-    },
-    "Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android": {
-      "tasks": [
-        "Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android"
-      ]
-    },
-    "Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android": {
-      "tasks": [
-        "Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android"
-      ]
-    },
-    "Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android": {
-      "tasks": [
-        "Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android"
       ]
     },
     "Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android": {
@@ -18266,7 +18236,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18322,7 +18292,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18386,7 +18356,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18450,7 +18420,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18509,7 +18479,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18559,7 +18529,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18609,7 +18579,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18659,7 +18629,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18710,7 +18680,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -18761,7 +18731,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -20003,7 +19973,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -20136,10 +20106,6 @@
         "Housekeeper-PerCommit-PushAppsFromSkiaDockerImage",
         "--workdir",
         ".",
-        "--gerrit_project",
-        "buildbot",
-        "--gerrit_url",
-        "https://skia-review.googlesource.com",
         "--repo",
         "<(REPO)",
         "--revision",
@@ -20214,10 +20180,6 @@
         "Housekeeper-PerCommit-PushAppsFromWASMDockerImage",
         "--workdir",
         ".",
-        "--gerrit_project",
-        "buildbot",
-        "--gerrit_url",
-        "https://skia-review.googlesource.com",
         "--repo",
         "<(REPO)",
         "--revision",
@@ -20282,9 +20244,9 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "skia/bots/bazel",
-          "path": "bazel",
-          "version": "version:3"
+          "name": "skia/bots/bazelisk",
+          "path": "bazelisk",
+          "version": "version:0"
         }
       ],
       "command": [
@@ -20297,20 +20259,8 @@
         "Housekeeper-PerCommit-PushBazelAppsFromWASMDockerImage",
         "--workdir",
         ".",
-        "--gerrit_project",
-        "buildbot",
-        "--gerrit_url",
-        "https://skia-review.googlesource.com",
-        "--repo",
-        "<(REPO)",
-        "--revision",
-        "<(REVISION)",
-        "--patch_issue",
-        "<(ISSUE)",
-        "--patch_set",
-        "<(PATCHSET)",
-        "--patch_server",
-        "<(CODEREVIEW_SERVER)"
+        "--skia_revision",
+        "<(REVISION)"
       ],
       "dependencies": [
         "Housekeeper-PerCommit-BuildTaskDrivers_linux_amd64",
@@ -20328,7 +20278,7 @@
         "PATH": [
           "cipd_bin_packages",
           "cipd_bin_packages/bin",
-          "bazel/bin"
+          "bazelisk"
         ]
       },
       "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
@@ -21702,197 +21652,6 @@
       "dimensions": [
         "device_os:QP1A.190711.020",
         "device_type:starlte",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 14400000000000,
-      "max_attempts": 2,
-      "outputs": [
-        "perf"
-      ]
-    },
-    "Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "perf",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-arm64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "skia/bots/text_blob_traces",
-          "path": "text_blob_traces",
-          "version": "version:0"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "perf",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android\",\"do_upload\":\"true\",\"images\":\"true\",\"nanobench_flags\":\"[\\\"nanobench\\\",\\\"--pre_log\\\",\\\"--scales\\\",\\\"1.0\\\",\\\"1.1\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"8888\\\",\\\"nonrendering\\\",\\\"--internalSamples\\\",\\\"4\\\",\\\"--match\\\",\\\"~blurroundrect\\\",\\\"~patch_grid\\\",\\\"~desk_carsvg\\\",\\\"~keymobi_shop_mobileweb_ebay_com.skp\\\",\\\"~inc0.gif\\\",\\\"~inc1.gif\\\",\\\"~incInterlaced.gif\\\",\\\"~inc0.jpg\\\",\\\"~incGray.jpg\\\",\\\"~inc0.wbmp\\\",\\\"~inc1.wbmp\\\",\\\"~inc0.webp\\\",\\\"~inc1.webp\\\",\\\"~inc0.ico\\\",\\\"~inc1.ico\\\",\\\"~inc0.png\\\",\\\"~inc1.png\\\",\\\"~inc2.png\\\",\\\"~inc12.png\\\",\\\"~inc13.png\\\",\\\"~inc14.png\\\",\\\"~inc0.webp\\\",\\\"~inc1.webp\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"cpu_or_gpu\\\",\\\"CPU\\\",\\\"cpu_or_gpu_value\\\",\\\"Snapdragon800\\\",\\\"extra_config\\\",\\\"Android\\\",\\\"model\\\",\\\"Nexus5\\\",\\\"os\\\",\\\"Android\\\"]\",\"nanobench_properties\":\"{\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\"}\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"perf\",\"task_id\":\"<(TASK_ID)\",\"textTraces\":\"true\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Build-Debian10-Clang-arm-Release-Android",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "device_os:M4B30Z_3437181",
-        "device_type:hammerhead",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 14400000000000,
-      "max_attempts": 2,
-      "outputs": [
-        "perf"
-      ]
-    },
-    "Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "perf",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-arm64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "perf",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android\",\"do_upload\":\"true\",\"nanobench_flags\":\"[\\\"nanobench\\\",\\\"--pre_log\\\",\\\"--gpuStatsDump\\\",\\\"true\\\",\\\"--scales\\\",\\\"1.0\\\",\\\"1.1\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"srgb-gles\\\",\\\"narrow-gles\\\",\\\"glesfakev2\\\",\\\"glesmsaa4\\\",\\\"--internalSamples\\\",\\\"4\\\",\\\"--match\\\",\\\"~blurroundrect\\\",\\\"~patch_grid\\\",\\\"~desk_carsvg\\\",\\\"~keymobi_shop_mobileweb_ebay_com.skp\\\",\\\"~inc0.gif\\\",\\\"~inc1.gif\\\",\\\"~incInterlaced.gif\\\",\\\"~inc0.jpg\\\",\\\"~incGray.jpg\\\",\\\"~inc0.wbmp\\\",\\\"~inc1.wbmp\\\",\\\"~inc0.webp\\\",\\\"~inc1.webp\\\",\\\"~inc0.ico\\\",\\\"~inc1.ico\\\",\\\"~inc0.png\\\",\\\"~inc1.png\\\",\\\"~inc2.png\\\",\\\"~inc12.png\\\",\\\"~inc13.png\\\",\\\"~inc14.png\\\",\\\"~inc0.webp\\\",\\\"~inc1.webp\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"Adreno330\\\",\\\"extra_config\\\",\\\"Android\\\",\\\"model\\\",\\\"Nexus5\\\",\\\"os\\\",\\\"Android\\\"]\",\"nanobench_properties\":\"{\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\"}\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"perf\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Build-Debian10-Clang-arm-Release-Android",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "device_os:M4B30Z_3437181",
-        "device_type:hammerhead",
         "os:Android",
         "pool:Skia"
       ],
@@ -24581,7 +24340,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -24691,7 +24450,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -24796,7 +24555,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -24901,7 +24660,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25006,7 +24765,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25111,7 +24870,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25221,7 +24980,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25326,7 +25085,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25431,7 +25190,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25535,7 +25294,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25645,7 +25404,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25759,7 +25518,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25878,7 +25637,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -25987,7 +25746,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -26101,7 +25860,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -26215,7 +25974,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -26324,7 +26083,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -26433,7 +26192,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -26688,7 +26447,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -26758,7 +26517,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -26943,7 +26702,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27047,7 +26806,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27151,7 +26910,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27255,7 +27014,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27359,7 +27118,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27463,7 +27222,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27567,7 +27326,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27672,7 +27431,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27777,7 +27536,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27881,7 +27640,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -27985,7 +27744,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -28089,7 +27848,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -28193,7 +27952,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -28297,7 +28056,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -28396,7 +28155,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -28495,7 +28254,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -28599,7 +28358,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -28703,7 +28462,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -28812,7 +28571,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -28916,7 +28675,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -29020,7 +28779,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -29135,7 +28894,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -29208,7 +28967,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -29277,7 +29036,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -29346,7 +29105,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -29417,7 +29176,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -29671,7 +29430,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -29785,7 +29544,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -29888,7 +29647,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -29992,7 +29751,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -30096,7 +29855,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -30195,7 +29954,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -30299,7 +30058,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -30398,7 +30157,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -30502,7 +30261,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -30606,7 +30365,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -30705,7 +30464,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -30809,7 +30568,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -30908,7 +30667,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -31007,7 +30766,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         }
       ],
       "command": [
@@ -31106,7 +30865,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31210,7 +30969,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31314,7 +31073,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31418,7 +31177,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31522,7 +31281,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31626,7 +31385,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31730,7 +31489,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31834,7 +31593,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -31938,7 +31697,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32042,7 +31801,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32146,7 +31905,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32250,7 +32009,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32354,7 +32113,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32458,7 +32217,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32562,7 +32321,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32666,7 +32425,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32770,7 +32529,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32874,7 +32633,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -32978,7 +32737,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -33082,7 +32841,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -33186,7 +32945,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -33290,7 +33049,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -33395,7 +33154,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -33500,7 +33259,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -35978,402 +35737,6 @@
       "dimensions": [
         "device_os:QP1A.190711.020",
         "device_type:starlte",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 14400000000000,
-      "max_attempts": 2,
-      "outputs": [
-        "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Debug-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "test",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-arm64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Debug-All-Android\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"CPU\\\",\\\"cpu_or_gpu_value\\\",\\\"Snapdragon800\\\",\\\"extra_config\\\",\\\"Android\\\",\\\"model\\\",\\\"Nexus5\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"8888\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"--skip\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"--noRAW_threading\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Debug-All-Android\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Build-Debian10-Clang-arm-Debug-Android",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "device_os:M4B30Z_3437181",
-        "device_type:hammerhead",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 14400000000000,
-      "max_attempts": 2,
-      "outputs": [
-        "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "test",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-arm64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"CPU\\\",\\\"cpu_or_gpu_value\\\",\\\"Snapdragon800\\\",\\\"extra_config\\\",\\\"Android\\\",\\\"model\\\",\\\"Nexus5\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nogpu\\\",\\\"--config\\\",\\\"8888\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"--skip\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"--noRAW_threading\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Build-Debian10-Clang-arm-Release-Android",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "device_os:M4B30Z_3437181",
-        "device_type:hammerhead",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 14400000000000,
-      "max_attempts": 2,
-      "outputs": [
-        "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "test",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-arm64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"Adreno330\\\",\\\"extra_config\\\",\\\"Android\\\",\\\"model\\\",\\\"Nexus5\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"glesdft\\\",\\\"srgb-gles\\\",\\\"glesmsaa4\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ProcessorCloneTest\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"Programs\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ProcessorOptimizationValidationTest\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"srgb-gles\\\",\\\"image\\\",\\\"_\\\",\\\"_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"encode-platform\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLArrayCast_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLArrayComparison_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"DSLFPTest_SwitchStatement\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLMatrixToVectorCast_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLStructsInFunctions_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLMatrices\\\",\\\"--noRAW_threading\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Build-Debian10-Clang-arm-Debug-Android",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "device_os:M4B30Z_3437181",
-        "device_type:hammerhead",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 14400000000000,
-      "max_attempts": 2,
-      "outputs": [
-        "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "test",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-arm64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"Adreno330\\\",\\\"extra_config\\\",\\\"Android\\\",\\\"model\\\",\\\"Nexus5\\\",\\\"os\\\",\\\"Android\\\",\\\"style\\\",\\\"default\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"glesdft\\\",\\\"srgb-gles\\\",\\\"glesmsaa4\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ProcessorCloneTest\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"Programs\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"ProcessorOptimizationValidationTest\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"srgb-gles\\\",\\\"image\\\",\\\"_\\\",\\\"_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"encode-platform\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLArrayCast_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLArrayComparison_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"DSLFPTest_SwitchStatement\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLMatrixToVectorCast_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLStructsInFunctions_GPU\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"SkSLMatrices\\\",\\\"--noRAW_threading\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Build-Debian10-Clang-arm-Release-Android",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "device_os:M4B30Z_3437181",
-        "device_type:hammerhead",
         "os:Android",
         "pool:Skia"
       ],
@@ -41005,7 +40368,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41116,7 +40479,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41227,7 +40590,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41338,7 +40701,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41449,7 +40812,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41560,7 +40923,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41671,7 +41034,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41782,7 +41145,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -41893,7 +41256,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42004,7 +41367,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42115,7 +41478,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42226,7 +41589,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42337,7 +41700,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42448,7 +41811,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42559,7 +41922,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42670,7 +42033,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42781,7 +42144,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -42891,7 +42254,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43001,7 +42364,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43111,7 +42474,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43221,7 +42584,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43332,7 +42695,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43442,7 +42805,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43558,7 +42921,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43678,7 +43041,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43793,7 +43156,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -43913,7 +43276,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44028,7 +43391,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44148,7 +43511,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44262,7 +43625,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44382,7 +43745,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44497,7 +43860,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44616,7 +43979,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44730,7 +44093,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44849,7 +44212,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -44963,7 +44326,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45078,7 +44441,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45197,7 +44560,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45311,7 +44674,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45430,7 +44793,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45544,7 +44907,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45663,7 +45026,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45778,7 +45141,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -45893,7 +45256,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -46008,7 +45371,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -46123,7 +45486,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -46621,7 +45984,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -46733,7 +46096,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -46845,7 +46208,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -46957,7 +46320,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47069,7 +46432,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47179,7 +46542,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47289,7 +46652,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47399,7 +46762,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47509,7 +46872,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47619,7 +46982,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47729,7 +47092,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47834,7 +47197,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -47943,7 +47306,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48053,7 +47416,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48158,7 +47521,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48267,7 +47630,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48378,7 +47741,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48489,7 +47852,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48600,7 +47963,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48710,7 +48073,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48820,7 +48183,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -48925,7 +48288,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49034,7 +48397,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49144,7 +48507,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49254,7 +48617,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49364,7 +48727,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49474,7 +48837,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49584,7 +48947,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49694,7 +49057,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49804,7 +49167,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -49914,7 +49277,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50024,7 +49387,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50134,7 +49497,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50239,7 +49602,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50348,7 +49711,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50458,7 +49821,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50568,7 +49931,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50678,7 +50041,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50788,7 +50151,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -50898,7 +50261,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51003,7 +50366,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51112,7 +50475,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51217,7 +50580,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51326,7 +50689,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51436,7 +50799,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51545,7 +50908,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51660,7 +51023,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51770,7 +51133,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51884,7 +51247,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -51994,7 +51357,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52108,7 +51471,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52213,7 +51576,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52327,7 +51690,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52437,7 +51800,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52547,7 +51910,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52661,7 +52024,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52770,7 +52133,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52884,7 +52247,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -52988,7 +52351,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53102,7 +52465,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53206,7 +52569,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53316,7 +52679,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53426,7 +52789,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53546,7 +52909,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53740,7 +53103,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53844,7 +53207,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -53948,7 +53311,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54052,7 +53415,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54156,7 +53519,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54260,7 +53623,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54364,7 +53727,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54468,7 +53831,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54572,7 +53935,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54676,7 +54039,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54780,7 +54143,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54884,7 +54247,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -54988,7 +54351,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55097,7 +54460,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55201,7 +54564,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55305,7 +54668,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55409,7 +54772,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55513,7 +54876,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55617,7 +54980,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55726,7 +55089,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55830,7 +55193,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -55934,7 +55297,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56038,7 +55401,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56142,7 +55505,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56246,7 +55609,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56350,7 +55713,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56454,7 +55817,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56558,7 +55921,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56662,7 +56025,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56766,7 +56129,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56870,7 +56233,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -56974,7 +56337,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57078,7 +56441,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57182,7 +56545,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57286,7 +56649,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57390,7 +56753,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57494,7 +56857,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57598,7 +56961,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57702,7 +57065,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57806,7 +57169,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -57910,7 +57273,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58014,7 +57377,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58118,7 +57481,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58222,7 +57585,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58326,7 +57689,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58430,7 +57793,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58534,7 +57897,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58638,7 +58001,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58742,7 +58105,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58846,7 +58209,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -58950,7 +58313,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59054,7 +58417,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59158,7 +58521,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59262,7 +58625,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59366,7 +58729,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59470,7 +58833,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59574,7 +58937,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59678,7 +59041,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59782,7 +59145,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59886,7 +59249,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -59990,7 +59353,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60094,7 +59457,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60198,7 +59561,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60302,7 +59665,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60406,7 +59769,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60510,7 +59873,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60614,7 +59977,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60718,7 +60081,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60822,7 +60185,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -60926,7 +60289,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61030,7 +60393,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61135,7 +60498,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61240,7 +60603,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61345,7 +60708,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61450,7 +60813,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61555,7 +60918,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61660,7 +61023,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61765,7 +61128,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61870,7 +61233,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -61975,7 +61338,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62080,7 +61443,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62185,7 +61548,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62289,7 +61652,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62393,7 +61756,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62497,7 +61860,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62601,7 +61964,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62705,7 +62068,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62809,7 +62172,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -62913,7 +62276,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -63017,7 +62380,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -63121,7 +62484,7 @@
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:352"
+          "version": "version:353"
         },
         {
           "name": "skia/bots/svg",
@@ -63646,7 +63009,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"glesdft\\\",\\\"srgb-gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"srgb-gles\\\",\\\"image\\\",\\\"_\\\",\\\"_\\\",\\\"gles\\\",\\\"skp\\\",\\\"_\\\",\\\"_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"glesdft\\\",\\\"srgb-gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"srgb-gles\\\",\\\"image\\\",\\\"_\\\",\\\"_\\\",\\\"gles\\\",\\\"skp\\\",\\\"_\\\",\\\"_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -63749,7 +63112,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All-Metal\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"extra_config\\\",\\\"Metal\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"mtl\\\",\\\"mtlmsaa4\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~flight_animated_image\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All-Metal\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All-Metal\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Debug\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"extra_config\\\",\\\"Metal\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"mtl\\\",\\\"mtlmsaa4\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~flight_animated_image\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Debug-All-Metal\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -63852,7 +63215,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"glesdft\\\",\\\"srgb-gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"srgb-gles\\\",\\\"image\\\",\\\"_\\\",\\\"_\\\",\\\"gles\\\",\\\"skp\\\",\\\"_\\\",\\\"_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"gles\\\",\\\"glesdft\\\",\\\"srgb-gles\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"srgb-gles\\\",\\\"image\\\",\\\"_\\\",\\\"_\\\",\\\"gles\\\",\\\"skp\\\",\\\"_\\\",\\\"_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -63955,7 +63318,7 @@
         "skia/infra/bots/run_recipe.py",
         "${ISOLATED_OUTDIR}",
         "test",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All-Metal\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"extra_config\\\",\\\"Metal\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"mtl\\\",\\\"mtlmsaa4\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~flight_animated_image\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All-Metal\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
+        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All-Metal\",\"dm_flags\":\"[\\\"dm\\\",\\\"--nameByHash\\\",\\\"--key\\\",\\\"arch\\\",\\\"arm64\\\",\\\"compiler\\\",\\\"Clang\\\",\\\"configuration\\\",\\\"Release\\\",\\\"cpu_or_gpu\\\",\\\"GPU\\\",\\\"cpu_or_gpu_value\\\",\\\"PowerVRGX6450\\\",\\\"extra_config\\\",\\\"Metal\\\",\\\"model\\\",\\\"iPhone6\\\",\\\"os\\\",\\\"iOS\\\",\\\"style\\\",\\\"default\\\",\\\"--randomProcessorTest\\\",\\\"--nocpu\\\",\\\"--config\\\",\\\"mtl\\\",\\\"mtlmsaa4\\\",\\\"--src\\\",\\\"tests\\\",\\\"gm\\\",\\\"image\\\",\\\"colorImage\\\",\\\"svg\\\",\\\"--skip\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"svgparse_\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgba32abf.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24prof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"rgb24lprof.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"8bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"4bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"32bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"24bpp-pixeldata-cropped.bmp\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"frame_larger_than_image.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc2.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc3.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc4.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc5.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc6.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc7.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc8.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc9.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc10.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc11.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc12.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc13.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc14.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.png\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"incInterlaced.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc1.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"inc0.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"butterfly.gif\\\",\\\"_\\\",\\\"image\\\",\\\"gen_platf\\\",\\\"error\\\",\\\"_\\\",\\\"test\\\",\\\"_\\\",\\\"GrStyledShape\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylargebitmap\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"verylarge_picture_image\\\",\\\"_\\\",\\\"svg\\\",\\\"_\\\",\\\"A_large_blank_world_map_with_oceans_marked_in_blue.svg\\\",\\\"_\\\",\\\"tests\\\",\\\"_\\\",\\\"ImageFilterBlurLargeImage_Gpu\\\",\\\"_\\\",\\\"gm\\\",\\\"_\\\",\\\"wacky_yuv\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced1.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced2.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\"interlaced3.png\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".arw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".cr2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".dng\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".nrw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".orf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".raf\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".rw2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".pef\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".srw\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ARW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".CR2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".DNG\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".NRW\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".ORF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RAF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".RW2\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".PEF\\\",\\\"_\\\",\\\"image\\\",\\\"_\\\",\\\".SRW\\\",\\\"--match\\\",\\\"~flight_animated_image\\\",\\\"--nonativeFonts\\\",\\\"--verbose\\\"]\",\"dm_properties\":\"{\\\"buildbucket_build_id\\\":\\\"<(BUILDBUCKET_BUILD_ID)\\\",\\\"builder\\\":\\\"Test-iOS-Clang-iPhone6-GPU-PowerVRGX6450-arm64-Release-All-Metal\\\",\\\"gitHash\\\":\\\"<(REVISION)\\\",\\\"issue\\\":\\\"<(ISSUE)\\\",\\\"patch_storage\\\":\\\"<(PATCH_STORAGE)\\\",\\\"patchset\\\":\\\"<(PATCHSET)\\\",\\\"swarming_bot_id\\\":\\\"${SWARMING_BOT_ID}\\\",\\\"swarming_task_id\\\":\\\"${SWARMING_TASK_ID}\\\",\\\"task_id\\\":\\\"<(TASK_ID)\\\"}\",\"do_upload\":\"true\",\"gold_hashes_url\":\"https://gold.skia.org/json/v1/hashes\",\"gs_bucket\":\"skia-infra-gm\",\"images\":\"true\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"resources\":\"true\",\"revision\":\"<(REVISION)\",\"skps\":\"true\",\"svgs\":\"true\",\"swarm_out_dir\":\"test\",\"task_id\":\"<(TASK_ID)\"}",
         "skia"
       ],
       "dependencies": [
@@ -66876,192 +66239,6 @@
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
         "Perf-Android-Clang-GalaxyS9-GPU-MaliG72-arm64-Release-All-Android_Vulkan"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-highmem-2",
-        "os:Debian-10.3",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 3600000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 3600000000000,
-      "max_attempts": 2,
-      "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Upload-Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "run-recipe",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-amd64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-amd64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "upload_nano_results",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android\",\"gs_bucket\":\"skia-perf\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"output_ignored\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Perf-Android-Clang-Nexus5-CPU-Snapdragon800-arm-Release-All-Android"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-highmem-2",
-        "os:Debian-10.3",
-        "pool:Skia"
-      ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
-      "env_prefixes": {
-        "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
-          "cipd_bin_packages",
-          "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
-        "VPYTHON_VIRTUALENV_ROOT": [
-          "cache/vpython"
-        ]
-      },
-      "execution_timeout_ns": 3600000000000,
-      "extra_tags": {
-        "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
-      },
-      "io_timeout_ns": 3600000000000,
-      "max_attempts": 2,
-      "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Upload-Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android": {
-      "caches": [
-        {
-          "name": "vpython",
-          "path": "cache/vpython"
-        }
-      ],
-      "casSpec": "run-recipe",
-      "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/linux-amd64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-amd64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        }
-      ],
-      "command": [
-        "cipd_bin_packages/vpython3${EXECUTABLE_SUFFIX}",
-        "-u",
-        "skia/infra/bots/run_recipe.py",
-        "${ISOLATED_OUTDIR}",
-        "upload_nano_results",
-        "{\"$kitchen\":{\"devshell\":true,\"git_auth\":true},\"buildbucket_build_id\":\"<(BUILDBUCKET_BUILD_ID)\",\"buildername\":\"Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android\",\"gs_bucket\":\"skia-perf\",\"patch_issue\":\"<(ISSUE_INT)\",\"patch_ref\":\"<(PATCH_REF)\",\"patch_repo\":\"<(PATCH_REPO)\",\"patch_set\":\"<(PATCHSET_INT)\",\"patch_storage\":\"<(PATCH_STORAGE)\",\"repository\":\"<(REPO)\",\"revision\":\"<(REVISION)\",\"swarm_out_dir\":\"output_ignored\",\"task_id\":\"<(TASK_ID)\"}",
-        "skia"
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",

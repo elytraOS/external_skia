@@ -11,6 +11,7 @@
 #include "include/core/SkFont.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkPerlinNoiseShader.h"
+#include "include/sksl/SkSLDebugTrace.h"
 #include "src/core/SkEnumerate.h"
 #include "tools/Resources.h"
 #include "tools/viewer/Viewer.h"
@@ -140,6 +141,14 @@ void SkSLSlide::draw(SkCanvas* canvas) {
         return;
     }
 
+    bool writeTrace = false;
+    bool writeDump = false;
+    if (!canvas->recordingContext()) {
+        ImGui::InputInt2("Trace Coordinate (X/Y)", fTraceCoord);
+        writeTrace = ImGui::Button("Write Debug Trace (JSON)");
+        writeDump = ImGui::Button("Write Debug Dump (Human-Readable)");
+    }
+
     // Update fMousePos
     ImVec2 mousePos = ImGui::GetMousePos();
     if (ImGui::IsMouseDown(0)) {
@@ -246,9 +255,29 @@ void SkSLSlide::draw(SkCanvas* canvas) {
     ImGui::End();
 
     auto inputs = SkData::MakeWithoutCopy(fInputs.get(), fEffect->uniformSize());
+
+    canvas->save();
+
+    sk_sp<SkSL::DebugTrace> debugTrace;
     auto shader = fEffect->makeShader(std::move(inputs), fChildren.data(), fChildren.count(),
                                       nullptr, false);
+    if (writeTrace || writeDump) {
+        SkIPoint traceCoord = {fTraceCoord[0], fTraceCoord[1]};
+        SkRuntimeEffect::TracedShader traced = SkRuntimeEffect::MakeTraced(std::move(shader),
+                                                                           traceCoord);
+        shader = std::move(traced.shader);
+        debugTrace = std::move(traced.debugTrace);
 
+        // Reduce debug trace delay by clipping to a 4x4 rectangle for this paint, centered on the
+        // pixel to trace. A minor complication is that the canvas might have a transform applied to
+        // it, but we want to clip in device space. This can be worked around by resetting the
+        // canvas matrix temporarily.
+        SkM44 canvasMatrix = canvas->getLocalToDevice();
+        canvas->resetMatrix();
+        auto r = SkRect::MakeXYWH(fTraceCoord[0] - 1, fTraceCoord[1] - 1, 4, 4);
+        canvas->clipRect(r, SkClipOp::kIntersect);
+        canvas->setMatrix(canvasMatrix);
+    }
     SkPaint p;
     p.setColor4f(gPaintColor);
     p.setShader(std::move(shader));
@@ -273,6 +302,17 @@ void SkSLSlide::draw(SkCanvas* canvas) {
                                    256, font, p);
         } break;
         default: break;
+    }
+
+    canvas->restore();
+
+    if (debugTrace && writeTrace) {
+        SkFILEWStream traceFile("SkVMDebugTrace.json");
+        debugTrace->writeTrace(&traceFile);
+    }
+    if (debugTrace && writeDump) {
+        SkFILEWStream dumpFile("SkVMDebugTrace.dump.txt");
+        debugTrace->dump(&dumpFile);
     }
 }
 
