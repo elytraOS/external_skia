@@ -434,6 +434,7 @@ namespace skvm {
     // Order matters a little: Ops <=store128 are treated as having side effects.
     #define SKVM_OPS(M)                                              \
         M(assert_true)                                               \
+        M(trace_line) M(trace_var) M(trace_call)                     \
         M(store8)   M(store16)   M(store32) M(store64) M(store128)   \
         M(load8)    M(load16)    M(load32)  M(load64) M(load128)     \
         M(index)                                                     \
@@ -472,6 +473,9 @@ namespace skvm {
     static inline bool is_always_varying(Op op) {
         return Op::store8 <= op && op <= Op::index;
     }
+    static inline bool is_trace(Op op) {
+        return Op::trace_line <= op && op <= Op::trace_call;
+    }
 
     using Val = int;
     // We reserve an impossibe Val ID as a sentinel
@@ -482,8 +486,15 @@ namespace skvm {
     // varyings and uniforms. Varyings use Ptr, have a stride associated with them, and are
     // evaluated everytime through the loop. Uniforms use UPtr, don't have a stride, and are
     // usually hoisted above the loop.
-    struct Ptr { int ix; };
-    struct UPtr : public Ptr {};
+    struct Ptr {
+        Ptr() = default;
+        Ptr(int ix_) : ix(ix_) {}
+        int ix;
+    };
+    struct UPtr : public Ptr {
+        UPtr() = default;
+        UPtr(int ix_) : Ptr(ix_) {}
+    };
 
     bool operator!=(Ptr a, Ptr b);
 
@@ -609,7 +620,7 @@ namespace skvm {
         template <typename T>
         Ptr varying() { return this->arg(sizeof(T)); }
         Ptr varying(int stride) { SkASSERT(stride > 0); return this->arg(stride); }
-        UPtr uniform() { Ptr p = this->arg(0); return UPtr{{p.ix}}; }
+        UPtr uniform() { Ptr p = this->arg(0); return UPtr{p.ix}; }
 
         // TODO: allow uniform (i.e. Ptr) offsets to store* and load*?
         // TODO: sign extension (signed types) for <32-bit loads?
@@ -619,6 +630,14 @@ namespace skvm {
         void assert_true(I32 cond, I32 debug);
         void assert_true(I32 cond, F32 debug) { assert_true(cond, pun_to_I32(debug)); }
         void assert_true(I32 cond)            { assert_true(cond, cond); }
+
+        // Insert debug traces into the instruction stream
+        void trace_line(I32 mask, int line);
+        void trace_var(I32 mask, int slot, I32 val);
+        void trace_var(I32 mask, int slot, F32 val);
+        void trace_var(I32 mask, int slot, bool b);
+        void trace_call_enter(I32 mask, int line);
+        void trace_call_exit(I32 mask, int line);
 
         // Store {8,16,32,64,128}-bit varying.
         void store8  (Ptr ptr, I32 val);
@@ -1027,6 +1046,7 @@ namespace skvm {
         bool hasJIT() const;  // Has this Program been JITted?
 
         void dump(SkWStream* = nullptr) const;
+        void disassemble(SkWStream* = nullptr) const;
 
     private:
         void setupInterpreter(const std::vector<OptimizedInstruction>&);

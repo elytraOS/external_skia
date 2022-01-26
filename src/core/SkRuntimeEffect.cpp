@@ -161,7 +161,7 @@ static bool read_child_effects(SkReadBuffer& buffer,
                                const SkRuntimeEffect* effect,
                                SkTArray<SkRuntimeEffect::ChildPtr>* children) {
     size_t childCount = buffer.read32();
-    if (!buffer.validate(childCount == effect->children().count())) {
+    if (!buffer.validate(childCount == effect->children().size())) {
         return false;
     }
 
@@ -649,6 +649,7 @@ std::unique_ptr<SkFilterColorProgram> SkFilterColorProgram::Make(const SkRuntime
     skvm::Color result = SkSL::ProgramToSkVM(*effect->fBaseProgram,
                                              effect->fMain,
                                              &p,
+                                             /*debugInfo=*/nullptr,
                                              SkMakeSpan(uniform),
                                              /*device=*/zeroCoord,
                                              /*local=*/zeroCoord,
@@ -883,9 +884,9 @@ public:
         // There should be no way for the color filter to use device coords, but we need to supply
         // something. (Uninitialized values can trigger asserts in skvm::Builder).
         skvm::Coord zeroCoord = { p->splat(0.0f), p->splat(0.0f) };
-        return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   /*device=*/zeroCoord, /*local=*/zeroCoord, c, c, sampleShader,
-                                   sampleColorFilter, sampleBlender);
+        return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, /*debugInfo=*/nullptr,
+                                   SkMakeSpan(uniform), /*device=*/zeroCoord, /*local=*/zeroCoord,
+                                   c, c, sampleShader, sampleColorFilter, sampleBlender);
     }
 
     SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const override {
@@ -981,18 +982,13 @@ public:
                 get_xformed_uniforms(fEffect.get(), fUniforms, args.fDstColorInfo->colorSpace());
         SkASSERT(uniforms);
 
-        // If we sample children with explicit colors, this may not be true.
-        // TODO: Determine this via analysis?
-        GrFPArgs childArgs = args;
-        childArgs.fInputColorIsOpaque = false;
-
         auto [success, fp] = make_effect_fp(fEffect,
                                             "runtime_shader",
                                             std::move(uniforms),
                                             /*inputFP=*/nullptr,
                                             /*destColorFP=*/nullptr,
                                             SkMakeSpan(fChildren),
-                                            childArgs);
+                                            args);
         if (!success) {
             return nullptr;
         }
@@ -1049,9 +1045,9 @@ public:
         std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
                                                             *inputs);
 
-        return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   device, local, paint, paint, sampleShader, sampleColorFilter,
-                                   sampleBlender);
+        return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, /*debugInfo=*/nullptr,
+                                   SkMakeSpan(uniform), device, local, paint, paint, sampleShader,
+                                   sampleColorFilter, sampleBlender);
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -1161,9 +1157,9 @@ public:
 
         // Emit the blend function as an SkVM program.
         skvm::Coord zeroCoord = {p->splat(0.0f), p->splat(0.0f)};
-        return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                  /*device=*/zeroCoord, /*local=*/zeroCoord, src, dst,
-                                  sampleShader, sampleColorFilter, sampleBlender);
+        return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, /*debugInfo=*/nullptr,
+                                   SkMakeSpan(uniform), /*device=*/zeroCoord, /*local=*/zeroCoord,
+                                   src, dst, sampleShader, sampleColorFilter, sampleBlender);
     }
 
 #if SK_SUPPORT_GPU

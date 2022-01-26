@@ -146,7 +146,7 @@ void SkParticleEffectParams::prepare(const skresources::ResourceProvider* resour
         // and after it's populated, the values never need to be touched again.
         // The second uniform arg is for things declared as 'uniform' in the SkSL (including the
         // built-in declarations of 'dt' and 'effect').
-        skvm::Uniforms efUniforms(skvm::UPtr{{0}}, 0);
+        skvm::Uniforms efUniforms(skvm::UPtr{0}, 0);
         auto alloc = std::make_unique<SkArenaAlloc>(0);
 
         std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFns;
@@ -186,7 +186,8 @@ void SkParticleEffectParams::prepare(const skresources::ResourceProvider* resour
             for (int i = 0; i < uniformInfo->fUniformSlotCount; ++i) {
                 uniformIDs.push_back(b.uniform32(skslUniformPtr, i * sizeof(int)).id);
             }
-            if (!SkSL::ProgramToSkVM(*program, *fn, &b, SkMakeSpan(uniformIDs))) {
+            if (!SkSL::ProgramToSkVM(*program, *fn, &b, /*debugInfo=*/nullptr,
+                                     SkMakeSpan(uniformIDs))) {
                 return skvm::Program{};
             }
             return b.done();

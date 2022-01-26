@@ -22,7 +22,6 @@
 #include "src/gpu/gl/GrGLContext.h"
 #include "src/gpu/gl/GrGLRenderTarget.h"
 #include "src/gpu/gl/GrGLTexture.h"
-#include "src/utils/SkJSONWriter.h"
 
 #if defined(SK_BUILD_FOR_IOS)
 #include <TargetConditionals.h>
@@ -62,6 +61,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fDisallowDynamicMSAA = false;
     fMustResetBlendFuncBetweenDualSourceAndDisable = false;
     fBindTexture0WhenChangingTextureFBOMultisampleCount = false;
+    fRebindColorAttachmentAfterCheckFramebufferStatus = false;
     fProgramBinarySupport = false;
     fProgramParameterSupport = false;
     fSamplerObjectSupport = false;
@@ -72,7 +72,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fSRGBWriteControl = false;
     fSkipErrorChecks = false;
 
-    fShaderCaps.reset(new GrShaderCaps(contextOptions));
+    fShaderCaps = std::make_unique<GrShaderCaps>();
 
     // All of Skia's automated testing of ANGLE and all related tuning of performance and driver
     // workarounds is oriented around the D3D backends of ANGLE. Chrome has started using Skia
@@ -153,14 +153,18 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                                  ctxInfo.hasExtension("GL_NV_texture_barrier");
     } else if (GR_IS_GR_GL_ES(standard)) {
         fTextureBarrierSupport = ctxInfo.hasExtension("GL_NV_texture_barrier");
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fTextureBarrierSupport = false;
+    }
 
     if (GR_IS_GR_GL(standard)) {
         fSampleLocationsSupport = version >= GR_GL_VER(3,2) ||
                                   ctxInfo.hasExtension("GL_ARB_texture_multisample");
     } else if (GR_IS_GR_GL_ES(standard)) {
         fSampleLocationsSupport = version >= GR_GL_VER(3,1);
-    }  // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fSampleLocationsSupport = false;
+    }
 
     fImagingSupport = GR_IS_GR_GL(standard) &&
                       ctxInfo.hasExtension("GL_ARB_imaging");
@@ -206,7 +210,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fDebugSupport = true;
     } else if (GR_IS_GR_GL_ES(standard)) {
         fDebugSupport = ctxInfo.hasExtension("GL_KHR_debug");
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fDebugSupport = false;
+    }
 
     if (GR_IS_GR_GL(standard)) {
         fES2CompatibilitySupport = ctxInfo.hasExtension("GL_ARB_ES2_compatibility");
@@ -221,7 +227,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fClientCanDisableMultisample = true;
     } else if (GR_IS_GR_GL_ES(standard)) {
         fClientCanDisableMultisample = ctxInfo.hasExtension("GL_EXT_multisample_compatibility");
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fClientCanDisableMultisample = false;
+    }
 
     if (GR_IS_GR_GL(standard)) {
         // 3.1 has draw_instanced but not instanced_arrays, for the time being we only care about
@@ -263,7 +271,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         if (version >= GR_GL_VER(3, 0) && ctxInfo.hasExtension("GL_EXT_blend_func_extended")) {
             fBindFragDataLocationSupport = true;
         }
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fBindFragDataLocationSupport = false;
+    }
 
     fBindUniformLocationSupport = ctxInfo.hasExtension("GL_CHROMIUM_bind_uniform_location");
 
@@ -275,7 +285,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     } else if (GR_IS_GR_GL_ES(standard)) {
         fRectangleTextureSupport = ctxInfo.hasExtension("GL_ARB_texture_rectangle") ||
                                    ctxInfo.hasExtension("GL_ANGLE_texture_rectangle");
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fRectangleTextureSupport = false;
+    }
 
     // GrCaps defaults fClampToBorderSupport to true, so disable when unsupported
     if (GR_IS_GR_GL(standard)) {
@@ -303,7 +315,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         if (version >= GR_GL_VER(3,0)) {
             fTextureSwizzleSupport = true;
         }
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fTextureSwizzleSupport = false;
+    }
 
     if (GR_IS_GR_GL(standard)) {
         fMipmapLevelControlSupport = true;
@@ -313,7 +327,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
             fMipmapLevelControlSupport = true;
             fMipmapLodControlSupport = true;
         }
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fMipmapLevelControlSupport = false;
+        fMipmapLodControlSupport = false;
+    }
 
     // Chrome's command buffer will zero out a buffer if null is passed to glBufferData to avoid
     // letting an application see uninitialized memory. WebGL spec explicitly disallows null values.
@@ -324,7 +341,9 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                                 ctxInfo.hasExtension("GL_ARB_clear_texture"));
     } else if (GR_IS_GR_GL_ES(standard)) {
         fClearTextureSupport = ctxInfo.hasExtension("GL_EXT_clear_texture");
-    }  // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fClearTextureSupport = false;
+    }
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
     fSupportsAHardwareBufferImages = true;
@@ -514,7 +533,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 //            fTransferFromSurfaceToBufferSupport = false;
 //            fTransferBufferType = TransferBufferType::kChromium;
         }
-    } // no WebGL support
+    } else if (GR_IS_GR_WEBGL(standard)) {
+        fTransferFromBufferToTextureSupport = false;
+        fTransferFromSurfaceToBufferSupport = false;
+    }
 
     // On many GPUs, map memory is very expensive, so we effectively disable it here by setting the
     // threshold to the maximum unless the client gives us a hint that map memory is cheap.
@@ -640,9 +662,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
             fBaseVertexBaseInstanceSupport = ctxInfo.hasExtension("GL_EXT_base_instance");
             if (fBaseVertexBaseInstanceSupport) {
                 fNativeDrawIndirectSupport = (version >= GR_GL_VER(3,1));
-                if (ctxInfo.hasExtension("GL_EXT_multi_draw_indirect")) {
-                    fMultiDrawType = MultiDrawType::kMultiDrawIndirect;
-                }
+                // Don't use GL_EXT_multi_draw_indirect. It doesn't allow VAO 0.
+                // https://github.com/KhronosGroup/OpenGL-Registry/blob/main/extensions/EXT/EXT_multi_draw_indirect.txt#L142
             }
         }
         fDrawRangeElementsSupport = version >= GR_GL_VER(3,0);
@@ -972,10 +993,11 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     }
 
     if (GR_IS_GR_GL(standard)) {
-        shaderCaps->fInfinitySupport = true;
+        shaderCaps->fInfinitySupport = shaderCaps->fNonconstantArrayIndexSupport = true;
     } else if (GR_IS_GR_GL_ES(standard) || GR_IS_GR_WEBGL(standard)) {
         // Desktop GLSL 3.30 == ES GLSL 3.00.
-        shaderCaps->fInfinitySupport = ctxInfo.glslGeneration() >= k330_GrGLSLGeneration;
+        shaderCaps->fInfinitySupport = shaderCaps->fNonconstantArrayIndexSupport =
+                (ctxInfo.glslGeneration() >= k330_GrGLSLGeneration);
     }
 
     if (GR_IS_GR_GL(standard)) {
@@ -1108,6 +1130,8 @@ void GrGLCaps::initStencilSupport(const GrGLContextInfo& ctxInfo) {
 }
 
 #ifdef SK_ENABLE_DUMP_GPU
+#include "src/utils/SkJSONWriter.h"
+
 static const char* multi_draw_type_name(GrGLCaps::MultiDrawType multiDrawType) {
     switch (multiDrawType) {
         case GrGLCaps::MultiDrawType::kNone : return "kNone";
@@ -1872,19 +1896,19 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         GrGLenum bgraTexImageFormat;
         // If BGRA is supported as an internal format it must always be specified to glTex[Sub]Image
         // as a base format. Which base format depends on which extension is used.
-        if (ctxInfo.hasExtension("GL_APPLE_texture_format_BGRA8888")) {
-            // GL_APPLE_texture_format_BGRA8888:
-            //     ES 2.0: the extension makes BGRA an external format but not an internal format.
-            //     ES 3.0: the extension explicitly states GL_BGRA8 is not a valid internal format
-            //             for glTexImage (just for glTexStorage).
-            bgraTexImageFormat = GR_GL_RGBA;
-        } else {
+        if (ctxInfo.hasExtension("GL_EXT_texture_format_BGRA8888")) {
             // GL_EXT_texture_format_BGRA8888:
             //      This extension adds GL_BGRA as an unsized internal format. However, it is
             //      written against ES 2.0 and therefore doesn't define a GL_BGRA8 as ES 2.0 doesn't
             //      have sized internal formats. See later where we check for tex storage BGRA8
             //      support.
             bgraTexImageFormat = GR_GL_BGRA;
+        } else {
+            // GL_APPLE_texture_format_BGRA8888:
+            //     ES 2.0: the extension makes BGRA an external format but not an internal format.
+            //     ES 3.0: the extension explicitly states GL_BGRA8 is not a valid internal format
+            //             for glTexImage (just for glTexStorage).
+            bgraTexImageFormat = GR_GL_RGBA;
         }
 
         // TexStorage requires using a sized internal format and BGRA8 is only supported if we have
@@ -3884,14 +3908,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     }
 #endif
 
-    if (ctxInfo.renderer() == GrGLRenderer::kAdreno615 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno630 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno640 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno6xx_other) {
-        shaderCaps->fInBlendModesFailRandomlyForAllZeroVec = true;
-    }
-
     // The Adreno 5xx and 6xx produce incorrect results when comparing a pair of matrices.
     if (ctxInfo.renderer() == GrGLRenderer::kAdreno530 ||
         ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other ||
@@ -3996,7 +4012,9 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // This is fixed by reseting the blend function to anything that does not reference src2 when we
     // disable blending.
     if (ctxInfo.renderer() == GrGLRenderer::kAdreno530 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other) {
+        ctxInfo.renderer() == GrGLRenderer::kAdreno5xx_other ||
+        ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
+        ctxInfo.renderer() == GrGLRenderer::kAdreno640) {
         fMustResetBlendFuncBetweenDualSourceAndDisable = true;
     }
 
@@ -4030,6 +4048,16 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         ctxInfo.renderer() == GrGLRenderer::kAdreno430 ||
         ctxInfo.renderer() == GrGLRenderer::kAdreno4xx_other ||  // We get garbage on Adreno405.
         ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D9) {  // D3D9 conic strokes fail.
+        fDisableTessellationPathRenderer = true;
+    }
+    // We found that on Wembley devices (PowerVR GE8320) that using tessellation path renderer would
+    // cause lots of rendering errors where it seemed like vertices were in the wrong place. This
+    // led to lots of GMs drawing nothing (e.g. dashing4) or lots of garbage. The Wembley devices
+    // were running Android 12 with a driver version of 1.13. We previously had TecnoSpark devices
+    // with the same GPU running on Android P (driver 1.10) which did not have this issue. We don't
+    // know when the bug appeared in the driver so for now we disable tessellation path renderer for
+    // all matching gpus regardless of driver version.
+    if (ctxInfo.renderer() == GrGLRenderer::kPowerVRRogue) {
         fDisableTessellationPathRenderer = true;
     }
 
@@ -4231,29 +4259,48 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // non-MSAA we get corruption in the texture contents. Binding texture 0 and then rebinding the
     // original texture avoids this.
     // This was found on Nexus 5, Android 6.0.1, build M4B30Z
-    // GL_VENDOR:   "Qualcomm"
+    // GL_VENDOR  : "Qualcomm"
     // GL_RENDERER: "Adreno (TM) 330"
-    // GL_VERSION:  "OpenGL ES 3.0 V@127.0 AU@  (GIT@I96aee987eb)"
+    // GL_VERSION : "OpenGL ES 3.0 V@127.0 AU@  (GIT@I96aee987eb)"
     //
     // We also so alpha blending issues on these GMs skbug_9819, p3_ovals, p3 on Mali-Gxx devices
     // The GM issues were observed on a Galaxy S9 running Android 10:
-    // GL_VERSION:  "OpenGL ES 3.2 v1.r19p0-01rel0.###other-sha0123456789ABCDEF0###"
+    // GL_VERSION : "OpenGL ES 3.2 v1.r19p0-01rel0.###other-sha0123456789ABCDEF0###"
     // GL_RENDERER: "Mali-G72"
-    // GL_VENDOR:   "ARM"
+    // GL_VENDOR  : "ARM"
     // and a P30 running Android 9:
-    // GL_VERSION:  "OpenGL ES 3.2 v1.r16p0-01rel0.4aee637066427cbcd25297324dba15f5"
+    // GL_VERSION : "OpenGL ES 3.2 v1.r16p0-01rel0.4aee637066427cbcd25297324dba15f5"
     // GL_RENDERER: "Mali-G76"
-    // GL_VENDOR:   "ARM"
+    // GL_VENDOR  : "ARM"
     // but *not* a Galaxy S20 running Android 10:
-    // GL_VERSION:  "OpenGL ES 3.2 v1.r20p0-01rel0.###other-sha0123456789ABCDEF0###"
+    // GL_VERSION : "OpenGL ES 3.2 v1.r20p0-01rel0.###other-sha0123456789ABCDEF0###"
     // GL_RENDERER: "Mali-G77"
-    // GL_VENDOR:   "ARM"
+    // GL_VENDOR  : "ARM"
     // It's unclear if the difference is driver version or Bifrost vs Valhall. The workaround is
     // fairly trivial so just applying to all Bifrost and Valhall.
     if ((ctxInfo.renderer() == GrGLRenderer::kAdreno3xx &&
          ctxInfo.driver()   == GrGLDriver::kQualcomm) ||
         (ctxInfo.renderer() == GrGLRenderer::kMaliG)) {
         fBindTexture0WhenChangingTextureFBOMultisampleCount = true;
+    }
+
+    // skbug.com/12640
+    // We found that on the Galaxy S7 the TransferPixelsTo test would fail after adding
+    // glCheckFramebufferStatus() checks when making new FBOs. Note that the returned status was
+    // GL_FRAMEBUFFER_COMPLETE. Switching the color binding to ID 0 and back to the original
+    // afterwards works around the issue.
+    // GL_VENDOR  : "ARM"
+    // GL_RENDERER: "Mali-T880"
+    // GL_VERSION : "OpenGL ES 3.2 v1.r22p0-01rel0.f294e54ceb2cb2d81039204fa4b0402e"
+    //
+    // This *didn't* reproduce on a Kevin ChromeOS device:
+    // GL_VENDOR  : "ARM"
+    // GL_RENDERER: "Mali-T860"
+    // GL_VERSION : "OpenGL ES 3.2 v1.r26p0-01rel0.217d2597f6bd19b169343737782e56e3"
+    if (ctxInfo.renderer()      == GrGLRenderer::kMaliT &&
+        ctxInfo.driver()        == GrGLDriver::kARM     &&
+        ctxInfo.driverVersion()  < GR_GL_DRIVER_VER(1, 26, 0)) {
+        fRebindColorAttachmentAfterCheckFramebufferStatus = true;
     }
 }
 

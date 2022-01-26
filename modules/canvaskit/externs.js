@@ -58,6 +58,7 @@ var CanvasKit = {
   MakeWebGLCanvasSurface: function() {},
   Malloc: function() {},
   MallocGlyphIDs: function() {},
+  MakeLazyImageFromTextureSource: function() {},
   Free: function() {},
   computeTonalColors: function() {},
   deleteContext: function() {},
@@ -381,7 +382,6 @@ var CanvasKit = {
   FontMgr: {
     // public API (from C++ and JS bindings)
     FromData: function() {},
-    RefDefault: function() {},
     countFamilies: function() {},
     getFamilyName: function() {},
 
@@ -415,6 +415,7 @@ var CanvasKit = {
     // private API
     _makeShaderCubic: function() {},
     _makeShaderOptions: function() {},
+    _makeFromGenerator: function() {},
   },
 
   ImageFilter: {
@@ -1054,8 +1055,6 @@ CanvasKit.Surface.prototype.dispose = function() {};
 CanvasKit.Surface.prototype.flush = function() {};
 CanvasKit.Surface.prototype.requestAnimationFrame = function() {};
 CanvasKit.Surface.prototype.drawOnce = function() {};
-
-CanvasKit.FontMgr.prototype.MakeTypefaceFromData = function() {};
 
 CanvasKit.RuntimeEffect.prototype.makeShader = function() {};
 CanvasKit.RuntimeEffect.prototype.makeShaderWithChildren = function() {};

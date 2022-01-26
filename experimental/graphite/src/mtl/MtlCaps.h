@@ -19,6 +19,24 @@ public:
     Caps(const id<MTLDevice>);
     ~Caps() override {}
 
+    skgpu::TextureInfo getDefaultSampledTextureInfo(SkColorType,
+                                                    uint32_t levelCount,
+                                                    Protected,
+                                                    Renderable) const override;
+
+    skgpu::TextureInfo getDefaultMSAATextureInfo(SkColorType,
+                                                 uint32_t sampleCount,
+                                                 Protected) const override;
+
+    skgpu::TextureInfo getDefaultDepthStencilTextureInfo(DepthStencilType,
+                                                         uint32_t sampleCount,
+                                                         Protected) const override;
+
+    bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
+    bool isApple()const  { return fGPUFamily == GPUFamily::kApple; }
+
+    size_t getMinBufferAlignment() const { return this->isMac() ? 4 : 1; }
+
 private:
     void initGPUFamily(const id<MTLDevice>);
 
@@ -30,8 +48,6 @@ private:
         kMac,
         kApple,
     };
-    bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
-    bool isApple()const  { return fGPUFamily == GPUFamily::kApple; }
     static bool GetGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* group);
     static bool GetGPUFamilyFromFeatureSet(id<MTLDevice> device, GPUFamily* gpuFamily,
                                            int* group);

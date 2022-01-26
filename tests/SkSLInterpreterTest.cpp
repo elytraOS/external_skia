@@ -15,7 +15,7 @@
 
 struct ProgramBuilder {
     ProgramBuilder(skiatest::Reporter* r, const char* src)
-            : fCaps(GrContextOptions{}), fCompiler(&fCaps) {
+            : fCompiler(&fCaps) {
         SkSL::Program::Settings settings;
         // The SkSL inliner is well tested in other contexts. Here, we disable inlining entirely,
         // to stress-test the VM generator's handling of function calls with varying signatures.
@@ -88,7 +88,7 @@ void test(skiatest::Reporter* r, const char* src, float* in, const float* expect
 
     skvm::Builder b;
     SkSL::SkVMSignature sig;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{}, &sig);
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{}, &sig);
     skvm::Program p = b.done();
 
     REPORTER_ASSERT(r, p.nargs() == (int)(sig.fParameterSlots + sig.fReturnSlots));
@@ -118,7 +118,7 @@ void test(skiatest::Reporter* r, const char* src,
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     // TODO: Test with and without JIT?
@@ -532,7 +532,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
         for (int i = 0; i < 16; ++i) {
             uniforms[i] = b.uniform32(uniformPtr, i * sizeof(int)).id;
         }
-        SkSL::ProgramToSkVM(*program, *fn, &b, SkMakeSpan(uniforms));
+        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugInfo=*/nullptr, SkMakeSpan(uniforms));
         return b.done();
     };
 
@@ -623,7 +623,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 }
 
 static void expect_failure(skiatest::Reporter* r, const char* src) {
-    GrShaderCaps caps(GrContextOptions{});
+    GrShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     auto program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
@@ -651,7 +651,7 @@ DEF_TEST(SkSLInterpreterReturnThenCall, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { -2.0f, 0.0f, 3.0f, -1.0f };
@@ -673,7 +673,7 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { 1.0f, 3.0f },
@@ -715,7 +715,7 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
 
     auto test_fn = [&](const SkSL::FunctionDefinition* fn, float in, float expected) {
         skvm::Builder b;
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*uniforms=*/{});
+        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
         skvm::Program p = b.done();
 
         float out = 0.0f;
@@ -891,7 +891,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalFunction, r) {
-    GrShaderCaps caps(GrContextOptions{});
+    GrShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src = "float main() { return externalSqrt(25); }";
@@ -905,7 +905,7 @@ DEF_TEST(SkSLInterpreterExternalFunction, r) {
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out;
@@ -945,7 +945,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalTable, r) {
-    GrShaderCaps caps(GrContextOptions{});
+    GrShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src =
@@ -963,7 +963,7 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
 
-    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out[4];

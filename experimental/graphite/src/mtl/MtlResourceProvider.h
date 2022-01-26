@@ -25,12 +25,13 @@ public:
     ResourceProvider(const skgpu::Gpu* gpu);
     ~ResourceProvider() override {}
 
-    std::unique_ptr<skgpu::CommandBuffer> createCommandBuffer() override;
-
 private:
     const Gpu* mtlGpu();
 
+    sk_sp<skgpu::CommandBuffer> createCommandBuffer() override;
+    sk_sp<skgpu::GraphicsPipeline> onCreateGraphicsPipeline(const GraphicsPipelineDesc&) override;
     sk_sp<skgpu::Texture> createTexture(SkISize, const skgpu::TextureInfo&) override;
+    sk_sp<skgpu::Buffer> createBuffer(size_t size, BufferType type, PrioritizeGpuReads) override;
 };
 
 } // namespace skgpu::mtl

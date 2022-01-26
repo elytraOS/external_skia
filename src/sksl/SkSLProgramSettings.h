@@ -40,12 +40,13 @@ struct ProgramSettings {
     // At present, zero is always used by our backends.
     int fDefaultUniformSet = 0;
     int fDefaultUniformBinding = 0;
-    // Enables the SkSL optimizer.
+    // Enables the SkSL optimizer. Note that we never disable optimizations which are needed to
+    // fully evaluate constant-expressions, like constant folding or constant-intrinsic evaluation.
     bool fOptimize = true;
     // (Requires fOptimize = true) Removes any uncalled functions other than main(). Note that a
     // function which starts out being used may end up being uncalled after optimization.
     bool fRemoveDeadFunctions = true;
-    // (Requires fOptimize = true) Removes global variables which are never used.
+    // (Requires fOptimize = true) Removes variables which are never used.
     bool fRemoveDeadVariables = true;
     // (Requires fOptimize = true) When greater than zero, enables the inliner. The threshold value
     // sets an upper limit on the acceptable amount of code growth from inlining.

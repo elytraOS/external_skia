@@ -268,6 +268,18 @@ export interface CanvasKit {
     MakeRenderTarget(ctx: GrDirectContext, info: ImageInfo): Surface | null;
 
     /**
+     * Returns a texture-backed image based on the content in src. It assumes the image is
+     * RGBA_8888, unpremul and SRGB. This image can be re-used across multiple surfaces.
+     *
+     * Not available for software-backed surfaces.
+     * @param src - CanvasKit will take ownership of the TextureSource and clean it up when
+     *              the image is destroyed.
+     * @param info - If provided, will be used to determine the width/height/format of the
+     *               source image. If not, sensible defaults will be used.
+     */
+    MakeLazyImageFromTextureSource(src: TextureSource, info?: ImageInfo | PartialImageInfo): Image;
+
+    /**
      * Deletes the associated WebGLContext. Function not available on the CPU version.
      * @param ctx
      */
@@ -1763,12 +1775,6 @@ export interface FontMgr extends EmbindObject<FontMgr> {
      * @param index
      */
     getFamilyName(index: number): string;
-
-    /**
-     * Create a typeface for the specified bytes and return it.
-     * @param fontData
-     */
-    MakeTypefaceFromData(fontData: ArrayBuffer): Typeface;
 }
 
 /**
@@ -2577,6 +2583,16 @@ export type Shader = EmbindObject<Shader>;
 
 export interface Surface extends EmbindObject<Surface> {
     /**
+     * A convenient way to draw exactly once on the canvas associated with this surface.
+     * This requires an environment where a global function called requestAnimationFrame is
+     * available (e.g. on the web, not on Node). Users do not need to flush the surface,
+     * or delete/dispose of it as that is taken care of automatically with this wrapper.
+     *
+     * Node users should call getCanvas() and work with that canvas directly.
+     */
+    drawOnce(drawFrame: (_: Canvas) => void): void;
+
+    /**
      * Clean up the surface and any extra memory.
      * [Deprecated]: In the future, calls to delete() will be sufficient to clean up the memory.
      */
@@ -2616,14 +2632,18 @@ export interface Surface extends EmbindObject<Surface> {
      * Returns a texture-backed image based on the content in src. It uses RGBA_8888, unpremul
      * and SRGB - for more control, use makeImageFromTexture.
      *
+     * The underlying texture for this image will be created immediately from src, so
+     * it can be disposed of after this call. This image will *only* be usable for this
+     * surface (because WebGL textures are not transferable to other WebGL contexts).
+     * For an image that can be used across multiple surfaces, at the cost of being lazily
+     * loaded, see MakeLazyImageFromTextureSource.
+     *
      * Not available for software-backed surfaces.
      * @param src
-     * @param width - If provided, will be used as the width of src. Otherwise, the natural
-     *                width of src (if available) will be used.
-     * @param height - If provided, will be used as the height of src. Otherwise, the natural
-     *                height of src (if available) will be used.
+     * @param info - If provided, will be used to determine the width/height/format of the
+     *               source image. If not, sensible defaults will be used.
      */
-    makeImageFromTextureSource(src: TextureSource, width?: number, height?: number): Image | null;
+    makeImageFromTextureSource(src: TextureSource, info?: ImageInfo | PartialImageInfo): Image | null;
 
     /**
      * Returns current contents of the surface as an Image. This image will be optimized to be
@@ -2643,6 +2663,19 @@ export interface Surface extends EmbindObject<Surface> {
      * Returns if this Surface is a GPU-backed surface or not.
      */
     reportBackendTypeIsGPU(): boolean;
+
+    /**
+     * A convenient way to draw multiple frames on the canvas associated with this surface.
+     * This requires an environment where a global function called requestAnimationFrame is
+     * available (e.g. on the web, not on Node). Users do not need to flush the surface,
+     * as that is taken care of automatically with this wrapper.
+     *
+     * Users should probably call surface.requestAnimationFrame in the callback function to
+     * draw multiple frames, e.g. of an animation.
+     *
+     * Node users should call getCanvas() and work with that canvas directly.
+     */
+    requestAnimationFrame(drawFrame: (_: Canvas) => void): void;
 
     /**
      * If this surface is GPU-backed, return the sample count of the surface.
@@ -2785,7 +2818,7 @@ export interface TextStyle {
     decoration?: number;
     decorationColor?: InputColor;
     decorationThickness?: number;
-    decrationStyle?: DecorationStyle;
+    decorationStyle?: DecorationStyle;
     fontFamilies?: string[];
     fontFeatures?: TextFontFeatures[];
     fontSize?: number;
@@ -3173,12 +3206,6 @@ export interface FontMgrFactory {
      * @param buffers
      */
     FromData(...buffers: ArrayBuffer[]): FontMgr | null;
-
-    /**
-     * Return the default FontMgr. This will generally have 0 or 1 fonts in it, depending on if
-     * the demo monospace font was compiled in.
-     */
-    RefDefault(): FontMgr;
 }
 
 /**
@@ -3764,6 +3791,7 @@ export type InputFlattenedRSXFormArray = MallocObj | Float32Array | number[];
 export type InputVector3 = MallocObj | Vector3 | Float32Array;
 /**
  * These are the types that webGL's texImage2D supports as a way to get data from as a texture.
+ * Not listed, but also supported are https://developer.mozilla.org/en-US/docs/Web/API/VideoFrame
  */
 export type TextureSource = TypedArray | HTMLImageElement | HTMLVideoElement | ImageData | ImageBitmap;
 

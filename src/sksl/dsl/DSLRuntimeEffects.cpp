@@ -10,8 +10,7 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/sksl/DSLCore.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLIRGenerator.h"
-#include "src/sksl/dsl/priv/DSLWriter.h"
+#include "src/sksl/SkSLThreadContext.h"
 
 namespace SkSL {
 
@@ -21,7 +20,7 @@ namespace dsl {
 
 void StartRuntimeShader(SkSL::Compiler* compiler) {
     Start(compiler, SkSL::ProgramKind::kRuntimeShader);
-    SkSL::ProgramSettings& settings = DSLWriter::Settings();
+    SkSL::ProgramSettings& settings = ThreadContext::Settings();
     SkASSERT(settings.fInlineThreshold == SkSL::kDefaultInlineThreshold);
     settings.fInlineThreshold = 0;
     SkASSERT(!settings.fAllowNarrowingConversions);

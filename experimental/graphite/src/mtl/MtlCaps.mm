@@ -7,6 +7,10 @@
 
 #include "experimental/graphite/src/mtl/MtlCaps.h"
 
+#include "experimental/graphite/include/TextureInfo.h"
+#include "experimental/graphite/include/mtl/MtlTypes.h"
+#include "experimental/graphite/src/mtl/MtlUtils.h"
+
 namespace skgpu::mtl {
 
 Caps::Caps(const id<MTLDevice> device)
@@ -217,6 +221,58 @@ void Caps::initShaderCaps() {
 void Caps::initFormatTable() {
     // TODO
 }
+
+skgpu::TextureInfo Caps::getDefaultSampledTextureInfo(SkColorType colorType,
+                                                      uint32_t levelCount,
+                                                      Protected,
+                                                      Renderable renderable) const {
+    MTLTextureUsage usage = MTLTextureUsageShaderRead;
+    if (renderable == Renderable::kYes) {
+        usage |= MTLTextureUsageRenderTarget;
+    }
+
+    TextureInfo info;
+    info.fSampleCount = 1;
+    info.fLevelCount = levelCount;
+    info.fFormat = SkColorTypeToFormat(colorType);
+    info.fUsage = usage;
+    info.fStorageMode = MTLStorageModePrivate;
+    info.fFramebufferOnly = false;
+
+    return info;
+}
+
+skgpu::TextureInfo Caps::getDefaultMSAATextureInfo(SkColorType colorType,
+                                                   uint32_t sampleCount,
+                                                   Protected) const {
+    MTLTextureUsage usage = MTLTextureUsageRenderTarget;
+
+    TextureInfo info;
+    info.fSampleCount = sampleCount;
+    info.fLevelCount = 1;
+    info.fFormat = SkColorTypeToFormat(colorType);
+    info.fUsage = usage;
+    info.fStorageMode = MTLStorageModePrivate;
+    info.fFramebufferOnly = false;
+
+    return info;
+}
+
+skgpu::TextureInfo Caps::getDefaultDepthStencilTextureInfo(DepthStencilType depthStencilType,
+                                                           uint32_t sampleCount,
+                                                           Protected) const {
+    TextureInfo info;
+    info.fSampleCount = sampleCount;
+    info.fLevelCount = 1;
+    info.fFormat = DepthStencilTypeToFormat(depthStencilType);
+    info.fUsage = MTLTextureUsageRenderTarget;
+    info.fStorageMode = MTLStorageModePrivate;
+    info.fFramebufferOnly = false;
+
+    return info;
+}
+
+
 
 
 } // namespace skgpu::mtl

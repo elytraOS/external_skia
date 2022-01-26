@@ -39,6 +39,9 @@ public:
 
     ~TextureInfo() {}
     TextureInfo(const TextureInfo&) = default;
+    TextureInfo& operator=(const TextureInfo&) = delete;
+
+    bool operator==(const TextureInfo&) const;
 
     bool isValid() const { return fValid; }
     BackendApi backend() const { return fBackend; }
