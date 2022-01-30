@@ -10,6 +10,7 @@
 
 #include "include/core/SkM44.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "third_party/externals/ImGuiColorTextEdit/TextEditor.h"
 #include "tools/viewer/Slide.h"
 
 class SkSLSlide : public Slide {
@@ -34,7 +35,9 @@ public:
 private:
     bool rebuild();
 
-    SkString fSkSL;
+    TextEditor fEditor;
+    TextEditor::ErrorMarkers fErrors;
+
     bool fCodeIsDirty;
     sk_sp<SkRuntimeEffect> fEffect;
     SkAutoTMalloc<char> fInputs;

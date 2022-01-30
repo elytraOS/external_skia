@@ -27,6 +27,7 @@
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkClipStack.h"
 #include "src/core/SkColorFilterBase.h"
+#include "src/core/SkCustomMeshPriv.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkGlyphRun.h"
 #include "src/core/SkImageFilterCache.h"
@@ -1796,6 +1797,17 @@ void SkCanvas::drawVertices(const SkVertices* vertices, SkBlendMode mode, const 
     this->onDrawVerticesObject(vertices, mode, paint);
 }
 
+#ifdef SK_ENABLE_SKSL
+void SkCanvas::drawCustomMesh(SkCustomMesh cm, sk_sp<SkBlender> blender, const SkPaint& paint) {
+    TRACE_EVENT0("skia", TRACE_FUNC);
+    RETURN_ON_FALSE(SkValidateCustomMesh(cm));
+    if (!blender) {
+        blender = SkBlender::Mode(SkBlendMode::kModulate);
+    }
+    this->onDrawCustomMesh(std::move(cm), std::move(blender), paint);
+}
+#endif
+
 void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
     this->onDrawPath(path, paint);
@@ -2437,6 +2449,21 @@ void SkCanvas::onDrawVerticesObject(const SkVertices* vertices, SkBlendMode bmod
         this->topDevice()->drawVertices(vertices, SkBlender::Mode(bmode), layer->paint());
     }
 }
+
+#ifdef SK_ENABLE_SKSL
+void SkCanvas::onDrawCustomMesh(SkCustomMesh cm, sk_sp<SkBlender> blender, const SkPaint& paint) {
+    SkPaint simplePaint = clean_paint_for_drawVertices(paint);
+
+    if (this->internalQuickReject(cm.bounds, simplePaint)) {
+        return;
+    }
+
+    auto layer = this->aboutToDraw(this, simplePaint, nullptr);
+    if (layer) {
+        this->topDevice()->drawCustomMesh(std::move(cm), std::move(blender), paint);
+    }
+}
+#endif
 
 void SkCanvas::drawPatch(const SkPoint cubics[12], const SkColor colors[4],
                          const SkPoint texCoords[4], SkBlendMode bmode,

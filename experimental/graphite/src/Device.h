@@ -24,6 +24,7 @@ class Context;
 class DrawContext;
 class Recorder;
 class Shape;
+class TextureProxy;
 class Transform;
 
 class Device final : public SkBaseDevice  {
@@ -31,10 +32,15 @@ public:
     ~Device() override;
 
     static sk_sp<Device> Make(sk_sp<Recorder>, const SkImageInfo&);
+    static sk_sp<Device> Make(sk_sp<Recorder>,
+                              sk_sp<TextureProxy>,
+                              sk_sp<SkColorSpace>,
+                              SkColorType,
+                              SkAlphaType);
 
     sk_sp<Recorder> refRecorder() { return fRecorder; }
 
-protected:
+private:
     // Clipping
     void onSave() override {}
     void onRestore() override {}
@@ -101,6 +107,7 @@ protected:
 
     void drawDrawable(SkDrawable*, const SkMatrix*, SkCanvas*) override {}
     void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override {}
+    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override {}
     void drawShadow(const SkPath&, const SkDrawShadowRec&) override {}
     void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override {}
 
@@ -112,7 +119,6 @@ protected:
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
     sk_sp<SkSpecialImage> snapSpecial(const SkIRect& subset, bool forceCopy = false) override;
 
-private:
     // DrawFlags alters the effects used by drawShape.
     enum class DrawFlags : unsigned {
         kNone             = 0b00,
