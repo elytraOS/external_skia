@@ -35,6 +35,7 @@ class DebugTrace;
 class FunctionDefinition;
 struct Program;
 enum class ProgramKind : int8_t;
+struct ProgramSettings;
 }  // namespace SkSL
 
 namespace skvm {
@@ -255,11 +256,12 @@ public:
 
 private:
     enum Flags {
-        kUsesSampleCoords_Flag   = 0x1,
-        kAllowColorFilter_Flag   = 0x2,
-        kAllowShader_Flag        = 0x4,
-        kAllowBlender_Flag       = 0x8,
+        kUsesSampleCoords_Flag   = 0x01,
+        kAllowColorFilter_Flag   = 0x02,
+        kAllowShader_Flag        = 0x04,
+        kAllowBlender_Flag       = 0x08,
         kSamplesOutsideMain_Flag = 0x10,
+        kUsesColorTransform_Flag = 0x20,
     };
 
     SkRuntimeEffect(std::unique_ptr<SkSL::Program> baseProgram,
@@ -269,6 +271,8 @@ private:
                     std::vector<Child>&& children,
                     std::vector<SkSL::SampleUsage>&& sampleUsages,
                     uint32_t flags);
+
+    sk_sp<SkRuntimeEffect> makeUnoptimizedClone();
 
     static Result MakeFromSource(SkString sksl, const Options& options, SkSL::ProgramKind kind);
 
@@ -280,12 +284,15 @@ private:
                                const Options& options,
                                SkSL::ProgramKind kind);
 
+    static SkSL::ProgramSettings MakeSettings(const Options& options, bool optimize);
+
     uint32_t hash() const { return fHash; }
-    bool usesSampleCoords()   const { return (fFlags & kUsesSampleCoords_Flag); }
-    bool allowShader()        const { return (fFlags & kAllowShader_Flag);      }
-    bool allowColorFilter()   const { return (fFlags & kAllowColorFilter_Flag); }
-    bool allowBlender()       const { return (fFlags & kAllowBlender_Flag);     }
+    bool usesSampleCoords()   const { return (fFlags & kUsesSampleCoords_Flag);   }
+    bool allowShader()        const { return (fFlags & kAllowShader_Flag);        }
+    bool allowColorFilter()   const { return (fFlags & kAllowColorFilter_Flag);   }
+    bool allowBlender()       const { return (fFlags & kAllowBlender_Flag);       }
     bool samplesOutsideMain() const { return (fFlags & kSamplesOutsideMain_Flag); }
+    bool usesColorTransform() const { return (fFlags & kUsesColorTransform_Flag); }
 
     const SkFilterColorProgram* getFilterColorProgram();
 

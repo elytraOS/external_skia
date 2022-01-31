@@ -87,6 +87,9 @@ SkSL::String emit_SkSL_attributes(SkSpan<const Attribute> vertexAttrs,
                 case SLType::kFloat2:
                     result.append("float2");
                     break;
+                case SLType::kFloat3:
+                    result.append("float3");
+                    break;
                 case SLType::kFloat:
                     result.append("float");
                     break;
@@ -364,7 +367,9 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(const Gpu* gpu,
 
     mtlColorAttachment.pixelFormat = MTLPixelFormatRGBA8Unorm;
     mtlColorAttachment.blendingEnabled = FALSE;
-    mtlColorAttachment.writeMask = MTLColorWriteMaskAll;
+
+    const bool writesColor = desc.shaderCombo().fShaderType != ShaderCombo::ShaderType::kNone;
+    mtlColorAttachment.writeMask = writesColor ? MTLColorWriteMaskAll : MTLColorWriteMaskNone;
 
     (*psoDescriptor).colorAttachments[0] = mtlColorAttachment;
 
@@ -406,11 +411,16 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(const Gpu* gpu,
     id<MTLDepthStencilState> dss = resourceProvider->findOrCreateCompatibleDepthStencilState(
             depthStencilSettings);
 
-    return sk_sp<GraphicsPipeline>(new GraphicsPipeline(std::move(pso),
+    return sk_sp<GraphicsPipeline>(new GraphicsPipeline(gpu,
+                                                        std::move(pso),
                                                         dss,
                                                         depthStencilSettings.fStencilReferenceValue,
                                                         desc.renderStep()->vertexStride(),
                                                         desc.renderStep()->instanceStride()));
+}
+
+void GraphicsPipeline::onFreeGpuData() {
+    fPipelineState.reset();
 }
 
 } // namespace skgpu::mtl

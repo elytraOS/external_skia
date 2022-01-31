@@ -14,6 +14,67 @@
 
 namespace SkSL {
 
+std::string SkVMDebugTrace::getSlotComponentSuffix(int slotIndex) const {
+    const SkSL::SkVMSlotInfo& slot = fSlotInfo[slotIndex];
+
+    if (slot.rows > 1) {
+        return "["  + std::to_string(slot.componentIndex / slot.rows) +
+               "][" + std::to_string(slot.componentIndex % slot.rows) +
+               "]";
+    }
+    if (slot.columns > 1) {
+        switch (slot.componentIndex) {
+            case 0:  return ".x";
+            case 1:  return ".y";
+            case 2:  return ".z";
+            case 3:  return ".w";
+            default: return "[???]";
+        }
+    }
+    return {};
+}
+
+double SkVMDebugTrace::interpretValueBits(int slotIndex, int32_t valueBits) const {
+    SkASSERT(slotIndex >= 0);
+    SkASSERT((size_t)slotIndex < fSlotInfo.size());
+    switch (fSlotInfo[slotIndex].numberKind) {
+        case SkSL::Type::NumberKind::kUnsigned: {
+            uint32_t uintValue;
+            static_assert(sizeof(uintValue) == sizeof(valueBits));
+            memcpy(&uintValue, &valueBits, sizeof(uintValue));
+            return uintValue;
+        }
+        case SkSL::Type::NumberKind::kFloat: {
+            float floatValue;
+            static_assert(sizeof(floatValue) == sizeof(valueBits));
+            memcpy(&floatValue, &valueBits, sizeof(floatValue));
+            return floatValue;
+        }
+        default: {
+            return valueBits;
+        }
+    }
+}
+
+std::string SkVMDebugTrace::slotValueToString(int slotIndex, double value) const {
+    SkASSERT(slotIndex >= 0);
+    SkASSERT((size_t)slotIndex < fSlotInfo.size());
+    switch (fSlotInfo[slotIndex].numberKind) {
+        case SkSL::Type::NumberKind::kBoolean: {
+            return value ? "true" : "false";
+        }
+        default: {
+            char buffer[32];
+            snprintf(buffer, SK_ARRAY_COUNT(buffer), "%.8g", value);
+            return buffer;
+        }
+    }
+}
+
+std::string SkVMDebugTrace::getSlotValue(int slotIndex, int32_t valueBits) const {
+    return this->slotValueToString(slotIndex, this->interpretValueBits(slotIndex, valueBits));
+}
+
 void SkVMDebugTrace::setTraceCoord(const SkIPoint& coord) {
     fTraceCoord = coord;
 }
@@ -89,39 +150,9 @@ void SkVMDebugTrace::dump(SkWStream* o) const {
                     const SkVMSlotInfo& slot = fSlotInfo[data0];
                     o->writeText(indent.c_str());
                     o->writeText(slot.name.c_str());
-                    if (slot.rows > 1) {
-                        o->writeText("[");
-                        o->writeDecAsText(slot.componentIndex / slot.rows);
-                        o->writeText("][");
-                        o->writeDecAsText(slot.componentIndex % slot.rows);
-                        o->writeText("]");
-                    } else if (slot.columns > 1) {
-                        switch (slot.componentIndex) {
-                            case 0:  o->writeText(".x"); break;
-                            case 1:  o->writeText(".y"); break;
-                            case 2:  o->writeText(".z"); break;
-                            case 3:  o->writeText(".w"); break;
-                            default: o->writeText("[???]"); break;
-                        }
-                    }
+                    o->writeText(this->getSlotComponentSuffix(data0).c_str());
                     o->writeText(" = ");
-                    switch (slot.numberKind) {
-                        case SkSL::Type::NumberKind::kSigned:
-                        case SkSL::Type::NumberKind::kUnsigned:
-                        default:
-                            o->writeDecAsText(data1);
-                            break;
-                        case SkSL::Type::NumberKind::kBoolean:
-                            o->writeText(data1 ? "true" : "false");
-                            break;
-                        case SkSL::Type::NumberKind::kFloat: {
-                            float floatVal;
-                            static_assert(sizeof(floatVal) == sizeof(data1));
-                            memcpy(&floatVal, &data1, sizeof(floatVal));
-                            o->writeScalarAsText(floatVal);
-                            break;
-                        }
-                    }
+                    o->writeText(this->getSlotValue(data0, data1).c_str());
                     break;
                 }
                 case SkSL::SkVMTraceInfo::Op::kEnter:
@@ -136,6 +167,19 @@ void SkVMDebugTrace::dump(SkWStream* o) const {
                     o->writeText(indent.c_str());
                     o->writeText("exit ");
                     o->writeText(fFuncInfo[data0].name.c_str());
+                    break;
+
+                case SkSL::SkVMTraceInfo::Op::kScope:
+                    for (int delta = data0; delta < 0; ++delta) {
+                        indent.pop_back();
+                    }
+                    o->writeText(indent.c_str());
+                    o->writeText("scope ");
+                    o->writeText((data0 >= 0) ? "+" : "");
+                    o->writeDecAsText(data0);
+                    for (int delta = data0; delta > 0; --delta) {
+                        indent.push_back(' ');
+                    }
                     break;
             }
             o->newline();

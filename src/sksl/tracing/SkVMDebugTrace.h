@@ -47,6 +47,7 @@ struct SkVMTraceInfo {
         kVar,   /** data: slot, value */
         kEnter, /** data: function index, (unused) */
         kExit,  /** data: function index, (unused) */
+        kScope, /** data: scope delta, (unused) */
     };
     Op op;
     int32_t data[2];
@@ -68,6 +69,18 @@ public:
 
     /** Generates a human-readable dump of the debug trace. */
     void dump(SkWStream* o) const override;
+
+    /** Returns a slot's component as a variable-name suffix, e.g. ".x" or "[2][2]". */
+    std::string getSlotComponentSuffix(int slotIndex) const;
+
+    /** Bit-casts a slot's value, then converts to text, e.g. "3.14" or "true" or "12345". */
+    std::string getSlotValue(int slotIndex, int32_t value) const;
+
+    /** Bit-casts a value for a given slot into a double, honoring the slot's NumberKind. */
+    double interpretValueBits(int slotIndex, int32_t valueBits) const;
+
+    /** Converts a numeric value into text, based on the slot's NumberKind. */
+    std::string slotValueToString(int slotIndex, double value) const;
 
     /** The device-coordinate pixel to trace (controlled by setTraceCoord) */
     SkIPoint fTraceCoord = {};

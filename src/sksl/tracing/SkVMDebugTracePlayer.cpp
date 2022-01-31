@@ -13,15 +13,33 @@ void SkVMDebugTracePlayer::reset(sk_sp<SkVMDebugTrace> debugTrace) {
     size_t nslots = debugTrace ? debugTrace->fSlotInfo.size() : 0;
     fDebugTrace = debugTrace;
     fCursor = 0;
+    fScope = 0;
     fSlots.clear();
-    fSlots.resize(nslots);
+    fSlots.resize(nslots, {/*fValue=*/0,
+                           /*fScope=*/INT_MAX,
+                           /*fWriteTime=*/0});
     fStack.clear();
     fStack.push_back({/*fFunction=*/-1,
                       /*fLine=*/-1,
                       /*fDisplayMask=*/SkBitSet(nslots)});
+    fDirtyMask.emplace(nslots);
+    fReturnValues.emplace(nslots);
+
+    for (size_t slotIdx = 0; slotIdx < nslots; ++slotIdx) {
+        if (fDebugTrace->fSlotInfo[slotIdx].fnReturnValue >= 0) {
+            fReturnValues->set(slotIdx);
+        }
+    }
+
+    for (const SkVMTraceInfo& trace : fDebugTrace->fTraceInfo) {
+        if (trace.op == SkVMTraceInfo::Op::kLine) {
+            fLineNumbers[trace.data[0]] += 1;
+        }
+    }
 }
 
 void SkVMDebugTracePlayer::step() {
+    this->tidy();
     while (!this->traceHasCompleted()) {
         if (this->execute(fCursor++)) {
             break;
@@ -30,13 +48,50 @@ void SkVMDebugTracePlayer::step() {
 }
 
 void SkVMDebugTracePlayer::stepOver() {
+    this->tidy();
     size_t initialStackDepth = fStack.size();
     while (!this->traceHasCompleted()) {
         bool canEscapeFromThisStackDepth = (fStack.size() <= initialStackDepth);
-        if (this->execute(fCursor++) && canEscapeFromThisStackDepth) {
-            break;
+        if (this->execute(fCursor++)) {
+            if (canEscapeFromThisStackDepth || this->atBreakpoint()) {
+                break;
+            }
         }
     }
+}
+
+void SkVMDebugTracePlayer::stepOut() {
+    this->tidy();
+    size_t initialStackDepth = fStack.size();
+    while (!this->traceHasCompleted()) {
+        if (this->execute(fCursor++)) {
+            bool hasEscapedFromInitialStackDepth = (fStack.size() < initialStackDepth);
+            if (hasEscapedFromInitialStackDepth || this->atBreakpoint()) {
+                break;
+            }
+        }
+    }
+}
+
+void SkVMDebugTracePlayer::run() {
+    this->tidy();
+    while (!this->traceHasCompleted()) {
+        if (this->execute(fCursor++)) {
+            if (this->atBreakpoint()) {
+                break;
+            }
+        }
+    }
+}
+
+void SkVMDebugTracePlayer::tidy() {
+    fDirtyMask->reset();
+
+    // Conceptually this is `fStack.back().fDisplayMask &= ~fReturnValues`, but SkBitSet doesn't
+    // support masking one set of bits against another.
+    fReturnValues->forEachSetIndex([&](int slot) {
+        fStack.back().fDisplayMask.reset(slot);
+    });
 }
 
 bool SkVMDebugTracePlayer::traceHasCompleted() const {
@@ -46,6 +101,22 @@ bool SkVMDebugTracePlayer::traceHasCompleted() const {
 int32_t SkVMDebugTracePlayer::getCurrentLine() const {
     SkASSERT(!fStack.empty());
     return fStack.back().fLine;
+}
+
+bool SkVMDebugTracePlayer::atBreakpoint() const {
+    return fBreakpointLines.count(this->getCurrentLine());
+}
+
+void SkVMDebugTracePlayer::setBreakpoints(std::unordered_set<int> breakpointLines) {
+    fBreakpointLines = std::move(breakpointLines);
+}
+
+void SkVMDebugTracePlayer::addBreakpoint(int line) {
+    fBreakpointLines.insert(line);
+}
+
+void SkVMDebugTracePlayer::removeBreakpoint(int line) {
+    fBreakpointLines.erase(line);
 }
 
 std::vector<int> SkVMDebugTracePlayer::getCallStack() const {
@@ -64,12 +135,17 @@ int SkVMDebugTracePlayer::getStackDepth() const {
 }
 
 std::vector<SkVMDebugTracePlayer::VariableData> SkVMDebugTracePlayer::getVariablesForDisplayMask(
-        const SkBitSet& bits) const {
-    SkASSERT(bits.size() == fSlots.size());
+        const SkBitSet& displayMask) const {
+    SkASSERT(displayMask.size() == fSlots.size());
 
     std::vector<VariableData> vars;
-    bits.forEachSetIndex([&](int slot) {
-        vars.push_back({slot, fSlots[slot]});
+    displayMask.forEachSetIndex([&](int slot) {
+        double typedValue = fDebugTrace->interpretValueBits(slot, fSlots[slot].fValue);
+        vars.push_back({slot, fDirtyMask->test(slot), typedValue});
+    });
+    // Order the variable list so that the most recently-written variables are shown at the top.
+    std::stable_sort(vars.begin(), vars.end(), [&](const VariableData& a, const VariableData& b) {
+        return fSlots[a.fSlotIndex].fWriteTime > fSlots[b.fSlotIndex].fWriteTime;
     });
     return vars;
 }
@@ -93,6 +169,19 @@ std::vector<SkVMDebugTracePlayer::VariableData> SkVMDebugTracePlayer::getGlobalV
     return this->getVariablesForDisplayMask(fStack.front().fDisplayMask);
 }
 
+void SkVMDebugTracePlayer::updateVariableWriteTime(int slotIdx, size_t cursor) {
+    // The slotIdx could point to any slot within a variable.
+    // We want to update the write time on EVERY slot associated with this variable.
+    // The SlotInfo gives us enough information to find the affected range.
+    const SkSL::SkVMSlotInfo& changedSlot = fDebugTrace->fSlotInfo[slotIdx];
+    slotIdx -= changedSlot.componentIndex;
+    int lastSlotIdx = slotIdx + (changedSlot.columns * changedSlot.rows);
+
+    for (; slotIdx < lastSlotIdx; ++slotIdx) {
+        fSlots[slotIdx].fWriteTime = cursor;
+    }
+}
+
 bool SkVMDebugTracePlayer::execute(size_t position) {
     if (position >= fDebugTrace->fTraceInfo.size()) {
         SkDEBUGFAILF("position %zu out of range", position);
@@ -106,25 +195,30 @@ bool SkVMDebugTracePlayer::execute(size_t position) {
             int lineNumber = trace.data[0];
             SkASSERT(lineNumber >= 0);
             SkASSERT((size_t)lineNumber < fDebugTrace->fSource.size());
+            SkASSERT(fLineNumbers[lineNumber] > 0);
             fStack.back().fLine = lineNumber;
+            fLineNumbers[lineNumber] -= 1;
             return true;
         }
         case SkVMTraceInfo::Op::kVar: {  // data: slot, value
-            int slot = trace.data[0];
+            int slotIdx = trace.data[0];
             int value = trace.data[1];
-            SkASSERT(slot >= 0);
-            SkASSERT((size_t)slot < fDebugTrace->fSlotInfo.size());
-            fSlots[slot] = value;
-            if (fDebugTrace->fSlotInfo[slot].fnReturnValue < 0) {
+            SkASSERT(slotIdx >= 0);
+            SkASSERT((size_t)slotIdx < fDebugTrace->fSlotInfo.size());
+            fSlots[slotIdx].fValue = value;
+            fSlots[slotIdx].fScope = std::min<>(fSlots[slotIdx].fScope, fScope);
+            this->updateVariableWriteTime(slotIdx, position);
+            if (fDebugTrace->fSlotInfo[slotIdx].fnReturnValue < 0) {
                 // Normal variables are associated with the current function.
                 SkASSERT(fStack.size() > 0);
-                fStack.rbegin()[0].fDisplayMask.set(slot);
+                fStack.rbegin()[0].fDisplayMask.set(slotIdx);
             } else {
                 // Return values are associated with the parent function (since the current function
                 // is exiting and we won't see them there).
                 SkASSERT(fStack.size() > 1);
-                fStack.rbegin()[1].fDisplayMask.set(slot);
+                fStack.rbegin()[1].fDisplayMask.set(slotIdx);
             }
+            fDirtyMask->set(slotIdx);
             break;
         }
         case SkVMTraceInfo::Op::kEnter: { // data: function index, (unused)
@@ -141,6 +235,20 @@ bool SkVMDebugTracePlayer::execute(size_t position) {
             SkASSERT(fStack.back().fFunction == trace.data[0]);
             fStack.pop_back();
             return true;
+        }
+        case SkVMTraceInfo::Op::kScope: { // data: scope delta, (unused)
+            SkASSERT(!fStack.empty());
+            fScope += trace.data[0];
+            if (trace.data[0] < 0) {
+                // If the scope is being reduced, discard variables that are now out of scope.
+                for (size_t slotIdx = 0; slotIdx < fSlots.size(); ++slotIdx) {
+                    if (fScope < fSlots[slotIdx].fScope) {
+                        fSlots[slotIdx].fScope = INT_MAX;
+                        fStack.back().fDisplayMask.reset(slotIdx);
+                    }
+                }
+            }
+            return false;
         }
     }
 

@@ -23,6 +23,7 @@ import (
 	docker_pubsub "go.skia.org/infra/go/docker/build/pubsub"
 	sk_exec "go.skia.org/infra/go/exec"
 	"go.skia.org/infra/task_driver/go/lib/auth_steps"
+	"go.skia.org/infra/task_driver/go/lib/bazel"
 	"go.skia.org/infra/task_driver/go/lib/checkout"
 	"go.skia.org/infra/task_driver/go/lib/docker"
 	"go.skia.org/infra/task_driver/go/lib/golang"
@@ -115,8 +116,30 @@ func main() {
 		td.Fatal(ctx, err)
 	}
 
-	// TODO(kjlubick) Build and push all apps of interest as they are ported.
-	if err := buildPushJSFiddle(ctx, wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
+	opts := bazel.BazelOptions{
+		CachePath: "/mnt/pd0/bazel_cache",
+	}
+	if err := bazel.EnsureBazelRCFile(ctx, opts); err != nil {
+		td.Fatal(ctx, err)
+	}
+
+	if err := buildPush(ctx, "debugger-app", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
+		td.Fatal(ctx, err)
+	}
+
+	if err := buildPush(ctx, "jsfiddle", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
+		td.Fatal(ctx, err)
+	}
+
+	if err := buildPush(ctx, "particles", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
+		td.Fatal(ctx, err)
+	}
+
+	if err := buildPush(ctx, "shaders", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
+		td.Fatal(ctx, err)
+	}
+
+	if err := buildPush(ctx, "skottie", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
 		td.Fatal(ctx, err)
 	}
 
@@ -128,8 +151,11 @@ func main() {
 	}
 }
 
-func buildPushJSFiddle(ctx context.Context, wasmProductsDir, checkoutDir, skiaRevision string, topic *pubsub.Topic) error {
-	err := td.Do(ctx, td.Props("Build jsfiddle image").Infra(), func(ctx context.Context) error {
+// buildPush pushes the app in the given skia-infra folder using `make bazel_release_ci`.
+// By convention, all of these apps should have the k8s deployment name be the same as the app
+// name and be built using the same Make target.
+func buildPush(ctx context.Context, appName, wasmProductsDir, checkoutDir, skiaRevision string, topic *pubsub.Topic) error {
+	err := td.Do(ctx, td.Props("Build "+appName+" image").Infra(), func(ctx context.Context) error {
 		runCmd := &sk_exec.Command{
 			Name:       "make",
 			Args:       []string{"bazel_release_ci"},
@@ -138,7 +164,7 @@ func buildPushJSFiddle(ctx context.Context, wasmProductsDir, checkoutDir, skiaRe
 				"COPY_FROM_DIR=" + wasmProductsDir,
 				"STABLE_DOCKER_TAG=" + skiaRevision,
 			},
-			Dir:       filepath.Join(checkoutDir, "jsfiddle"),
+			Dir:       filepath.Join(checkoutDir, appName),
 			LogStdout: true,
 			LogStderr: true,
 		}
@@ -151,13 +177,15 @@ func buildPushJSFiddle(ctx context.Context, wasmProductsDir, checkoutDir, skiaRe
 	if err != nil {
 		return err
 	}
-	return publishToTopic(ctx, "gcr.io/skia-public/jsfiddle", skiaRevision, topic)
+	return publishToTopic(ctx, "gcr.io/skia-public/"+appName, skiaRevision, topic)
 }
 
+// publishToTopic publishes a message to the pubsub topic which is subscribed to by
+// https://github.com/google/skia-buildbot/blob/cd593cf6c534ba7a1bd2d88a488d37840663230d/docker_pushes_watcher/go/docker_pushes_watcher/main.go#L335
+// The tag will be used to determine if the image should be updated, as such, it is the
+// skia revision that was used to build the wasm components.
 func publishToTopic(ctx context.Context, image, tag string, topic *pubsub.Topic) error {
 	return td.Do(ctx, td.Props(fmt.Sprintf("Publish pubsub msg to %s", docker_pubsub.TOPIC)).Infra(), func(ctx context.Context) error {
-		// Publish to the pubsub topic which is subscribed to by
-		// https://github.com/google/skia-buildbot/blob/cd593cf6c534ba7a1bd2d88a488d37840663230d/docker_pushes_watcher/go/docker_pushes_watcher/main.go#L335
 		b, err := json.Marshal(&docker_pubsub.BuildInfo{
 			ImageName: image,
 			Tag:       tag,
