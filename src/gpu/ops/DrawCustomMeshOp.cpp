@@ -542,8 +542,9 @@ static sk_sp<SkCustomMeshSpecification> make_vertices_spec(bool hasColors, bool 
         attributes.push_back({Attribute::Type::kUByte4_unorm, size, SkString{"color"}});
         varyings.push_back({Varying::Type::kHalf4, SkString{"color"}});
         vs += "v.color = a.color;\n";
-        fs += "main(Varyings v, out half4 color) {\n"
-              "color = half4(v.color.bgr*v.color.a, v.color.a);\n";
+        // Using float4 for the output color to work around skbug.com/12761
+        fs += "main(Varyings v, out float4 color) {\n"
+              "color = float4(v.color.bgr*v.color.a, v.color.a);\n";
         size += 4;
     } else {
         fs += "main(Varyings v) {\n";
