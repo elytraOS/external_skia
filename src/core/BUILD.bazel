@@ -2196,6 +2196,7 @@ generated_cc_atom(
     deps = [
         ":SkMask_hdr",
         ":SkMathPriv_hdr",
+        ":SkStrikeForGPU_hdr",
         "//include/core:SkPath_hdr",
         "//include/core:SkTypes_hdr",
         "//include/private:SkChecksum_hdr",
@@ -4145,6 +4146,7 @@ generated_cc_atom(
         "//include/effects:SkRuntimeEffect_hdr",
         "//include/gpu:GrRecordingContext_hdr",
         "//include/private:SkMutex_hdr",
+        "//include/sksl:DSLCore_hdr",
         "//src/gpu:GrColorInfo_hdr",
         "//src/gpu:GrFPArgs_hdr",
         "//src/gpu:GrImageInfo_hdr",
@@ -4496,6 +4498,8 @@ generated_cc_atom(
         "//include/core:SkBitmap_hdr",
         "//include/core:SkCanvas_hdr",
         "//include/core:SkImage_hdr",
+        "//include/core:SkMatrix_hdr",
+        "//include/core:SkTileMode_hdr",
         "//include/gpu:GrDirectContext_hdr",
         "//include/gpu:GrRecordingContext_hdr",
         "//src/gpu:GrImageInfo_hdr",
@@ -4504,6 +4508,7 @@ generated_cc_atom(
         "//src/gpu:GrTextureProxy_hdr",
         "//src/image:SkImage_Base_hdr",
         "//src/image:SkImage_Gpu_hdr",
+        "//src/shaders:SkImageShader_hdr",
     ],
 )
 
@@ -4654,7 +4659,6 @@ generated_cc_atom(
     hdrs = ["SkStrikeForGPU.h"],
     visibility = ["//:__subpackages__"],
     deps = [
-        ":SkGlyph_hdr",
         "//include/core:SkPaint_hdr",
         "//include/core:SkPoint_hdr",
         "//include/core:SkSpan_hdr",
@@ -5550,5 +5554,55 @@ generated_cc_atom(
         "//src/sksl/ir:SkSLFunctionDefinition_hdr",
         "//src/sksl/ir:SkSLProgram_hdr",
         "//src/sksl/ir:SkSLVarDeclarations_hdr",
+    ],
+)
+
+generated_cc_atom(
+    name = "SkDebugUtils_hdr",
+    hdrs = ["SkDebugUtils.h"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//include/core:SkTileMode_hdr"],
+)
+
+generated_cc_atom(
+    name = "SkKeyHelpers_hdr",
+    hdrs = ["SkKeyHelpers.h"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//experimental/graphite/include:Context_hdr",
+        "//include/core:SkBlendMode_hdr",
+        "//include/core:SkShader_hdr",
+        "//include/core:SkTileMode_hdr",
+    ],
+)
+
+generated_cc_atom(
+    name = "SkKeyHelpers_src",
+    srcs = ["SkKeyHelpers.cpp"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":SkDebugUtils_hdr",
+        ":SkKeyHelpers_hdr",
+        "//include/private:SkPaintParamsKey_hdr",
+    ],
+)
+
+generated_cc_atom(
+    name = "SkPaintParamsKey_src",
+    srcs = ["SkPaintParamsKey.cpp"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":SkKeyHelpers_hdr",
+        "//include/private:SkPaintParamsKey_hdr",
+    ],
+)
+
+generated_cc_atom(
+    name = "SkShaderCodeDictionary_src",
+    srcs = ["SkShaderCodeDictionary.cpp"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":SkOpts_hdr",
+        "//include/private:SkShaderCodeDictionary_hdr",
     ],
 )
