@@ -9,13 +9,16 @@
 
 #include "experimental/graphite/include/TextureInfo.h"
 #include "experimental/graphite/include/mtl/MtlTypes.h"
+#include "experimental/graphite/src/CommandBuffer.h"
+#include "experimental/graphite/src/GraphicsPipelineDesc.h"
 #include "experimental/graphite/src/mtl/MtlUtils.h"
+#include "src/sksl/SkSLUtil.h"
 
 namespace skgpu::mtl {
 
 Caps::Caps(const id<MTLDevice> device)
         : skgpu::Caps() {
-    // TODO: allocate shadercaps
+    fShaderCaps = std::make_unique<SkSL::ShaderCaps>();
 
     this->initGPUFamily(device);
     this->initCaps(device);
@@ -211,11 +214,49 @@ void Caps::initGPUFamily(id<MTLDevice> device) {
 }
 
 void Caps::initCaps(const id<MTLDevice> device) {
-    // TODO
+    if (this->isMac() || fFamilyGroup >= 3) {
+        fMaxTextureSize = 16384;
+    } else {
+        fMaxTextureSize = 8192;
+    }
+
+    // We use constant address space for our uniform buffers which has various alignment
+    // requirements for the offset when binding the buffer. On MacOS the offset must align to 256.
+    // On iOS we must align to the max of the data type consumed by the vertex function or 4 bytes.
+    // We can ignore the data type and just always use 16 bytes on iOS.
+    if (this->isMac()) {
+        fRequiredUniformBufferAlignment = 256;
+    } else {
+        fRequiredUniformBufferAlignment = 16;
+    }
 }
 
 void Caps::initShaderCaps() {
-    // TODO
+    SkSL::ShaderCaps* shaderCaps = fShaderCaps.get();
+
+    // Setting this true with the assumption that this cap will eventually mean we support varying
+    // precisions and not just via modifiers.
+    shaderCaps->fUsesPrecisionModifiers = true;
+    shaderCaps->fFlatInterpolationSupport = true;
+
+    shaderCaps->fShaderDerivativeSupport = true;
+
+    // TODO(skia:8270): Re-enable this once bug 8270 is fixed
+#if 0
+    if (this->isApple()) {
+        shaderCaps->fFBFetchSupport = true;
+        shaderCaps->fFBFetchNeedsCustomOutput = true; // ??
+        shaderCaps->fFBFetchColorName = ""; // Somehow add [[color(0)]] to arguments to frag shader
+    }
+#endif
+
+    shaderCaps->fIntegerSupport = true;
+    shaderCaps->fNonsquareMatrixSupport = true;
+    shaderCaps->fInverseHyperbolicSupport = true;
+
+    // Metal uses IEEE floats so assuming those values here.
+    // TODO: add fHalfIs32Bits?
+    shaderCaps->fFloatIs32Bits = true;
 }
 
 void Caps::initFormatTable() {
@@ -258,13 +299,13 @@ skgpu::TextureInfo Caps::getDefaultMSAATextureInfo(SkColorType colorType,
     return info;
 }
 
-skgpu::TextureInfo Caps::getDefaultDepthStencilTextureInfo(DepthStencilType depthStencilType,
+skgpu::TextureInfo Caps::getDefaultDepthStencilTextureInfo(Mask<DepthStencilFlags> depthStencilType,
                                                            uint32_t sampleCount,
                                                            Protected) const {
     TextureInfo info;
     info.fSampleCount = sampleCount;
     info.fLevelCount = 1;
-    info.fFormat = DepthStencilTypeToFormat(depthStencilType);
+    info.fFormat = DepthStencilFlagsToFormat(depthStencilType);
     info.fUsage = MTLTextureUsageRenderTarget;
     info.fStorageMode = MTLStorageModePrivate;
     info.fFramebufferOnly = false;
@@ -272,7 +313,71 @@ skgpu::TextureInfo Caps::getDefaultDepthStencilTextureInfo(DepthStencilType dept
     return info;
 }
 
+UniqueKey Caps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipelineDesc,
+                                        const RenderPassDesc& renderPassDesc) const {
+    UniqueKey pipelineKey;
+    {
+        static const skgpu::UniqueKey::Domain kGraphicsPipelineDomain = UniqueKey::GenerateDomain();
+        SkSpan<const uint32_t> pipelineDescKey = pipelineDesc.asKey();
+        UniqueKey::Builder builder(&pipelineKey, kGraphicsPipelineDomain,
+                                   pipelineDescKey.size() + 1, "GraphicsPipeline");
+        // add graphicspipelinedesc key
+        for (unsigned int i = 0; i < pipelineDescKey.size(); ++i) {
+            builder[i] = pipelineDescKey[i];
+        }
+        // add renderpassdesc key
+        mtl::TextureInfo colorInfo, depthStencilInfo;
+        renderPassDesc.fColorAttachment.fTextureInfo.getMtlTextureInfo(&colorInfo);
+        renderPassDesc.fDepthStencilAttachment.fTextureInfo.getMtlTextureInfo(&depthStencilInfo);
+        SkASSERT(colorInfo.fFormat < 65535 && depthStencilInfo.fFormat < 65535);
+        uint32_t renderPassKey = colorInfo.fFormat << 16 | depthStencilInfo.fFormat;
+        builder[pipelineDescKey.size()] = renderPassKey;
+        builder.finish();
+    }
+
+    return pipelineKey;
+}
+
+bool Caps::onIsTexturable(const skgpu::TextureInfo& info) const {
+    if (!(info.mtlTextureSpec().fUsage & MTLTextureUsageShaderRead)) {
+        return false;
+    }
+    if (info.mtlTextureSpec().fFramebufferOnly) {
+        return false;
+    }
+    return this->isTexturable((MTLPixelFormat)info.mtlTextureSpec().fFormat);
+}
+
+bool Caps::isTexturable(MTLPixelFormat format) const {
+    // TODO: Fill out format table so that we can query all formats. For now we only support RGBA8
+    // and BGRA8 which is supported everywhere.
+    return format == MTLPixelFormatRGBA8Unorm || format == MTLPixelFormatBGRA8Unorm;
+}
+
+bool Caps::isRenderable(const skgpu::TextureInfo& info) const {
+    return info.mtlTextureSpec().fUsage & MTLTextureUsageRenderTarget &&
+    this->isRenderable((MTLPixelFormat)info.mtlTextureSpec().fFormat, info.numSamples());
+}
+
+bool Caps::isRenderable(MTLPixelFormat format, uint32_t numSamples) const {
+    // TODO: Fill out format table so that we can query all formats. For now we only support RGBA8
+    // and BGRA8 with a sampleCount of 1 which is supported everywhere.
+    if ((format != MTLPixelFormatRGBA8Unorm && format != MTLPixelFormatBGRA8Unorm) ||
+        numSamples != 1) {
+        return false;
+    }
+    return true;
+}
 
 
+bool Caps::onAreColorTypeAndTextureInfoCompatible(SkColorType type,
+                                                  const skgpu::TextureInfo& info) const {
+    // TODO: Fill out format table so that we can query all formats. For now we only support RGBA8
+    // or BGRA8 for both the color type and format.
+    return (type == kRGBA_8888_SkColorType &&
+            info.mtlTextureSpec().fFormat == MTLPixelFormatRGBA8Unorm) ||
+           (type == kBGRA_8888_SkColorType &&
+            info.mtlTextureSpec().fFormat == MTLPixelFormatBGRA8Unorm);
+}
 
 } // namespace skgpu::mtl

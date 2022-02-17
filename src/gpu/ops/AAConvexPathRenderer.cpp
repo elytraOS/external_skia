@@ -20,6 +20,7 @@
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -364,7 +365,7 @@ typedef SkTArray<Draw, true> DrawArray;
 
 void create_vertices(const SegmentArray& segments,
                      const SkPoint& fanPt,
-                     const GrVertexColor& color,
+                     const VertexColor& color,
                      DrawArray* draws,
                      VertexWriter& verts,
                      uint16_t* idxs,
@@ -559,7 +560,7 @@ public:
 
     const char* name() const override { return "QuadEdge"; }
 
-    void addToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void addToKey(const GrShaderCaps& caps, KeyBuilder* b) const override {
         b->addBool(fUsesLocalCoords, "usesLocalCoords");
         b->addBits(ProgramImpl::kMatrixKeyBits,
                    ProgramImpl::ComputeMatrixKey(caps, fLocalMatrix),
@@ -577,7 +578,7 @@ private:
         fInColor = MakeColorAttribute("inColor", wideColor);
         // GL on iOS 14 needs more precision for the quadedge attributes
         fInQuadEdge = {"inQuadEdge", kFloat4_GrVertexAttribType, kFloat4_GrSLType};
-        this->setVertexAttributes(&fInPosition, 3);
+        this->setVertexAttributesWithImplicitOffsets(&fInPosition, 3);
     }
 
     Attribute fInPosition;
@@ -822,7 +823,7 @@ private:
             }
 
             SkSTArray<kPreallocDrawCnt, Draw, true> draws;
-            GrVertexColor color(args.fColor, fWideColor);
+            VertexColor color(args.fColor, fWideColor);
             create_vertices(segments, fanPt, color, &draws, verts, idxs, kVertexStride);
 
             GrSimpleMesh* meshes = target->allocMeshes(draws.count());

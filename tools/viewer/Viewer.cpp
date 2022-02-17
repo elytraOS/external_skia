@@ -17,12 +17,14 @@
 #include "include/private/SkTPin.h"
 #include "include/private/SkTo.h"
 #include "include/utils/SkPaintFilterCanvas.h"
+#include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkScan.h"
+#include "src/core/SkStringUtils.h"
 #include "src/core/SkSurfacePriv.h"
 #include "src/core/SkTSort.h"
 #include "src/core/SkTaskGroup.h"
@@ -31,11 +33,11 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrPersistentCacheUtils.h"
-#include "src/gpu/GrShaderUtils.h"
 #include "src/image/SkImage_Base.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/utils/SkJSONWriter.h"
 #include "src/utils/SkOSPath.h"
+#include "src/utils/SkShaderUtils.h"
 #include "tools/Resources.h"
 #include "tools/RuntimeBlendUtils.h"
 #include "tools/ToolUtils.h"
@@ -49,6 +51,7 @@
 #include "tools/viewer/ParticlesSlide.h"
 #include "tools/viewer/SKPSlide.h"
 #include "tools/viewer/SampleSlide.h"
+#include "tools/viewer/SkSLDebuggerSlide.h"
 #include "tools/viewer/SkSLSlide.h"
 #include "tools/viewer/SlideDir.h"
 #include "tools/viewer/SvgSlide.h"
@@ -331,6 +334,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     , fShowImGuiDebugWindow(false)
     , fShowSlidePicker(false)
     , fShowImGuiTestWindow(false)
+    , fShowHistogramWindow(false)
     , fShowZoomWindow(false)
     , fZoomWindowFixed(false)
     , fZoomWindowLocation{0.0f, 0.0f}
@@ -470,6 +474,10 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     fCommands.addCommand('0', "Overlays", "Reset stats", [this]() {
         fStatsLayer.resetMeasurements();
         this->updateTitle();
+        fWindow->inval();
+    });
+    fCommands.addCommand('C', "GUI", "Toggle color histogram", [this]() {
+        this->fShowHistogramWindow = !this->fShowHistogramWindow;
         fWindow->inval();
     });
     fCommands.addCommand('c', "Modes", "Cycle color mode", [this]() {
@@ -833,28 +841,31 @@ void Viewer::initSlides() {
     for (skiagm::GMFactory gmFactory : skiagm::GMRegistry::Range()) {
         std::unique_ptr<skiagm::GM> gm = gmFactory();
         if (!CommandLineFlags::ShouldSkip(FLAGS_match, gm->getName())) {
-            sk_sp<Slide> slide(new GMSlide(std::move(gm)));
+            auto slide = sk_make_sp<GMSlide>(std::move(gm));
             fSlides.push_back(std::move(slide));
         }
     }
-    // reverse gms
-    int numGMs = fSlides.count() - firstGM;
-    for (int i = 0; i < numGMs/2; ++i) {
-        std::swap(fSlides[firstGM + i], fSlides[fSlides.count() - i - 1]);
-    }
+
+    auto orderBySlideName = [](sk_sp<Slide> a, sk_sp<Slide> b) {
+        return SK_strcasecmp(a->getName().c_str(), b->getName().c_str()) < 0;
+    };
+    std::sort(fSlides.begin() + firstGM, fSlides.end(), orderBySlideName);
 
     // samples
+    int firstSample = fSlides.count();
     for (const SampleFactory factory : SampleRegistry::Range()) {
-        sk_sp<Slide> slide(new SampleSlide(factory));
+        auto slide = sk_make_sp<SampleSlide>(factory);
         if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
             fSlides.push_back(slide);
         }
     }
 
+    std::sort(fSlides.begin() + firstSample, fSlides.end(), orderBySlideName);
+
     // Particle demo
     {
         // TODO: Convert this to a sample
-        sk_sp<Slide> slide(new ParticlesSlide());
+        auto slide = sk_make_sp<ParticlesSlide>();
         if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
             fSlides.push_back(std::move(slide));
         }
@@ -862,7 +873,15 @@ void Viewer::initSlides() {
 
     // Runtime shader editor
     {
-        sk_sp<Slide> slide(new SkSLSlide());
+        auto slide = sk_make_sp<SkSLSlide>();
+        if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
+            fSlides.push_back(std::move(slide));
+        }
+    }
+
+    // Runtime shader debugger
+    {
+        auto slide = sk_make_sp<SkSLDebuggerSlide>();
         if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
             fSlides.push_back(std::move(slide));
         }
@@ -902,7 +921,7 @@ void Viewer::initSlides() {
     }
 
     if (!fSlides.count()) {
-        sk_sp<Slide> slide(new NullSlide());
+        auto slide = sk_make_sp<NullSlide>();
         fSlides.push_back(std::move(slide));
     }
 }
@@ -1520,6 +1539,7 @@ void Viewer::drawSlide(SkSurface* surface) {
     sk_sp<SkSurface> offscreenSurface = nullptr;
     if (kPerspective_Fake == fPerspectiveMode ||
         fShowZoomWindow ||
+        fShowHistogramWindow ||
         Window::kRaster_BackendType == fBackendType ||
         colorSpace != nullptr ||
         FLAGS_offscreen) {
@@ -2736,7 +2756,7 @@ void Viewer::drawImGui() {
         for (int i = 0; i < gShaderErrorHandler.fErrors.count(); ++i) {
             ImGui::TextWrapped("%s", gShaderErrorHandler.fErrors[i].c_str());
             SkSL::String sksl(gShaderErrorHandler.fShaders[i].c_str());
-            GrShaderUtils::VisitLineByLine(sksl, [](int lineNumber, const char* lineText) {
+            SkShaderUtils::VisitLineByLine(sksl, [](int lineNumber, const char* lineText) {
                 ImGui::TextWrapped("%4i\t%s\n", lineNumber, lineText);
             });
         }
@@ -2789,6 +2809,40 @@ void Viewer::drawImGui() {
                 outline.setStyle(SkPaint::kStroke_Style);
                 c->drawRect(SkRect::MakeXYWH(x, y, 1, 1), outline);
             });
+        }
+
+        ImGui::End();
+    }
+
+    if (fShowHistogramWindow && fLastImage) {
+        ImGui::SetNextWindowSize(ImVec2(450, 500));
+        ImGui::SetNextWindowBgAlpha(0.5f);
+        if (ImGui::Begin("Color Histogram (R,G,B)", &fShowHistogramWindow)) {
+            const auto info = SkImageInfo::MakeN32Premul(fWindow->width(), fWindow->height());
+            SkAutoPixmapStorage pixmap;
+            pixmap.alloc(info);
+
+            if (fLastImage->readPixels(fWindow->directContext(), info, pixmap.writable_addr(),
+                                       info.minRowBytes(), 0, 0)) {
+                std::vector<float> r(256), g(256), b(256);
+                for (int y = 0; y < info.height(); ++y) {
+                    for (int x = 0; x < info.width(); ++x) {
+                        const auto pmc = *pixmap.addr32(x, y);
+                        r[SkGetPackedR32(pmc)]++;
+                        g[SkGetPackedG32(pmc)]++;
+                        b[SkGetPackedB32(pmc)]++;
+                    }
+                }
+
+                ImGui::PushItemWidth(-1);
+                ImGui::PlotHistogram("R", r.data(), r.size(), 0, nullptr,
+                                     FLT_MAX, FLT_MAX, ImVec2(0, 150));
+                ImGui::PlotHistogram("G", g.data(), g.size(), 0, nullptr,
+                                     FLT_MAX, FLT_MAX, ImVec2(0, 150));
+                ImGui::PlotHistogram("B", b.data(), b.size(), 0, nullptr,
+                                     FLT_MAX, FLT_MAX, ImVec2(0, 150));
+                ImGui::PopItemWidth();
+            }
         }
 
         ImGui::End();

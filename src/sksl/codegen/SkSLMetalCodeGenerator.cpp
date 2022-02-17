@@ -1711,10 +1711,10 @@ void MetalCodeGenerator::writeLiteral(const Literal& l) {
         return;
     }
     if (type.isInteger()) {
-        if (type == *fContext.fTypes.fUInt) {
+        if (type.matches(*fContext.fTypes.fUInt)) {
             this->write(to_string(l.intValue() & 0xffffffff));
             this->write("u");
-        } else if (type == *fContext.fTypes.fUShort) {
+        } else if (type.matches(*fContext.fTypes.fUShort)) {
             this->write(to_string(l.intValue() & 0xffff));
             this->write("u");
         } else {
@@ -1827,26 +1827,22 @@ bool MetalCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) 
                 const GlobalVarDeclaration& decls = e->as<GlobalVarDeclaration>();
                 const VarDeclaration& var = decls.declaration()->as<VarDeclaration>();
                 if (var.var().type().typeKind() == Type::TypeKind::kSampler) {
-                    if (var.var().modifiers().fLayout.fBinding < 0) {
-                        fContext.fErrors->error(decls.fLine,
-                                                "Metal samplers must have 'layout(binding=...)'");
-                        return false;
-                    }
                     if (var.var().type().dimensions() != SpvDim2D) {
                         // Not yet implemented--Skia currently only uses 2D textures.
                         fContext.fErrors->error(decls.fLine, "Unsupported texture dimensions");
                         return false;
                     }
+                    int binding = getUniformBinding(var.var().modifiers());
                     this->write(", texture2d<half> ");
                     this->writeName(var.var().name());
                     this->write("[[texture(");
-                    this->write(to_string(var.var().modifiers().fLayout.fBinding));
+                    this->write(to_string(binding));
                     this->write(")]]");
                     this->write(", sampler ");
                     this->writeName(var.var().name());
                     this->write(SAMPLER_SUFFIX);
                     this->write("[[sampler(");
-                    this->write(to_string(var.var().modifiers().fLayout.fBinding));
+                    this->write(to_string(binding));
                     this->write(")]]");
                 }
             } else if (e->is<InterfaceBlock>()) {
@@ -2205,12 +2201,12 @@ void MetalCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
     fIndentation++;
     for (const std::unique_ptr<Statement>& stmt : s.cases()) {
         const SwitchCase& c = stmt->as<SwitchCase>();
-        if (c.value()) {
-            this->write("case ");
-            this->writeExpression(*c.value(), Precedence::kTopLevel);
-            this->writeLine(":");
-        } else {
+        if (c.isDefault()) {
             this->writeLine("default:");
+        } else {
+            this->write("case ");
+            this->write(to_string(c.value()));
+            this->writeLine(":");
         }
         if (!c.statement()->isEmpty()) {
             fIndentation++;
@@ -2238,7 +2234,7 @@ void MetalCodeGenerator::writeReturnStatementFromMain() {
 void MetalCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
     if (fCurrentFunction && fCurrentFunction->isMain()) {
         if (r.expression()) {
-            if (r.expression()->type() == *fContext.fTypes.fHalf4) {
+            if (r.expression()->type().matches(*fContext.fTypes.fHalf4)) {
                 this->write("_out.sk_FragColor = ");
                 this->writeExpression(*r.expression(), Precedence::kTopLevel);
                 this->writeLine(";");

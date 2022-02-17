@@ -71,7 +71,7 @@ npm:
 
 	# These features are turned off to keep code size smaller for the
 	# general use case.
-	./compile.sh release no_skottie no_particles no_rt_shader no_alias_font no_effects_deserialization
+	./compile.sh release no_skottie no_particles no_rt_shader no_sksl_trace no_alias_font no_effects_deserialization
 	cp ../../out/canvaskit_wasm/canvaskit.js       ./npm_build/bin
 	cp ../../out/canvaskit_wasm/canvaskit.wasm     ./npm_build/bin
 
@@ -93,9 +93,6 @@ gm_tests:
 	cp ../../out/wasm_gm_tests/wasm_gm_tests.wasm     ./out
 
 local-example:
-	rm -rf node_modules/canvaskit
-	mkdir -p node_modules
-	ln -s ../npm_build node_modules/canvaskit
 	echo "Go check out http://localhost:8000/npm_build/example.html"
 	python3 ../../tools/serve_wasm.py
 
@@ -129,33 +126,33 @@ bazel_gms_release:
 	# unit, by letting the cache be used (and not dropped from the sandbox), which gets expensive.
 	# Local testing showed using the local strategy sped up a clean build from 9.5 minutes
 	# to 1 minute. https://docs.bazel.build/versions/main/user-manual.html#strategy-options
-	bazelisk build :gm-bindings-wasm --compilation_mode opt --spawn_strategy=local \
-		--gpu_backend=gl_backend --with_gl_standard=webgl_standard \
-		--included_codec=jpeg_codec --included_codec=png_codec --include_codec=webp_codec \
-		--include_codec=gif_codec
+	bazelisk build :gm_bindings_wasm --compilation_mode opt --spawn_strategy=local
 	- rm -rf build/
 	mkdir build
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.js build/gm-bindings.js
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.wasm build/gm-bindings.wasm
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.js build/gm_bindings.js
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.wasm build/gm_bindings.wasm
 
 bazel_gms_debug:
 	# See above note about spawn_strategy
-	bazelisk build :gm-bindings-wasm --compilation_mode dbg --spawn_strategy=local \
-		--gpu_backend=gl_backend --with_gl_standard=webgl_standard \
-		--include_codec=jpeg_codec --include_codec=png_codec --include_codec=webp_codec \
-		--include_codec=gif_codec
+	bazelisk build :gm_bindings_wasm --compilation_mode dbg --spawn_strategy=local
 	- rm -rf build/
 	mkdir build
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.js build/gm-bindings.js
-	cp ../../bazel-bin/modules/canvaskit/gm-bindings-wasm/gm-bindings.wasm build/gm-bindings.wasm
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.js build/gm_bindings.js
+	cp ../../bazel-bin/modules/canvaskit/gm_bindings_wasm/gm_bindings.wasm build/gm_bindings.wasm
 
 bazel_canvaskit_debug:
 	# See above note about spawn_strategy
-	bazelisk build :canvaskit-wasm --compilation_mode dbg --spawn_strategy=local \
-		--gpu_backend=gl_backend --with_gl_standard=webgl_standard \
-		--include_codec=jpeg_codec --include_codec=png_codec --include_codec=webp_codec \
-		--include_codec=gif_codec
+	bazelisk build :canvaskit_wasm --compilation_mode dbg --spawn_strategy=local
 	- rm -rf build/
 	mkdir build
-	cp ../../bazel-bin/modules/canvaskit/canvaskit-wasm/canvaskit.js build/canvaskit.js
-	cp ../../bazel-bin/modules/canvaskit/canvaskit-wasm/canvaskit.wasm build/canvaskit.wasm
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.js build/canvaskit.js
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.wasm build/canvaskit.wasm
+
+bazel_canvaskit_release:
+	# See above note about spawn_strategy
+	bazelisk build :canvaskit_wasm --compilation_mode opt --spawn_strategy=local
+	- rm -rf build/
+	mkdir build
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.js build/canvaskit.js
+	cp ../../bazel-bin/modules/canvaskit/canvaskit_wasm/canvaskit.wasm build/canvaskit.wasm
+	ls -l build

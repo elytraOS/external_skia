@@ -14,8 +14,6 @@
 #include "include/gpu/d3d/GrD3DTypes.h"
 #include "src/gpu/d3d/GrD3DAttachment.h"
 
-class GrShaderCaps;
-
 /**
  * Stores some capabilities of a D3D backend.
  */
@@ -96,7 +94,7 @@ public:
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
-    void addExtraSamplerKey(GrProcessorKeyBuilder*,
+    void addExtraSamplerKey(skgpu::KeyBuilder*,
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 

@@ -7,10 +7,10 @@
 
 #include "experimental/graphite/src/Surface_Graphite.h"
 
+#include "experimental/graphite/include/Recorder.h"
 #include "experimental/graphite/include/SkStuff.h"
 #include "experimental/graphite/src/Device.h"
 #include "experimental/graphite/src/Image_Graphite.h"
-#include "experimental/graphite/src/Recorder.h"
 
 namespace skgpu {
 
@@ -24,7 +24,7 @@ Surface_Graphite::~Surface_Graphite() {}
 SkCanvas* Surface_Graphite::onNewCanvas() { return new SkCanvas(fDevice); }
 
 sk_sp<SkSurface> Surface_Graphite::onNewSurface(const SkImageInfo& ii) {
-    return MakeGraphite(fDevice->refRecorder(), ii);
+    return MakeGraphite(fDevice->recorder(), ii);
 }
 
 sk_sp<SkImage> Surface_Graphite::onNewImageSnapshot(const SkIRect* subset) {
@@ -36,5 +36,12 @@ sk_sp<SkImage> Surface_Graphite::onNewImageSnapshot(const SkIRect* subset) {
 
 void Surface_Graphite::onWritePixels(const SkPixmap&, int x, int y) {}
 bool Surface_Graphite::onCopyOnWrite(ContentChangeMode) { return true; }
+
+bool Surface_Graphite::onReadPixels(skgpu::Context* context,
+                                    const SkPixmap& dst,
+                                    int srcX,
+                                    int srcY) {
+    return fDevice->readPixels(context, dst, srcX, srcY);
+}
 
 } // namespace skgpu

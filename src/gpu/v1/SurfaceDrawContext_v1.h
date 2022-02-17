@@ -377,6 +377,20 @@ public:
                       GrPrimitiveType* overridePrimType = nullptr);
 
     /**
+     * Draws vertices with a paint.
+     *
+     * @param   paint            describes how to color pixels.
+     * @param   viewMatrix       transformation matrix
+     * @param   vertices         specifies the mesh to draw.
+     * @param   overridePrimType primitive type to draw. If NULL, derive prim type from vertices.
+     * @param   effect           runtime effect that will handle custom vertex attributes.
+     */
+    void drawCustomMesh(const GrClip*,
+                        GrPaint&& paint,
+                        const SkMatrixProvider& matrixProvider,
+                        SkCustomMesh);
+
+    /**
      * Draws textured sprites from an atlas with a paint. This currently does not support AA for the
      * sprite rectangle edges.
      *
@@ -484,21 +498,24 @@ public:
      * @param viewMatrix      transformationMatrix
      * @param glyphRunList    text, text positions, and paint.
      */
-    void drawGlyphRunListWithCache(const GrClip*,
-                                   const SkMatrixProvider& viewMatrix,
-                                   const SkGlyphRunList& glyphRunList,
-                                   const SkPaint& paint);
-
-    /**
-     * Draw the text specified by the SkGlyphRunList.
-     *
-     * @param viewMatrix      transformationMatrix
-     * @param glyphRunList    text, text positions, and paint.
-     */
     void drawGlyphRunListNoCache(const GrClip*,
                                  const SkMatrixProvider& viewMatrix,
                                  const SkGlyphRunList& glyphRunList,
                                  const SkPaint& paint);
+
+    /**
+     * Convert the glyph-run list to a slug.
+     */
+    sk_sp<GrSlug> convertGlyphRunListToSlug(const SkMatrixProvider& viewMatrix,
+                                            const SkGlyphRunList& glyphRunList,
+                                            const SkPaint& paint);
+
+    /**
+     * Draw a slug.
+     */
+    void drawSlug(const GrClip* clip,
+                  const SkMatrixProvider& viewMatrix,
+                  GrSlug* slugPtr);
 
     /**
      * Adds the necessary signal and wait semaphores and adds the passed in SkDrawable to the

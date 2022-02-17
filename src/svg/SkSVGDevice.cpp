@@ -1100,6 +1100,10 @@ void SkSVGDevice::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const S
     }
 }
 
-void SkSVGDevice::drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) {
+void SkSVGDevice::drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) {
+    // todo
+}
+
+void SkSVGDevice::drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) {
     // todo
 }

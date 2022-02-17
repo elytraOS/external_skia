@@ -11,7 +11,6 @@
 #include "include/gpu/vk/GrVkTypes.h"
 #include "src/gpu/GrCaps.h"
 
-class GrShaderCaps;
 class GrVkExtensions;
 struct GrVkInterface;
 class GrVkRenderTarget;
@@ -242,7 +241,7 @@ public:
     int getFragmentUniformBinding() const;
     int getFragmentUniformSet() const;
 
-    void addExtraSamplerKey(GrProcessorKeyBuilder*,
+    void addExtraSamplerKey(skgpu::KeyBuilder*,
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 

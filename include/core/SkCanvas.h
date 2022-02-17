@@ -40,6 +40,7 @@
 class AutoLayerForImageFilter;
 class GrBackendRenderTarget;
 class GrRecordingContext;
+class GrSlug;
 class SkBaseDevice;
 class SkBitmap;
 class SkData;
@@ -50,7 +51,6 @@ class SkGlyphRunBuilder;
 class SkGlyphRunList;
 class SkImage;
 class SkImageFilter;
-class SkMarkerStack;
 class SkPaintFilterCanvas;
 class SkPath;
 class SkPicture;
@@ -58,6 +58,7 @@ class SkPixmap;
 class SkRegion;
 class SkRRect;
 struct SkRSXform;
+struct SkCustomMesh;
 class SkSpecialImage;
 class SkSurface;
 class SkSurface_Base;
@@ -638,8 +639,6 @@ public:
     enum SaveLayerFlagsSet {
         kPreserveLCDText_SaveLayerFlag  = 1 << 1,
         kInitWithPrevious_SaveLayerFlag = 1 << 2, //!< initializes with previous contents
-        kMaskAgainstCoverage_EXPERIMENTAL_DONT_USE_SaveLayerFlag =
-                                          1 << 3, //!< experimental: do not use
         // instead of matching previous layer's colortype, use F16
         kF16ColorType                   = 1 << 4,
     };
@@ -858,20 +857,6 @@ public:
     */
     void concat(const SkMatrix& matrix);
     void concat(const SkM44&);
-
-    /**
-     *  Record a marker (provided by caller) for the current CTM. This does not change anything
-     *  about the ctm or clip, but does "name" this matrix value, so it can be referenced by
-     *  custom effects (who access it by specifying the same name).
-     *
-     *  Within a save frame, marking with the same name more than once just replaces the previous
-     *  value. However, between save frames, marking with the same name does not lose the marker
-     *  in the previous save frame. It is "visible" when the current save() is balanced with
-     *  a restore().
-     */
-    void markCTM(const char* name);
-
-    bool findMarkedCTM(const char* name, SkM44*) const;
 
     /** Replaces SkMatrix with matrix.
         Unlike concat(), any prior matrix state is overwritten.
@@ -1928,58 +1913,68 @@ public:
         If paint contains an SkShader and vertices does not contain texCoords, the shader
         is mapped using the vertices' positions.
 
-        If vertices colors are defined in vertices, and SkPaint paint contains SkShader,
-        SkBlendMode mode combines vertices colors with SkShader.
+        SkBlendMode is ignored if SkVertices does not have colors. Otherwise, it combines
+           - the SkShader if SkPaint contains SkShader
+           - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the interpolated vertex colors as the dst.
 
-        SkMaskFilter and SkPathEffect on paint are ignored.
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
 
         @param vertices  triangle mesh to draw
-        @param mode      combines vertices colors with SkShader, if both are present
-        @param paint     specifies the SkShader, used as SkVertices texture; may be nullptr
+        @param mode      combines vertices' colors with SkShader if present or SkPaint opaque color
+                         if not. Ignored if the vertices do not contain color.
+        @param paint     specifies the SkShader, used as SkVertices texture, and SkColorFilter.
 
         example: https://fiddle.skia.org/c/@Canvas_drawVertices
     */
     void drawVertices(const SkVertices* vertices, SkBlendMode mode, const SkPaint& paint);
 
-    /** Variant of 3-parameter drawVertices, using the default of Modulate for the blend
-     *  parameter. Note that SkVertices that include per-vertex-data ignore this mode parameter.
-     */
-    void drawVertices(const SkVertices* vertices, const SkPaint& paint) {
-        this->drawVertices(vertices, SkBlendMode::kModulate, paint);
-    }
-
     /** Draws SkVertices vertices, a triangle mesh, using clip and SkMatrix.
         If paint contains an SkShader and vertices does not contain texCoords, the shader
         is mapped using the vertices' positions.
 
-        If vertices colors are defined in vertices, and SkPaint paint contains SkShader,
-        SkBlendMode mode combines vertices colors with SkShader.
+        SkBlendMode is ignored if SkVertices does not have colors. Otherwise, it combines
+           - the SkShader if SkPaint contains SkShader
+           - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the interpolated vertex colors as the dst.
 
-        SkMaskFilter and SkPathEffect on paint are ignored.
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
 
         @param vertices  triangle mesh to draw
-        @param mode      combines vertices colors with SkShader, if both are present
+        @param mode      combines vertices' colors with SkShader if present or SkPaint opaque color
+                         if not. Ignored if the vertices do not contain color.
         @param paint     specifies the SkShader, used as SkVertices texture, may be nullptr
 
         example: https://fiddle.skia.org/c/@Canvas_drawVertices_2
     */
     void drawVertices(const sk_sp<SkVertices>& vertices, SkBlendMode mode, const SkPaint& paint);
 
-    /** Variant of 3-parameter drawVertices, using the default of Modulate for the blend
-     *  parameter. Note that SkVertices that include per-vertex-data ignore this mode parameter.
-     */
-    void drawVertices(const sk_sp<SkVertices>& vertices, const SkPaint& paint) {
-        this->drawVertices(vertices, SkBlendMode::kModulate, paint);
-    }
+#if defined(SK_ENABLE_EXPERIMENTAL_CUSTOM_MESH) && defined(SK_ENABLE_SKSL)
+    /**
+        Experimental, under active development, and subject to change without notice.
+
+        Draws a mesh using a user-defined specification (see SkCustomMeshSpecification).
+
+        SkBlender is ignored if SkCustomMesh's specification does not output fragment shader color.
+        Otherwise, it combines
+            - the SkShader if SkPaint contains SkShader
+            - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the mesh's fragment color as the dst.
+
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
+
+        @param cm        the custom mesh vertices and compatible specification.
+        @param blender   combines vertices colors with SkShader if present or SkPaint opaque color
+                         if not. Ignored if the custom mesh does not output color. Defaults to
+                         SkBlendMode::kModulate if nullptr.
+        @param paint     specifies the SkShader, used as SkVertices texture, may be nullptr
+    */
+    void drawCustomMesh(SkCustomMesh cm, sk_sp<SkBlender> blender, const SkPaint& paint);
+#endif
 
     /** Draws a Coons patch: the interpolation of four cubics with shared corners,
         associating a color, and optionally a texture SkPoint, with each corner.
 
-        Coons patch uses clip and SkMatrix, paint SkShader, SkColorFilter,
-        alpha, SkImageFilter, and SkBlendMode. If SkShader is provided it is treated
-        as Coons patch texture; SkBlendMode mode combines color colors and SkShader if
-        both are provided.
-
         SkPoint array cubics specifies four SkPath cubic starting at the top-left corner,
         in clockwise order, sharing every fourth point. The last SkPath cubic ends at the
         first point.
@@ -1991,49 +1986,23 @@ public:
         corners in top-left, top-right, bottom-right, bottom-left order. If texCoords is
         nullptr, SkShader is mapped using positions (derived from cubics).
 
-        SkMaskFilter and SkPathEffect on paint are ignored.
+        SkBlendMode is ignored if colors is null. Otherwise, it combines
+            - the SkShader if SkPaint contains SkShader
+            - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the interpolated patch colors as the dst.
+
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
 
         @param cubics     SkPath cubic array, sharing common points
         @param colors     color array, one for each corner
         @param texCoords  SkPoint array of texture coordinates, mapping SkShader to corners;
                           may be nullptr
-        @param mode       SkBlendMode for colors, and for SkShader if paint has one
+        @param mode       combines patch's colors with SkShader if present or SkPaint opaque color
+                          if not. Ignored if colors is null.
         @param paint      SkShader, SkColorFilter, SkBlendMode, used to draw
     */
     void drawPatch(const SkPoint cubics[12], const SkColor colors[4],
                    const SkPoint texCoords[4], SkBlendMode mode, const SkPaint& paint);
-
-    /** Draws SkPath cubic Coons patch: the interpolation of four cubics with shared corners,
-        associating a color, and optionally a texture SkPoint, with each corner.
-
-        Coons patch uses clip and SkMatrix, paint SkShader, SkColorFilter,
-        alpha, SkImageFilter, and SkBlendMode. If SkShader is provided it is treated
-        as Coons patch texture; SkBlendMode mode combines color colors and SkShader if
-        both are provided.
-
-        SkPoint array cubics specifies four SkPath cubic starting at the top-left corner,
-        in clockwise order, sharing every fourth point. The last SkPath cubic ends at the
-        first point.
-
-        Color array color associates colors with corners in top-left, top-right,
-        bottom-right, bottom-left order.
-
-        If paint contains SkShader, SkPoint array texCoords maps SkShader as texture to
-        corners in top-left, top-right, bottom-right, bottom-left order. If texCoords is
-        nullptr, SkShader is mapped using positions (derived from cubics).
-
-        SkMaskFilter and SkPathEffect on paint are ignored.
-
-        @param cubics     SkPath cubic array, sharing common points
-        @param colors     color array, one for each corner
-        @param texCoords  SkPoint array of texture coordinates, mapping SkShader to corners;
-                          may be nullptr
-        @param paint      SkShader, SkColorFilter, SkBlendMode, used to draw
-    */
-    void drawPatch(const SkPoint cubics[12], const SkColor colors[4],
-                   const SkPoint texCoords[4], const SkPaint& paint) {
-        this->drawPatch(cubics, colors, texCoords, SkBlendMode::kModulate, paint);
-    }
 
     /** Draws a set of sprites from atlas, using clip, SkMatrix, and optional SkPaint paint.
         paint uses anti-alias, alpha, SkColorFilter, SkImageFilter, and SkBlendMode
@@ -2217,11 +2186,15 @@ protected:
     virtual void willRestore() {}
     virtual void didRestore() {}
 
-    virtual void onMarkCTM(const char*) {}
     virtual void didConcat44(const SkM44&) {}
     virtual void didSetM44(const SkM44&) {}
     virtual void didTranslate(SkScalar, SkScalar) {}
     virtual void didScale(SkScalar, SkScalar) {}
+
+#ifndef SK_ENABLE_EXPERIMENTAL_CUSTOM_MESH
+    // Define this in protected so we can still access internally for testing.
+    void drawCustomMesh(SkCustomMesh cm, sk_sp<SkBlender> blender, const SkPaint& paint);
+#endif
 
     // NOTE: If you are adding a new onDraw virtual to SkCanvas, PLEASE add an override to
     // SkCanvasVirtualEnforcer (in SkCanvasVirtualEnforcer.h). This ensures that subclasses using
@@ -2263,7 +2236,9 @@ protected:
 
     virtual void onDrawVerticesObject(const SkVertices* vertices, SkBlendMode mode,
                                       const SkPaint& paint);
-
+#ifdef SK_ENABLE_SKSL
+    virtual void onDrawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&);
+#endif
     virtual void onDrawAnnotation(const SkRect& rect, const char key[], SkData* value);
     virtual void onDrawShadowRec(const SkPath&, const SkDrawShadowRec&);
 
@@ -2287,6 +2262,17 @@ protected:
     virtual void onResetClip();
 
     virtual void onDiscard();
+
+#if SK_SUPPORT_GPU
+    /** Experimental
+     */
+    virtual sk_sp<GrSlug> doConvertBlobToSlug(
+            const SkTextBlob& blob, SkPoint origin, const SkPaint& paint);
+
+    /** Experimental
+     */
+    virtual void doDrawSlug(GrSlug* slug);
+#endif
 
 private:
 
@@ -2373,8 +2359,6 @@ private:
     // points to top of stack
     MCRec*      fMCRec;
 
-    sk_sp<SkMarkerStack> fMarkerStack;
-
     // the first N recs that can fit here mean we won't call malloc
     static constexpr int kMCRecSize      = 96; // most recent measurement
     static constexpr int kMCRecCount     = 32; // common depth for save/restores
@@ -2424,6 +2408,19 @@ private:
     SkCanvas(const SkCanvas&) = delete;
     SkCanvas& operator=(SkCanvas&&) = delete;
     SkCanvas& operator=(const SkCanvas&) = delete;
+
+#if SK_SUPPORT_GPU
+    friend class GrSlug;
+    /** Experimental
+     * Convert a SkTextBlob to a GrSlug using the current canvas state.
+     */
+    sk_sp<GrSlug> convertBlobToSlug(const SkTextBlob& blob, SkPoint origin, const SkPaint& paint);
+
+    /** Experimental
+     * Draw an GrSlug given the current canvas state.
+     */
+    void drawSlug(GrSlug* slug);
+#endif
 
     /** Experimental
      *  Saves the specified subset of the current pixels in the current layer,

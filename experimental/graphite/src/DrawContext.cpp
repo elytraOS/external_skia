@@ -9,10 +9,16 @@
 
 #include "include/private/SkColorData.h"
 
+#include "experimental/graphite/include/Context.h"
+#include "experimental/graphite/include/Recorder.h"
+#include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
+#include "experimental/graphite/src/ContextPriv.h"
 #include "experimental/graphite/src/DrawList.h"
 #include "experimental/graphite/src/DrawPass.h"
+#include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/RenderPassTask.h"
+#include "experimental/graphite/src/ResourceTypes.h"
 #include "experimental/graphite/src/TextureProxy.h"
 #include "experimental/graphite/src/geom/BoundsManager.h"
 #include "experimental/graphite/src/geom/Shape.h"
@@ -114,11 +120,27 @@ sk_sp<Task> DrawContext::snapRenderPassTask(Recorder* recorder,
     // the moment we should have only one drawPass.
     SkASSERT(fDrawPasses.size() == 1);
     RenderPassDesc desc;
-    desc.fColorAttachment.fTextureProxy = sk_ref_sp(fDrawPasses[0]->target());
-    std::tie(desc.fColorAttachment.fLoadOp, desc.fColorAttachment.fStoreOp) = fDrawPasses[0]->ops();
-    desc.fClearColor = fDrawPasses[0]->clearColor();
+    auto& drawPass = fDrawPasses[0];
+    desc.fColorAttachment.fTextureInfo = drawPass->target()->textureInfo();
+    std::tie(desc.fColorAttachment.fLoadOp, desc.fColorAttachment.fStoreOp) = drawPass->ops();
+    desc.fClearColor = drawPass->clearColor();
 
-    return RenderPassTask::Make(std::move(fDrawPasses), desc);
+    if (drawPass->depthStencilFlags() != DepthStencilFlags::kNone) {
+        const Caps* caps = recorder->context()->priv().gpu()->caps();
+        desc.fDepthStencilAttachment.fTextureInfo =
+                caps->getDefaultDepthStencilTextureInfo(drawPass->depthStencilFlags(),
+                                                        1 /*sampleCount*/, // TODO: MSAA
+                                                        Protected::kNo);
+        // Always clear the depth and stencil to 0 at the start of a DrawPass, but discard at the
+        // end since their contents do not affect the next frame.
+        desc.fDepthStencilAttachment.fLoadOp = LoadOp::kClear;
+        desc.fClearDepth = 0.f;
+        desc.fClearStencil = 0;
+        desc.fDepthStencilAttachment.fStoreOp = StoreOp::kDiscard;
+    }
+
+    sk_sp<TextureProxy> targetProxy = sk_ref_sp(fDrawPasses[0]->target());
+    return RenderPassTask::Make(std::move(fDrawPasses), desc, std::move(targetProxy));
 }
 
 } // namespace skgpu

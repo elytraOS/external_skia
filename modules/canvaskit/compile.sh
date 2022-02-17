@@ -153,6 +153,11 @@ if [[ $@ == *no_rt_shader* ]] ; then
   RT_SHADER_JS=""
 fi
 
+WASM_SKSL_TRACE="-DSK_INCLUDE_SKSL_TRACE"
+if [[ $@ == *no_sksl_trace* ]] ; then
+  WASM_SKSL_TRACE=""
+fi
+
 MATRIX_HELPER_JS="--pre-js $BASE_DIR/matrix.js"
 if [[ $@ == *no_matrix* ]]; then
   echo "Omitting matrix helper code"
@@ -165,6 +170,7 @@ HTML_CANVAS_API="--pre-js $BASE_DIR/htmlcanvas/preamble.js \
 --pre-js $BASE_DIR/htmlcanvas/font.js \
 --pre-js $BASE_DIR/htmlcanvas/canvas2dcontext.js \
 --pre-js $BASE_DIR/htmlcanvas/htmlcanvas.js \
+--pre-js $BASE_DIR/htmlcanvas/htmlimage.js \
 --pre-js $BASE_DIR/htmlcanvas/imagedata.js \
 --pre-js $BASE_DIR/htmlcanvas/lineargradient.js \
 --pre-js $BASE_DIR/htmlcanvas/path2d.js \
@@ -362,6 +368,7 @@ EMCC_DEBUG=1 ${EMCXX} \
     $WASM_GPU \
     $WASM_PATHOPS \
     $WASM_RT_SHADER \
+    $WASM_SKSL_TRACE \
     $WASM_SKP \
     $FONT_CFLAGS \
     -std=c++17 \

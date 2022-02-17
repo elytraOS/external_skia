@@ -140,6 +140,7 @@ var (
 	CAS_SPEC_LOTTIE_CI = &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/run_recipe.py",
 			"skia/infra/lottiecap",
 			"skia/tools/lottie-web-perf",
@@ -403,6 +404,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_CANVASKIT, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/run_recipe.py",
 			"skia/infra/canvaskit",
 			"skia/modules/canvaskit",
@@ -416,6 +418,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_LOTTIE_WEB, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/run_recipe.py",
 			"skia/tools/lottie-web-perf",
 		},
@@ -424,6 +427,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_PATHKIT, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/run_recipe.py",
 			"skia/infra/pathkit",
 			"skia/modules/pathkit",
@@ -433,6 +437,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_PERF, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/assets",
 			"skia/infra/bots/run_recipe.py",
 			"skia/platform_tools/ios/bin",
@@ -444,6 +449,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_PUPPETEER, &specs.CasSpec{
 		Root: "../skia", // Needed for other repos.
 		Paths: []string{
+			".vpython",
 			"tools/perf-canvaskit-puppeteer",
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
@@ -463,6 +469,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_RUN_RECIPE, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/run_recipe.py",
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
@@ -470,6 +477,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_SKOTTIE_WASM, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/run_recipe.py",
 			"skia/tools/skottie-wasm-perf",
 		},
@@ -478,6 +486,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_SKPBENCH, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/assets",
 			"skia/infra/bots/run_recipe.py",
 			"skia/tools/skpbench",
@@ -488,6 +497,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_TASK_DRIVERS, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/go.mod",
 			"skia/go.sum",
 			"skia/infra/bots/build_task_drivers.sh",
@@ -499,6 +509,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_TEST, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/infra/bots/assets",
 			"skia/infra/bots/run_recipe.py",
 			"skia/platform_tools/ios/bin",
@@ -510,6 +521,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_WASM_GM, &specs.CasSpec{
 		Root: "../skia", // Needed for other repos.
 		Paths: []string{
+			".vpython",
 			"resources",
 			"tools/run-wasm-gm-tests",
 		},
@@ -519,6 +531,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_RECREATE_SKPS, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython",
 			"skia/DEPS",
 			"skia/bin/fetch-sk",
 			"skia/infra/bots/assets/skp",
@@ -578,6 +591,8 @@ func marshalJson(data interface{}) string {
 func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	b.cipd(CIPD_PKG_LUCI_AUTH)
 	b.cipd(cipd.MustGetPackage("infra/tools/luci/kitchen/${platform}"))
+	b.env("RECIPES_USE_PY3", "true")
+	b.envPrefixes("VPYTHON_DEFAULT_SPEC", "skia/.vpython")
 	b.usesPython()
 	b.recipeProp("swarm_out_dir", outputDir)
 	if outputDir != OUTPUT_NONE {
@@ -765,10 +780,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			// ChOps VMs are at a newer version of MacOS.
 			d["os"] = "Mac-10.15.7"
 		}
-		if b.parts["model"] == "iPhone6" {
-			// This is the latest iOS that supports iPhone6.
-			d["os"] = "iOS-12.4.5"
-		}
 		if b.parts["model"] == "iPhone11" {
 			d["os"] = "iOS-13.6"
 		}
@@ -787,6 +798,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				"GalaxyS7_G930FD": {"herolte", "R16NW_G930FXXS2ERH6"}, // This is Oreo.
 				"GalaxyS9":        {"starlte", "QP1A.190711.020"},     // This is Android10.
 				"GalaxyS20":       {"exynos990", "QP1A.190711.020"},
+				"JioNext":         {"msm8937", "RKQ1.210602.002"},
 				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 				"P30":             {"HWELE", "HUAWEIELE-L29"},
@@ -814,7 +826,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 		} else if b.os("iOS") {
 			device, ok := map[string]string{
 				"iPadMini4": "iPad5,1",
-				"iPhone6":   "iPhone7,2",
 				"iPhone7":   "iPhone9,1",
 				"iPhone8":   "iPhone10,1",
 				"iPhone11":  "iPhone12,1",
@@ -976,12 +987,12 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 func (b *jobBuilder) bundleRecipes() string {
 	b.addTask(BUNDLE_RECIPES_NAME, func(b *taskBuilder) {
 		b.cipd(specs.CIPD_PKGS_GIT_LINUX_AMD64...)
-		b.cipd(specs.CIPD_PKGS_PYTHON_LINUX_AMD64...)
 		b.cmd("/bin/bash", "skia/infra/bots/bundle_recipes.sh", specs.PLACEHOLDER_ISOLATED_OUTDIR)
 		b.linuxGceDimensions(MACHINE_TYPE_SMALL)
-		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin")
 		b.idempotent()
 		b.cas(CAS_RECIPES)
+		b.usesPython()
+		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin")
 	})
 	return BUNDLE_RECIPES_NAME
 }
@@ -1066,8 +1077,7 @@ func (b *jobBuilder) createDockerImage(wasm bool) string {
 			"--swarm_out_dir", specs.PLACEHOLDER_ISOLATED_OUTDIR,
 		)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
-		// TODO(borenet): Does this task need go/go/bin in PATH?
-		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
+		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin")
 		b.cas(CAS_EMPTY)
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
@@ -1078,7 +1088,7 @@ func (b *jobBuilder) createDockerImage(wasm bool) string {
 }
 
 // createPushAppsFromSkiaDockerImage creates and pushes docker images of some apps
-// (eg: fiddler, debugger, api) using the skia-release docker image.
+// (eg: fiddler, api) using the skia-release docker image.
 func (b *jobBuilder) createPushAppsFromSkiaDockerImage() {
 	b.addTask(b.Name, func(b *taskBuilder) {
 		// TODO(borenet): Make this task not use Git.
@@ -1089,8 +1099,6 @@ func (b *jobBuilder) createPushAppsFromSkiaDockerImage() {
 			"--task_id", specs.PLACEHOLDER_TASK_ID,
 			"--task_name", b.Name,
 			"--workdir", ".",
-			"--gerrit_project", "buildbot",
-			"--gerrit_url", "https://skia-review.googlesource.com",
 			"--repo", specs.PLACEHOLDER_REPO,
 			"--revision", specs.PLACEHOLDER_REVISION,
 			"--patch_issue", specs.PLACEHOLDER_ISSUE,
@@ -1099,41 +1107,37 @@ func (b *jobBuilder) createPushAppsFromSkiaDockerImage() {
 		)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(b.createDockerImage(false))
-		// TODO(borenet): Does this task need go/go/bin in PATH?
-		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
+		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "bazelisk")
 		b.cas(CAS_EMPTY)
+		b.cipd(b.MustGetCipdPackageFromAsset("bazelisk"))
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.usesDocker()
 		b.cache(CACHES_DOCKER...)
+		b.timeout(2 * time.Hour)
 	})
 }
 
-// createPushAppsFromWASMDockerImage creates and pushes docker images of some apps
-// (eg: jsfiddle, skottie, particles) using the skia-wasm-release docker image.
-func (b *jobBuilder) createPushAppsFromWASMDockerImage() {
+// createPushBazelAppsFromWASMDockerImage pushes those infra apps that have been ported to Bazel
+// and require assets built in the WASM docker image.
+// TODO(kjlubick) The inputs to this job should not be the docker build, but a Bazel build.
+func (b *jobBuilder) createPushBazelAppsFromWASMDockerImage() {
 	b.addTask(b.Name, func(b *taskBuilder) {
 		// TODO(borenet): Make this task not use Git.
 		b.usesGit()
 		b.cmd(
-			"./push_apps_from_wasm_image",
+			"./push_bazel_apps_from_wasm_image",
 			"--project_id", "skia-swarming-bots",
 			"--task_id", specs.PLACEHOLDER_TASK_ID,
 			"--task_name", b.Name,
 			"--workdir", ".",
-			"--gerrit_project", "buildbot",
-			"--gerrit_url", "https://skia-review.googlesource.com",
-			"--repo", specs.PLACEHOLDER_REPO,
-			"--revision", specs.PLACEHOLDER_REVISION,
-			"--patch_issue", specs.PLACEHOLDER_ISSUE,
-			"--patch_set", specs.PLACEHOLDER_PATCHSET,
-			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--skia_revision", specs.PLACEHOLDER_REVISION,
 		)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(b.createDockerImage(true))
-		// TODO(borenet): Does this task need go/go/bin in PATH?
-		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "go/go/bin")
+		b.addToPATH("cipd_bin_packages", "cipd_bin_packages/bin", "bazelisk")
 		b.cas(CAS_EMPTY)
+		b.cipd(b.MustGetCipdPackageFromAsset("bazelisk"))
 		b.serviceAccount(b.cfg.ServiceAccountCompile)
 		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.usesDocker()
@@ -1151,8 +1155,6 @@ func (b *taskBuilder) maybeAddIosDevImage() {
 			// Other patch versions can be added to the same case.
 			case "11.4.1":
 				asset = "ios-dev-image-11.4"
-			case "12.4.5":
-				asset = "ios-dev-image-12.4"
 			case "13.3.1":
 				asset = "ios-dev-image-13.3"
 			case "13.4.1":
@@ -1630,14 +1632,14 @@ func (b *jobBuilder) fm() {
 			// Point sanitizer builds at our prebuilt libc++ for this sanitizer.
 			if b.extraConfig("MSAN") {
 				// We'd see false positives in std::basic_string<char> if this weren't set.
-				b.env("LD_LIBRARY_PATH", "clang_linux/msan")
+				b.envPrefixes("LD_LIBRARY_PATH", "clang_linux/msan")
 			} else if b.extraConfig("TSAN") {
 				// Occasional false positives may crop up in the standard library without this.
-				b.env("LD_LIBRARY_PATH", "clang_linux/tsan")
+				b.envPrefixes("LD_LIBRARY_PATH", "clang_linux/tsan")
 			} else {
 				// This isn't strictly required, but we usually get better sanitizer
 				// diagnostics from libc++ than the default OS-provided libstdc++.
-				b.env("LD_LIBRARY_PATH", "clang_linux/lib")
+				b.envPrefixes("LD_LIBRARY_PATH", "clang_linux/lib")
 			}
 		}
 	})
@@ -1645,7 +1647,7 @@ func (b *jobBuilder) fm() {
 
 // canary generates a task that uses TaskDrivers to trigger canary manual rolls on autorollers.
 // Canary-G3 does not use this path because it is very different from other autorollers.
-func (b *jobBuilder) canary(rollerName string) {
+func (b *jobBuilder) canary(rollerName, canaryCQKeyword, targetProjectBaseURL string) {
 	b.addTask(b.Name, func(b *taskBuilder) {
 		b.cas(CAS_EMPTY)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
@@ -1655,6 +1657,8 @@ func (b *jobBuilder) canary(rollerName string) {
 			"--task_id", specs.PLACEHOLDER_TASK_ID,
 			"--task_name", b.Name,
 			"--roller_name", rollerName,
+			"--cq_keyword", canaryCQKeyword,
+			"--target_project_base_url", targetProjectBaseURL,
 			"--repo", specs.PLACEHOLDER_REPO,
 			"--revision", specs.PLACEHOLDER_REVISION,
 			"--patch_issue", specs.PLACEHOLDER_ISSUE,
@@ -1898,7 +1902,7 @@ func (b *jobBuilder) presubmit() {
 		b.cipd(&specs.CipdPackage{
 			Name:    "infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build",
 			Path:    "recipe_bundle",
-			Version: "git_revision:a8bcedad6768e206c4d2bd1718caa849f29cd42d",
+			Version: "git_revision:1a28cb094add070f4beefd052725223930d8c27a",
 		})
 	})
 }

@@ -30,6 +30,7 @@ class SkRasterHandleAllocator;
 class SkRRect;
 class SkSurface;
 struct SkPoint;
+struct SkCustomMesh;
 
 ///////////////////////////////////////////////////////////////////////////////
 class SkBitmapDevice : public SkBaseDevice {
@@ -54,19 +55,10 @@ public:
      *  any drawing to this device will have no effect.
      */
     SkBitmapDevice(const SkBitmap& bitmap, const SkSurfaceProps& surfaceProps,
-                   void* externalHandle, const SkBitmap* coverage);
+                   void* externalHandle = nullptr);
 
     static SkBitmapDevice* Create(const SkImageInfo&, const SkSurfaceProps&,
-                                  bool trackCoverage,
-                                  SkRasterHandleAllocator*);
-
-    static SkBitmapDevice* Create(const SkImageInfo& info, const SkSurfaceProps& props) {
-        return Create(info, props, false, nullptr);
-    }
-
-    const SkPixmap* accessCoverage() const {
-        return fCoverage ? &fCoverage->pixmap() : nullptr;
-    }
+                                  SkRasterHandleAllocator* = nullptr);
 
 protected:
     void* getRasterHandle() const override { return fRasterHandle; }
@@ -94,8 +86,12 @@ protected:
                        const SkSamplingOptions&, const SkPaint&,
                        SkCanvas::SrcRectConstraint) override;
 
-    void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) override;
-    void drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count, SkBlendMode,
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override;
+#ifdef SK_ENABLE_SKSL
+    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override;
+#endif
+
+    void drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count, sk_sp<SkBlender>,
                    const SkPaint&) override;
 
     ///////////////////////////////////////////////////////////////////////////
@@ -157,7 +153,6 @@ private:
     SkBitmap    fBitmap;
     void*       fRasterHandle = nullptr;
     SkRasterClipStack  fRCStack;
-    std::unique_ptr<SkBitmap> fCoverage;    // if non-null, will have the same dimensions as fBitmap
     SkGlyphRunListPainter fGlyphPainter;
 
 

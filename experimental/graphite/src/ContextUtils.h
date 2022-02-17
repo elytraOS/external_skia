@@ -11,32 +11,19 @@
 #include "experimental/graphite/include/Context.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
 
-class SkPaint;
+enum class CodeSnippetID : uint8_t;
+class SkUniquePaintParamsID;
 
 namespace skgpu {
 
+class PaintParams;
 class Uniform;
-class UniformCache;
-
-// A single, fully specified combination resulting from a PaintCombo (i.e., it corresponds to a
-// specific SkPaint)
-struct Combination {
-    bool operator==(const Combination& other) const {
-        return fShaderType == other.fShaderType &&
-               fTileMode == other.fTileMode &&
-               fBlendMode == other.fBlendMode;
-    }
-
-    ShaderCombo::ShaderType fShaderType = ShaderCombo::ShaderType::kNone;
-    SkTileMode fTileMode = SkTileMode::kRepeat;
-    SkBlendMode fBlendMode = SkBlendMode::kSrc;
-};
 
 class UniformData : public SkRefCnt {
 public:
-    static constexpr uint32_t kInvalidUniformID = 0;
 
     // TODO: should we require a name (e.g., "gradient_uniforms") for each uniform block so
     // we can better name the Metal FS uniform struct?
@@ -50,11 +37,6 @@ public:
         delete [] fData;
     }
 
-    void setID(uint32_t id) {   // TODO: maybe make privileged for only UniformCache
-        SkASSERT(fID == kInvalidUniformID);
-        fID = id;
-    }
-    uint32_t id() const { return fID; }
     int count() const { return fCount; }
     const Uniform* uniforms() const { return fUniforms; }
     uint32_t* offsets() { return fOffsets; }
@@ -78,7 +60,6 @@ private:
             , fDataSize(dataSize) {
     }
 
-    uint32_t fID = kInvalidUniformID;
     const int fCount;
     const Uniform* fUniforms;
     uint32_t* fOffsets; // offset of each uniform in 'fData'
@@ -86,8 +67,15 @@ private:
     const size_t fDataSize;
 };
 
-std::tuple<Combination, sk_sp<UniformData>> ExtractCombo(UniformCache*, const SkPaint&);
-std::string GetMSLUniformStruct(ShaderCombo::ShaderType);
+std::tuple<SkUniquePaintParamsID, sk_sp<UniformData>> ExtractPaintData(Context*,
+                                                                       const PaintParams&);
+SkSpan<const Uniform> GetUniforms(CodeSnippetID);
+
+// TODO: Temporary way to get at SkSL snippet for handling the given shader type, which will be
+// embedded in the fragment function's body. It has access to the vertex output via a "interpolated"
+// variable, and must have a statement that writes to a float4 "out.color". Its uniforms (as defined
+// by GetUniforms(type)) are available as a variable named "uniforms".
+const char* GetShaderSkSL(CodeSnippetID);
 
 } // namespace skgpu
 

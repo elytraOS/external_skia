@@ -10,6 +10,7 @@
 #include "include/private/SkVx.h"
 #include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/geometry/GrQuadUtils.h"
 #include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
@@ -58,8 +59,7 @@ void write_quad_generic(VertexWriter* vb,
         // save color
         if (spec.hasVertexColors()) {
             bool wide = spec.colorType() == ColorType::kFloat;
-            *vb << GrVertexColor(color * (mode == CoverageMode::kWithColor ? coverage[i] : 1.f),
-                                 wide);
+            *vb << VertexColor(color * (mode == CoverageMode::kWithColor ? coverage[i] : 1), wide);
         }
 
         // save local position
@@ -112,7 +112,7 @@ void write_2d_color(VertexWriter* vb,
         SkASSERT(spec.coverageMode() == CoverageMode::kWithColor || coverage[i] == 1.f);
         *vb << deviceQuad->x(i)
             << deviceQuad->y(i)
-            << GrVertexColor(color * coverage[i], wide);
+            << VertexColor(color * coverage[i], wide);
     }
 }
 
@@ -169,7 +169,7 @@ void write_2d_color_uv(VertexWriter* vb,
         SkASSERT(spec.coverageMode() == CoverageMode::kWithColor || coverage[i] == 1.f);
         *vb << deviceQuad->x(i)
             << deviceQuad->y(i)
-            << GrVertexColor(color * coverage[i], wide)
+            << VertexColor(color * coverage[i], wide)
             << localQuad->x(i)
             << localQuad->y(i);
     }
@@ -263,7 +263,7 @@ void write_2d_color_uv_strict(VertexWriter* vb,
         SkASSERT(spec.coverageMode() == CoverageMode::kWithColor || coverage[i] == 1.f);
         *vb << deviceQuad->x(i)
             << deviceQuad->y(i)
-            << GrVertexColor(color * coverage[i], wide)
+            << VertexColor(color * coverage[i], wide)
             << localQuad->x(i)
             << localQuad->y(i)
             << texSubset;
@@ -625,7 +625,7 @@ public:
 
     const char* name() const override { return "QuadPerEdgeAAGeometryProcessor"; }
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
+    void addToKey(const GrShaderCaps&, KeyBuilder* b) const override {
         // texturing, device-dimensions are single bit flags
         b->addBool(fTexSubset.isInitialized(),    "subset");
         b->addBool(fSampler.isInitialized(),      "textured");
@@ -895,7 +895,7 @@ private:
             fTexSubset = {"texSubset", kFloat4_GrVertexAttribType, kFloat4_GrSLType};
         }
 
-        this->setVertexAttributes(&fPosition, 6);
+        this->setVertexAttributesWithImplicitOffsets(&fPosition, 6);
     }
 
     const TextureSampler& onTextureSampler(int) const override { return fSampler; }

@@ -177,6 +177,9 @@ void PathWedgeTessellator::writePatches(PatchWriter& patchWriter,
                             // This quad already fits in "maxTessellationSegments".
                             CubicPatch(patchWriter) << QuadToCubic{p0, p1, p2};
                         } else {
+                            // The path should have been pre-chopped if needed, so all curves fit in
+                            // kMaxTessellationSegmentsPerCurve.
+                            n4 = std::min(n4, pow4(kMaxTessellationSegmentsPerCurve));
                             // Chop until each quad tessellation requires "maxSegments" or fewer.
                             int numPatches =
                                     SkScalarCeilToInt(wangs_formula::root4(n4/maxSegments_pow4));
@@ -198,6 +201,9 @@ void PathWedgeTessellator::writePatches(PatchWriter& patchWriter,
                             // This conic already fits in "maxTessellationSegments".
                             ConicPatch(patchWriter) << p0 << p1 << p2 << *w;
                         } else {
+                            // The path should have been pre-chopped if needed, so all curves fit in
+                            // kMaxTessellationSegmentsPerCurve.
+                            n2 = std::min(n2, pow2(kMaxTessellationSegmentsPerCurve));
                             // Chop until each conic tessellation requires "maxSegments" or fewer.
                             int numPatches = SkScalarCeilToInt(sqrtf(n2/maxSegments_pow2));
                             patchWriter.chopAndWriteConics(p0, p1, p2, *w, numPatches);
@@ -217,6 +223,9 @@ void PathWedgeTessellator::writePatches(PatchWriter& patchWriter,
                             // This cubic already fits in "maxTessellationSegments".
                             CubicPatch(patchWriter) << p0 << p1 << p2 << p3;
                         } else {
+                            // The path should have been pre-chopped if needed, so all curves fit in
+                            // kMaxTessellationSegmentsPerCurve.
+                            n4 = std::min(n4, pow4(kMaxTessellationSegmentsPerCurve));
                             // Chop until each cubic tessellation requires "maxSegments" or fewer.
                             int numPatches =
                                     SkScalarCeilToInt(wangs_formula::root4(n4/maxSegments_pow4));
@@ -272,20 +281,20 @@ void PathWedgeTessellator::WriteFixedIndexBuffer(VertexWriter vertexWriter, size
 
 #if SK_GPU_V1
 
-GR_DECLARE_STATIC_UNIQUE_KEY(gFixedVertexBufferKey);
-GR_DECLARE_STATIC_UNIQUE_KEY(gFixedIndexBufferKey);
+SKGPU_DECLARE_STATIC_UNIQUE_KEY(gFixedVertexBufferKey);
+SKGPU_DECLARE_STATIC_UNIQUE_KEY(gFixedIndexBufferKey);
 
 void PathWedgeTessellator::prepareFixedCountBuffers(GrMeshDrawTarget* target) {
     GrResourceProvider* rp = target->resourceProvider();
 
-    GR_DEFINE_STATIC_UNIQUE_KEY(gFixedVertexBufferKey);
+    SKGPU_DEFINE_STATIC_UNIQUE_KEY(gFixedVertexBufferKey);
 
     fFixedVertexBuffer = rp->findOrMakeStaticBuffer(GrGpuBufferType::kVertex,
                                                     FixedVertexBufferSize(kMaxFixedResolveLevel),
                                                     gFixedVertexBufferKey,
                                                     WriteFixedVertexBuffer);
 
-    GR_DEFINE_STATIC_UNIQUE_KEY(gFixedIndexBufferKey);
+    SKGPU_DEFINE_STATIC_UNIQUE_KEY(gFixedIndexBufferKey);
 
     fFixedIndexBuffer = rp->findOrMakeStaticBuffer(GrGpuBufferType::kIndex,
                                                    FixedIndexBufferSize(kMaxFixedResolveLevel),

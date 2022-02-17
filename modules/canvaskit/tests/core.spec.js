@@ -172,6 +172,7 @@ describe('Core canvas behavior', () => {
         expect(aImg.width()).toEqual(320);
         expect(aImg.height()).toEqual(240);
         expect(aImg.getFrameCount()).toEqual(60);
+        expect(aImg.currentFrameDuration()).toEqual(60);
 
         const drawCurrentFrame = function(x, y) {
             let img = aImg.makeImageAtCurrentFrame();
@@ -369,7 +370,7 @@ describe('Core canvas behavior', () => {
          const texs = [0,0, 16,0, 16,16, 0,16];
 
          const params = [
-             [  0,   0, colors, null, null,   null],
+             [  0,   0, colors, null, null,   CanvasKit.BlendMode.Dst],
              [256,   0, null,   texs, shader, null],
              [  0, 256, colors, texs, shader, null],
              [256, 256, colors, texs, shader, CanvasKit.BlendMode.Screen],
@@ -1082,6 +1083,33 @@ describe('Core canvas behavior', () => {
     });
 
     describe('ColorSpace Support', () => {
+        it('Creates an SRGB 8888 surface by default', () => {
+            const colorSpace = CanvasKit.ColorSpace.SRGB;
+            const surface = CanvasKit.MakeCanvasSurface('test');
+            expect(surface).toBeTruthy('Could not make surface');
+            let info = surface.imageInfo();
+            expect(info.alphaType).toEqual(CanvasKit.AlphaType.Unpremul);
+            expect(info.colorType).toEqual(CanvasKit.ColorType.RGBA_8888);
+            expect(CanvasKit.ColorSpace.Equals(info.colorSpace, colorSpace))
+                .toBeTruthy("Surface not created with correct color space.");
+
+            const mObj = CanvasKit.Malloc(Uint8Array, CANVAS_WIDTH * CANVAS_HEIGHT * 4);
+            mObj.toTypedArray()[0] = 127; // sentinel value. Should be overwritten by readPixels.
+            const canvas = surface.getCanvas();
+            canvas.clear(CanvasKit.TRANSPARENT);
+            const pixels = canvas.readPixels(0, 0, {
+                width: CANVAS_WIDTH,
+                height: CANVAS_HEIGHT,
+                colorType: CanvasKit.ColorType.RGBA_8888,
+                alphaType: CanvasKit.AlphaType.Unpremul,
+                colorSpace: colorSpace
+            }, mObj, 4 * CANVAS_WIDTH);
+            expect(pixels).toBeTruthy('Could not read pixels from surface');
+            expect(pixels[0] !== 127).toBeTruthy();
+            expect(pixels[0]).toEqual(mObj.toTypedArray()[0]);
+            CanvasKit.Free(mObj);
+            surface.delete();
+        });
         it('Can create an SRGB 8888 surface', () => {
             const colorSpace = CanvasKit.ColorSpace.SRGB;
             const surface = CanvasKit.MakeCanvasSurface('test', CanvasKit.ColorSpace.SRGB);

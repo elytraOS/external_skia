@@ -27,9 +27,9 @@ skia_gpu_sources = [
   "$_include/private/GrGLTypesPriv.h",
   "$_include/private/GrImageContext.h",
   "$_include/private/GrMtlTypesPriv.h",
-  "$_include/private/GrResourceKey.h",
   "$_include/private/GrSingleOwner.h",
   "$_include/private/GrTypesPriv.h",
+  "$_include/private/chromium/GrSlug.h",
   "$_src/gpu/GrAHardwareBufferImageGenerator.cpp",
   "$_src/gpu/GrAHardwareBufferImageGenerator.h",
   "$_src/gpu/GrAHardwareBufferUtils.cpp",
@@ -188,8 +188,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrSemaphore.h",
   "$_src/gpu/GrShaderCaps.cpp",
   "$_src/gpu/GrShaderCaps.h",
-  "$_src/gpu/GrShaderUtils.cpp",
-  "$_src/gpu/GrShaderUtils.h",
   "$_src/gpu/GrShaderVar.cpp",
   "$_src/gpu/GrShaderVar.h",
   "$_src/gpu/GrSimpleMesh.h",
@@ -359,12 +357,13 @@ skia_gpu_sources = [
   "$_src/gpu/text/GrSDFMaskFilter.h",
   "$_src/gpu/text/GrSDFTControl.cpp",
   "$_src/gpu/text/GrSDFTControl.h",
+  "$_src/gpu/text/GrSlug.cpp",
   "$_src/gpu/text/GrStrikeCache.cpp",
   "$_src/gpu/text/GrStrikeCache.h",
   "$_src/gpu/text/GrTextBlob.cpp",
   "$_src/gpu/text/GrTextBlob.h",
-  "$_src/gpu/text/GrTextBlobCache.cpp",
-  "$_src/gpu/text/GrTextBlobCache.h",
+  "$_src/gpu/text/GrTextBlobRedrawCoordinator.cpp",
+  "$_src/gpu/text/GrTextBlobRedrawCoordinator.h",
 
   # GLSL
   "$_src/gpu/glsl/GrGLSL.cpp",
@@ -511,8 +510,8 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/ops/DrawAtlasOp.h",
   "$_src/gpu/ops/DrawAtlasPathOp.cpp",
   "$_src/gpu/ops/DrawAtlasPathOp.h",
-  "$_src/gpu/ops/DrawVerticesOp.cpp",
-  "$_src/gpu/ops/DrawVerticesOp.h",
+  "$_src/gpu/ops/DrawCustomMeshOp.cpp",
+  "$_src/gpu/ops/DrawCustomMeshOp.h",
   "$_src/gpu/ops/DrawableOp.cpp",
   "$_src/gpu/ops/DrawableOp.h",
   "$_src/gpu/ops/FillPathFlags.h",
@@ -816,7 +815,12 @@ skia_native_gpu_sources = [
 ]
 
 skia_shared_gpu_sources = [
+  "$_include/gpu/ShaderErrorHandler.h",
   "$_src/gpu/BufferWriter.h",
+  "$_src/gpu/KeyBuilder.h",
+  "$_src/gpu/ResourceKey.cpp",
+  "$_src/gpu/ResourceKey.h",
+  "$_src/gpu/ShaderErrorHandler.cpp",
 
   # tessellate
   "$_src/gpu/tessellate/CullTest.h",

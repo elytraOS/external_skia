@@ -243,6 +243,10 @@
 #define GR_GL_MULTISAMPLE_COVERAGE_MODES     0x8E12
 #define GR_GL_MAX_TEXTURE_BUFFER_SIZE        0x8C2B
 
+#define GR_GL_CONTEXT_FLAGS                  0x821E
+#define GR_GL_CONTEXT_FLAG_PROTECTED_CONTENT_BIT_EXT  0x00000010
+#define GR_GL_TEXTURE_PROTECTED_EXT          0x8BFA
+
 /* GetTextureParameter */
 /*      GL_TEXTURE_MAG_FILTER */
 /*      GL_TEXTURE_MIN_FILTER */
@@ -504,6 +508,7 @@
 #define GR_GL_RGB565                         0x8D62
 #define GR_GL_RGB8                           0x8051
 #define GR_GL_SRGB8                          0x8C41
+#define GR_GL_RGBX8                          0x96BA
 
 /* RGB integer sized formats */
 #define GR_GL_RGB8I                          0x8D8F

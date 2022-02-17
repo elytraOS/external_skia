@@ -2,6 +2,24 @@ Skia Graphics Release Notes
 
 This file includes a list of high level updates for each milestone release.
 
+Milestone 99
+------------
+  * Added two new intrinsic functions to SkSL for use in runtime effects:
+      vec3 toLinearSrgb(vec3 color)
+      vec3 fromLinearSrgb(vec3 color)
+    These convert RGB color values between the working color space (the color space of the
+    destination surface) and a known, fixed color space. `toLinearSrgb` converts a color to the
+    sRGB color gamut, with a linear transfer function. `fromLinearSrgb` converts a color from that
+    same color space. These are helpful for effects that need to work in a specific color space, or
+    want to apply effects (like lighting) that work best in a linear color space.
+    Note that if the destination surface has no color space (color space is `nullptr`), these
+    intrinsics will do no conversion, and return the input color unchanged.
+    https://review.skia.org/481416
+  * Added a new variant of SkImageFilters::RuntimeShader that supports multiple child nodes.
+    https://review.skia.org/489536
+
+* * *
+
 Milestone 98
 ------------
   * The following functions and methods are not defined in SkSurface when SK_SUPPORT_GPU is 0:
@@ -14,7 +32,25 @@ Milestone 98
     into Skia.
   * Surfaces and images are now limited to just under 2GB of total size. Previously, larger images
     could be created, but the CPU backend would fail to index them correctly.
+  * SkCanvas::drawVertices and SkCanvas::drawPatch variants that did not take SkBlendMode are
+    removed.
+  * SkImageFilters::RuntimeShader is a new public API that enables adding RuntimeShaderEffects into
+    image filter graph.
+  * SkImage::makeRawShader is a new public API that creates "raw" image shaders. makeRawShader
+    functions like SkImage::makeShader, but for images that contain non-color data. This includes
+    images encoding things like normals, material properties (eg roughness), heightmaps, or any
+    other purely mathematical data that happens to be stored in an image. These types of images are
+    useful with some programmable shaders (ie SkRuntimeEffect).
+    Raw image shaders work like regular image shaders (including filtering and tiling), with a few
+    major differences:
+      - No color space transformation is ever applied (the color space of the image is ignored).
+      - Images with an alpha type of kUnpremul are not automatically premultiplied.
+      - Bicubic filtering is not supported. If SkSamplingOptions::useCubic is true, these factories
+        will return nullptr.
+  * Removed SkCanvas::markCTM and SkCanvas::findMarkedCTM. These were created to be used with other
+    features that have since been deleted, so they served no purpose.
 
+* * *
 
 Milestone 97
 ------------

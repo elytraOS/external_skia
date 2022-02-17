@@ -112,6 +112,11 @@ public:
     String getArrayName(int arraySize) const;
 
     /**
+     * Creates an alias which maps to another type.
+     */
+    static std::unique_ptr<Type> MakeAliasType(skstd::string_view name, const Type& targetType);
+
+    /**
      * Create a generic type which maps to the listed types--e.g. $genType is a generic type which
      * can match float, float2, float3 or float4.
      */
@@ -141,8 +146,10 @@ public:
                                                  Type::TypeKind typeKind);
 
     /** Creates a struct type with the given fields. */
-    static std::unique_ptr<Type> MakeStructType(int line, skstd::string_view name,
-                                                std::vector<Field> fields);
+    static std::unique_ptr<Type> MakeStructType(int line,
+                                                skstd::string_view name,
+                                                std::vector<Field> fields,
+                                                bool interfaceBlock = false);
 
     /** Create a texture type. */
     static std::unique_ptr<Type> MakeTextureType(const char* name, SpvDim_ dimensions,
@@ -204,12 +211,14 @@ public:
         return this->name().starts_with("$");
     }
 
-    bool operator==(const Type& other) const {
-        return this->name() == other.name();
+    /** If this is an alias, returns the underlying type, otherwise returns this. */
+    virtual const Type& resolve() const {
+        return *this;
     }
 
-    bool operator!=(const Type& other) const {
-        return this->name() != other.name();
+    /** Returns true if these types are equal after alias resolution. */
+    bool matches(const Type& other) const {
+        return this->resolve().name() == other.resolve().name();
     }
 
     /**
@@ -290,18 +299,16 @@ public:
 
     /**
      * Returns true if this is an "opaque type" (an external object which the shader references in
-     * some fashion), or void. https://www.khronos.org/opengl/wiki/Data_Type_(GLSL)#Opaque_types
+     * some fashion). https://www.khronos.org/opengl/wiki/Data_Type_(GLSL)#Opaque_types
      */
     bool isOpaque() const {
         switch (fTypeKind) {
             case TypeKind::kBlender:
             case TypeKind::kColorFilter:
-            case TypeKind::kOther:
             case TypeKind::kSampler:
             case TypeKind::kSeparateSampler:
             case TypeKind::kShader:
             case TypeKind::kTexture:
-            case TypeKind::kVoid:
                 return true;
             default:
                 return false;
@@ -446,6 +453,10 @@ public:
     }
 
     virtual bool isStruct() const {
+        return false;
+    }
+
+    virtual bool isInterfaceBlock() const {
         return false;
     }
 

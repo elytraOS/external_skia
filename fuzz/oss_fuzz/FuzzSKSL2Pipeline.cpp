@@ -14,7 +14,7 @@
 #include "fuzz/Fuzz.h"
 
 bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
-    std::unique_ptr<GrShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
+    std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
     SkSL::Compiler compiler(caps.get());
     SkSL::Program::Settings settings;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
@@ -49,6 +49,9 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
         String sampleBlender(int index, String src, String dst) override {
             return "child_" + SkSL::to_string(index) + ".eval(" + src + ", " + dst + ")";
         }
+
+        String toLinearSrgb(String color) override { return color; }
+        String fromLinearSrgb(String color) override { return color; }
     };
 
     Callbacks callbacks;

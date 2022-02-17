@@ -51,7 +51,7 @@ class DirectMaskGlyphVertexFillBenchmark : public Benchmark {
         const SkPoint drawOrigin = glyphRunList.origin();
         drawMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
         GrSDFTControl control{false, props.isUseDeviceIndependentFonts(), 256, 256};
-        fBlob = GrTextBlob::Make(glyphRunList, paint, drawMatrix, control, &painter);
+        fBlob = GrTextBlob::Make(glyphRunList, paint, drawMatrix, false, control, &painter);
 
         SkASSERT(!fBlob->subRunList().isEmpty());
         GrAtlasSubRun* subRun = fBlob->subRunList().front().testingOnly_atlasSubRun();
@@ -71,7 +71,7 @@ class DirectMaskGlyphVertexFillBenchmark : public Benchmark {
 
         for (int loop = 0; loop < loops; loop++) {
             subRun->fillVertexData(fVertices.get(), 0, subRun->glyphCount(),
-                                   grColor, positionMatrix, clip);
+                                   grColor, positionMatrix, {0, 0}, clip);
         }
     }
 

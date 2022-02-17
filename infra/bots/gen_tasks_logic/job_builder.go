@@ -121,8 +121,8 @@ func (b *jobBuilder) genTasksForJob() {
 	if b.extraConfig("PushAppsFromSkiaDockerImage") {
 		b.createPushAppsFromSkiaDockerImage()
 		return
-	} else if b.extraConfig("PushAppsFromWASMDockerImage") {
-		b.createPushAppsFromWASMDockerImage()
+	} else if b.extraConfig("PushBazelAppsFromWASMDockerImage") {
+		b.createPushBazelAppsFromWASMDockerImage()
 		return
 	}
 
@@ -191,13 +191,13 @@ func (b *jobBuilder) genTasksForJob() {
 			b.g3FrameworkCanary()
 			return
 		} else if b.project("Android") {
-			b.canary("android-master-autoroll")
+			b.canary("android-master-autoroll", "Canary-Android-Topic", "https://googleplex-android-review.googlesource.com/q/topic:")
 			return
 		} else if b.project("Chromium") {
-			b.canary("skia-autoroll")
+			b.canary("skia-autoroll", "Canary-Chromium-CL", "https://chromium-review.googlesource.com/c/")
 			return
 		} else if b.project("Flutter") {
-			b.canary("skia-flutter-autoroll")
+			b.canary("skia-flutter-autoroll", "Canary-Flutter-PR", "https://github.com/flutter/engine/pull/")
 			return
 		}
 	}
@@ -223,7 +223,7 @@ func (b *jobBuilder) finish() {
 		b.trigger(specs.TRIGGER_NIGHTLY)
 	} else if b.frequency("Weekly") {
 		b.trigger(specs.TRIGGER_WEEKLY)
-	} else if b.extraConfig("Flutter", "CommandBuffer", "CreateDockerImage") {
+	} else if b.extraConfig("Flutter", "CommandBuffer", "CreateDockerImage", "PushAppsFromSkiaDockerImage", "PushBazelAppsFromWASMDockerImage") {
 		b.trigger(specs.TRIGGER_MAIN_ONLY)
 	} else if b.frequency("OnDemand") || b.role("Canary") {
 		b.trigger(specs.TRIGGER_ON_DEMAND)

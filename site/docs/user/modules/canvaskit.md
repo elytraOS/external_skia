@@ -71,7 +71,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
   <figure>
     <canvas id=camera3d width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/a5f9e976f1af65ef13bd978a5e265bdcb92110f5e64699fba5e8871c54be22b6"
+      <a href="https://jsfiddle.skia.org/canvaskit/55e66e892a5ae98175cc0b086fbac2100a4642105bb76bd938ed75ccce5af432"
           target=_blank rel=noopener>
         3D Cube JSFiddle</a>
     </figcaption>

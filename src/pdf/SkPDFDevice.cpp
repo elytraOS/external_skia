@@ -837,7 +837,7 @@ void SkPDFDevice::internalDrawGlyphRun(
     if (!metrics) {
         return;
     }
-    SkAdvancedTypefaceMetrics::FontType fontType = SkPDFFont::FontType(*metrics);
+    SkAdvancedTypefaceMetrics::FontType fontType = SkPDFFont::FontType(*typeface, *metrics);
 
     const std::vector<SkUnichar>& glyphToUnicode = SkPDFFont::GetUnicodeMap(typeface, fDocument);
 
@@ -963,11 +963,18 @@ void SkPDFDevice::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const S
     }
 }
 
-void SkPDFDevice::drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) {
+void SkPDFDevice::drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) {
     if (this->hasEmptyClip()) {
         return;
     }
     // TODO: implement drawVertices
+}
+
+void SkPDFDevice::drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
+    // TODO: implement drawCustomMesh
 }
 
 void SkPDFDevice::drawFormXObject(SkPDFIndirectReference xObject, SkDynamicMemoryWStream* content) {

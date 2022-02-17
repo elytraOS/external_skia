@@ -303,6 +303,9 @@ export interface CanvasKit {
     /**
      * Decodes the given bytes into an animated image. Returns null if the bytes were invalid.
      * The passed in bytes will be copied into the WASM heap, so the caller can dispose of them.
+     *
+     * The returned AnimatedImage will be "pointing to" the first frame, i.e. currentFrameDuration
+     * and makeImageAtCurrentFrame will be referring to the first frame.
      * @param bytes
      */
     MakeAnimatedImageFromEncoded(bytes: Uint8Array | ArrayBuffer): AnimatedImage | null;
@@ -404,7 +407,7 @@ export interface CanvasKit {
     readonly PictureRecorder: DefaultConstructor<PictureRecorder>;
     readonly TextStyle: TextStyleConstructor;
 
-    // Factories, i.e. things made with CanvasKit.Foo.MakeTurboEncapsulator()
+    // Factories, i.e. things made with CanvasKit.Foo.MakeTurboEncabulator()
     readonly ParagraphBuilder: ParagraphBuilderFactory;
     readonly ColorFilter: ColorFilterFactory;
     readonly FontMgr: FontMgrFactory;
@@ -1015,7 +1018,12 @@ export interface SkSLUniform {
  */
 export interface AnimatedImage extends EmbindObject<AnimatedImage> {
     /**
-     * Decodes the next frame. Returns -1 when the animation is on the last frame.
+     * Returns the length of the current frame in ms.
+     */
+    currentFrameDuration(): number;
+    /**
+     * Decodes the next frame. Returns the length of that new frame in ms.
+     * Returns -1 when the animation is on the last frame.
      */
     decodeNextFrame(): number;
 
@@ -1416,13 +1424,6 @@ export interface Canvas extends EmbindObject<Canvas> {
     drawVertices(verts: Vertices, mode: BlendMode, paint: Paint): void;
 
     /**
-     * Returns the 4x4 matrix matching the given marker or null if there was none.
-     * See also markCTM.
-     * @param marker
-     */
-    findMarkedCTM(marker: string): Matrix4x4 | null;
-
-    /**
      * Returns the current transform from local coordinates to the 'device', which for most
      * purposes means pixels.
      */
@@ -1447,15 +1448,6 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param info
      */
     makeSurface(info: ImageInfo): Surface | null;
-
-    /**
-     * Record a marker (provided by caller) for the current CTM. This does not change anything
-     * about the ctm or clip, but does "name" this matrix value, so it can be referenced by
-     * custom effects (who access it by specifying the same name).
-     * See also findMarkedCTM.
-     * @param marker
-     */
-    markCTM(marker: string): void;
 
     /**
      * Returns a TypedArray containing the pixels reading starting at (srcX, srcY) and does not
@@ -3340,6 +3332,15 @@ export interface PathEffectFactory {
 /**
  * See RuntimeEffect.h for more details.
  */
+export interface DebugTrace extends EmbindObject<DebugTrace> {
+    writeTrace(): string;
+}
+
+export interface TracedShader {
+    shader: Shader;
+    debugTrace: DebugTrace;
+}
+
 export interface RuntimeEffectFactory {
     /**
      * Compiles a RuntimeEffect from the given shader code.
@@ -3348,6 +3349,14 @@ export interface RuntimeEffectFactory {
      *                   be printed to console.log().
      */
     Make(sksl: string, callback?: (err: string) => void): RuntimeEffect | null;
+
+    /**
+     * Adds debug tracing to an existing RuntimeEffect.
+     * @param shader - An already-assembled shader, created with RuntimeEffect.makeShader.
+     * @param traceCoordX - the X coordinate of the device-space pixel to trace
+     * @param traceCoordY - the Y coordinate of the device-space pixel to trace
+     */
+    MakeTraced(shader: Shader, traceCoordX: number, traceCoordY: number): TracedShader;
 }
 
 /**

@@ -58,10 +58,10 @@ void GrGLSLVaryingHandler::addVarying(const char* name, GrGLSLVarying* varying,
 }
 
 void GrGLSLVaryingHandler::emitAttributes(const GrGeometryProcessor& gp) {
-    for (const auto& attr : gp.vertexAttributes()) {
+    for (auto attr : gp.vertexAttributes()) {
         this->addAttribute(attr.asShaderVar());
     }
-    for (const auto& attr : gp.instanceAttributes()) {
+    for (auto attr : gp.instanceAttributes()) {
         this->addAttribute(attr.asShaderVar());
     }
 }
@@ -120,7 +120,7 @@ void GrGLSLVaryingHandler::getVertexDecls(SkString* inputDecls, SkString* output
 
 void GrGLSLVaryingHandler::getFragDecls(SkString* inputDecls, SkString* outputDecls) const {
     // We should not have any outputs in the fragment shader when using version 1.10
-    SkASSERT(k110_GrGLSLGeneration != fProgramBuilder->shaderCaps()->generation() ||
+    SkASSERT(SkSL::GLSLGeneration::k110 != fProgramBuilder->shaderCaps()->generation() ||
              fFragOutputs.empty());
     this->appendDecls(fFragInputs, inputDecls);
     this->appendDecls(fFragOutputs, outputDecls);

@@ -39,25 +39,9 @@ public:
         BUILTIN,
         INPUT_ATTACHMENT_INDEX,
         ORIGIN_UPPER_LEFT,
-        OVERRIDE_COVERAGE,
-        EARLY_FRAGMENT_TESTS,
         BLEND_SUPPORT_ALL_EQUATIONS,
         PUSH_CONSTANT,
-        MARKER,
-        WHEN,
-        KEY,
-        TRACKED,
-        SRGB_UNPREMUL,
-        CTYPE,
-        SKPMCOLOR4F,
-        SKV4,
-        SKRECT,
-        SKIRECT,
-        SKPMCOLOR,
-        SKM44,
-        BOOL,
-        INT,
-        FLOAT,
+        COLOR,
     };
 
     DSLParser(Compiler* compiler, const ProgramSettings& settings, ProgramKind kind,
@@ -105,6 +89,13 @@ private:
     bool checkNext(Token::Kind kind, Token* result = nullptr);
 
     /**
+     * Behaves like checkNext(TK_IDENTIFIER), but also verifies that identifier is not a builtin
+     * type. If the token was actually a builtin type, false is returned (the next token is not
+     * considered to be an identifier).
+     */
+    bool checkIdentifier(Token* result = nullptr);
+
+    /**
      * Reads the next non-whitespace token and generates an error if it is not the expected type.
      * The 'expected' string is part of the error message, which reads:
      *
@@ -126,10 +117,6 @@ private:
 
     void error(Token token, String msg);
     void error(int line, String msg);
-
-    SymbolTable& symbols() {
-        return *dsl::CurrentSymbolTable();
-    }
 
     // these functions parse individual grammar rules from the current parse position; you probably
     // don't need to call any of these outside of the parser. The function declarations in the .cpp
@@ -174,7 +161,7 @@ private:
     dsl::DSLStatement localVarDeclarationEnd(PositionInfo position, const dsl::DSLModifiers& mods,
             dsl::DSLType baseType, skstd::string_view name);
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLParameter>> parameter();
+    skstd::optional<dsl::DSLWrapper<dsl::DSLParameter>> parameter(size_t paramIndex);
 
     int layoutInt();
 
