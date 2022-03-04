@@ -21,6 +21,7 @@
 #include "experimental/graphite/src/GraphicsPipeline.h"
 #include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/ResourceProvider.h"
+#include "experimental/graphite/src/Sampler.h"
 #include "experimental/graphite/src/Texture.h"
 #include "experimental/graphite/src/TextureProxy.h"
 #include "experimental/graphite/src/UniformManager.h"
@@ -28,6 +29,7 @@
 #include "experimental/graphite/src/geom/Transform_graphite.h"
 #include "include/private/SkShaderCodeDictionary.h"
 #include "src/core/SkKeyHelpers.h"
+#include "src/core/SkUniformData.h"
 
 #if GRAPHITE_TEST_UTILS
 // set to 1 if you want to do GPU capture of the commandBuffer
@@ -74,15 +76,15 @@ public:
         writer->draw({}, {}, 4);
     }
 
-    sk_sp<UniformData> writeUniforms(Layout layout,
-                                     const SkIRect&,
-                                     const Transform&,
-                                     const Shape& shape) const override {
+    sk_sp<SkUniformData> writeUniforms(Layout layout,
+                                       const SkIRect&,
+                                       const Transform&,
+                                       const Shape& shape) const override {
         SkASSERT(shape.isRect());
         // TODO: A << API for uniforms would be nice, particularly if it could take pre-computed
         // offsets for each uniform.
-        auto uniforms = UniformData::Make(this->numUniforms(), this->uniforms().data(),
-                                          sizeof(float) * 4);
+        auto uniforms = SkUniformData::Make(this->numUniforms(), this->uniforms().data(),
+                                            sizeof(float) * 4);
         float2 scale = shape.rect().size();
         float2 translate = shape.rect().topLeft();
         memcpy(uniforms->data(), &scale, sizeof(float2));
@@ -92,8 +94,8 @@ public:
 
 private:
     UniformRectDraw() : RenderStep(Flags::kPerformsShading,
-                                   /*uniforms=*/{{"scale",     SLType::kFloat2},
-                                                 {"translate", SLType::kFloat2}},
+                                   /*uniforms=*/{{"scale",     SkSLType::kFloat2},
+                                                 {"translate", SkSLType::kFloat2}},
                                    PrimitiveType::kTriangleStrip,
                                    {{},
                                     {},
@@ -140,11 +142,11 @@ public:
         writer->draw(vertices, indices, 6);
     }
 
-    sk_sp<UniformData> writeUniforms(Layout layout,
-                                     const SkIRect&,
-                                     const Transform&,
-                                     const Shape&) const override {
-        auto uniforms = UniformData::Make(this->numUniforms(), this->uniforms().data(),
+    sk_sp<SkUniformData> writeUniforms(Layout layout,
+                                       const SkIRect&,
+                                       const Transform&,
+                                       const Shape&) const override {
+        auto uniforms = SkUniformData::Make(this->numUniforms(), this->uniforms().data(),
                                           sizeof(float) * 4);
         float data[4] = {2.f, 2.f, -1.f, -1.f};
         memcpy(uniforms->data(), data, 4 * sizeof(float));
@@ -154,11 +156,13 @@ public:
 private:
     TriangleRectDraw()
             : RenderStep(Flags::kPerformsShading,
-                         /*uniforms=*/{{"scale",     SLType::kFloat2},
-                                       {"translate", SLType::kFloat2}},
+                         /*uniforms=*/{{"scale",     SkSLType::kFloat2},
+                                       {"translate", SkSLType::kFloat2}},
                          PrimitiveType::kTriangles,
                          kTestDepthStencilSettings,
-                         /*vertexAttrs=*/{{"position", VertexAttribType::kFloat2, SLType::kFloat2}},
+                         /*vertexAttrs=*/{{"position",
+                                           VertexAttribType::kFloat2,
+                                           SkSLType::kFloat2}},
                          /*instanceAttrs=*/{}) {}
 };
 
@@ -197,10 +201,10 @@ public:
         instanceWriter << shape.rect().topLeft() << shape.rect().size();
     }
 
-    sk_sp<UniformData> writeUniforms(Layout,
-                                     const SkIRect&,
-                                     const Transform&,
-                                     const Shape&) const override {
+    sk_sp<SkUniformData> writeUniforms(Layout,
+                                       const SkIRect&,
+                                       const Transform&,
+                                       const Shape&) const override {
         return nullptr;
     }
 
@@ -212,8 +216,8 @@ private:
                          kTestDepthStencilSettings,
                          /*vertexAttrs=*/{},
                          /*instanceAttrs=*/ {
-                                { "position", VertexAttribType::kFloat2, SLType::kFloat2 },
-                                { "dims",     VertexAttribType::kFloat2, SLType::kFloat2 }
+                                { "position", VertexAttribType::kFloat2, SkSLType::kFloat2 },
+                                { "dims",     VertexAttribType::kFloat2, SkSLType::kFloat2 }
                          }) {}
 };
 
@@ -249,7 +253,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     TextureInfo textureInfo;
 #endif
 
-    SkPaintParamsKey key = CreateKey(ShaderCombo::ShaderType::kSolidColor,
+    SkPaintParamsKey key = CreateKey(SkBackend::kGraphite,
+                                     ShaderCombo::ShaderType::kSolidColor,
                                      SkTileMode::kClamp,
                                      SkBlendMode::kSrc);
 
@@ -276,6 +281,11 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     renderPassDesc.fDepthStencilAttachment.fStoreOp = StoreOp::kDiscard;
     sk_sp<Texture> depthStencilTexture =
             gpu->resourceProvider()->findOrCreateTexture(textureSize, depthStencilInfo);
+
+    // Create Sampler -- for now, just to test creation
+    sk_sp<Sampler> sampler = gpu->resourceProvider()->findOrCreateCompatibleSampler(
+            SkSamplingOptions(SkFilterMode::kLinear), SkTileMode::kClamp, SkTileMode::kDecal);
+    REPORTER_ASSERT(reporter, sampler);
 
     commandBuffer->beginRenderPass(renderPassDesc, target->refTexture(), nullptr,
                                    depthStencilTexture);

@@ -48,9 +48,9 @@
 
 namespace SkSL {
 
-const char* MetalCodeGenerator::OperatorName(Operator op) {
+static const char* operator_name(Operator op) {
     switch (op.kind()) {
-        case Token::Kind::TK_LOGICALXOR:  return "!=";
+        case Token::Kind::TK_LOGICALXOR:  return " != ";
         default:                          return op.operatorName();
     }
 }
@@ -1642,11 +1642,9 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         // as long as the LHS has no side effects, and hope for the best otherwise.
         this->write(" = ");
         this->writeExpression(left, Precedence::kAssignment);
-        this->write(" ");
-        this->write(OperatorName(op.removeAssignment()));
-        this->write(" ");
+        this->write(operator_name(op.removeAssignment()));
     } else {
-        this->write(String(" ") + OperatorName(op) + " ");
+        this->write(operator_name(op));
     }
 
     needMatrixSplatOnScalar = leftType.isMatrix() && rightType.isNumber() &&
@@ -1678,11 +1676,11 @@ void MetalCodeGenerator::writeTernaryExpression(const TernaryExpression& t,
 }
 
 void MetalCodeGenerator::writePrefixExpression(const PrefixExpression& p,
-                                              Precedence parentPrecedence) {
+                                               Precedence parentPrecedence) {
     if (Precedence::kPrefix >= parentPrecedence) {
         this->write("(");
     }
-    this->write(OperatorName(p.getOperator()));
+    this->write(p.getOperator().tightOperatorName());
     this->writeExpression(*p.operand(), Precedence::kPrefix);
     if (Precedence::kPrefix >= parentPrecedence) {
         this->write(")");
@@ -1690,12 +1688,12 @@ void MetalCodeGenerator::writePrefixExpression(const PrefixExpression& p,
 }
 
 void MetalCodeGenerator::writePostfixExpression(const PostfixExpression& p,
-                                               Precedence parentPrecedence) {
+                                                Precedence parentPrecedence) {
     if (Precedence::kPostfix >= parentPrecedence) {
         this->write("(");
     }
     this->writeExpression(*p.operand(), Precedence::kPostfix);
-    this->write(OperatorName(p.getOperator()));
+    this->write(p.getOperator().tightOperatorName());
     if (Precedence::kPostfix >= parentPrecedence) {
         this->write(")");
     }
@@ -2088,8 +2086,7 @@ void MetalCodeGenerator::writeStatement(const Statement& s) {
             this->writeBlock(s.as<Block>());
             break;
         case Statement::Kind::kExpression:
-            this->writeExpression(*s.as<ExpressionStatement>().expression(), Precedence::kTopLevel);
-            this->write(";");
+            this->writeExpressionStatement(s.as<ExpressionStatement>());
             break;
         case Statement::Kind::kReturn:
             this->writeReturnStatement(s.as<ReturnStatement>());
@@ -2192,6 +2189,13 @@ void MetalCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->write(" while (");
     this->writeExpression(*d.test(), Precedence::kTopLevel);
     this->write(");");
+}
+
+void MetalCodeGenerator::writeExpressionStatement(const ExpressionStatement& s) {
+    if (s.expression()->hasSideEffects()) {
+        this->writeExpression(*s.expression(), Precedence::kTopLevel);
+        this->write(";");
+    }
 }
 
 void MetalCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {

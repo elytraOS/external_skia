@@ -15,6 +15,7 @@
 #include "include/private/SkShaderCodeDictionary.h"
 #include "include/private/SkUniquePaintParamsID.h"
 #include "src/core/SkKeyHelpers.h"
+#include "src/core/SkUniformData.h"
 
 namespace {
 
@@ -83,7 +84,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
             }
 
             for (auto bm : { SkBlendMode::kSrc, SkBlendMode::kSrcOver }) {
-                SkPaintParamsKey expected = CreateKey(s, tm, bm);
+                SkPaintParamsKey expected = CreateKey(SkBackend::kGraphite, s, tm, bm);
 
                 auto [ p, expectedNumUniforms ] = create_paint(s, tm, bm);
                 auto [ actualID, ud] = ExtractPaintData(context, PaintParams(p));

@@ -23,6 +23,7 @@ class ConstructorArrayCast;
 class ConstructorCompound;
 class ConstructorMatrixResize;
 class DoStatement;
+class ExpressionStatement;
 class Extension;
 class FieldAccess;
 class ForStatement;
@@ -71,8 +72,6 @@ protected:
     inline static constexpr Requirements kUniforms_Requirement  = 1 << 2;
     inline static constexpr Requirements kGlobals_Requirement   = 1 << 3;
     inline static constexpr Requirements kFragCoord_Requirement = 1 << 4;
-
-    static const char* OperatorName(Operator op);
 
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
@@ -243,6 +242,8 @@ protected:
     void writeForStatement(const ForStatement& f);
 
     void writeDoStatement(const DoStatement& d);
+
+    void writeExpressionStatement(const ExpressionStatement& s);
 
     void writeSwitchStatement(const SwitchStatement& s);
 

@@ -871,9 +871,9 @@ void GLSLCodeGenerator::writeMatrixComparisonWorkaround(const BinaryExpression& 
     this->writeExpression(left, Precedence::kAssignment);
     this->write("), (" + tempMatrix2 + " = ");
     this->writeExpression(right, Precedence::kAssignment);
-    this->write("), (" + tempMatrix1 + " ");
+    this->write("), (" + tempMatrix1);
     this->write(op.operatorName());
-    this->write(" " + tempMatrix2 + "))");
+    this->write(tempMatrix2 + "))");
 }
 
 void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
@@ -908,9 +908,7 @@ void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         this->write("sk_FragCoord_Workaround = (");
     }
     this->writeExpression(left, precedence);
-    this->write(" ");
     this->write(op.operatorName());
-    this->write(" ");
     this->writeExpression(right, precedence);
     if (positionWorkaround) {
         this->write(")");
@@ -969,7 +967,7 @@ void GLSLCodeGenerator::writePrefixExpression(const PrefixExpression& p,
     if (Precedence::kPrefix >= parentPrecedence) {
         this->write("(");
     }
-    this->write(p.getOperator().operatorName());
+    this->write(p.getOperator().tightOperatorName());
     this->writeExpression(*p.operand(), Precedence::kPrefix);
     if (Precedence::kPrefix >= parentPrecedence) {
         this->write(")");
@@ -982,7 +980,7 @@ void GLSLCodeGenerator::writePostfixExpression(const PostfixExpression& p,
         this->write("(");
     }
     this->writeExpression(*p.operand(), Precedence::kPostfix);
-    this->write(p.getOperator().operatorName());
+    this->write(p.getOperator().tightOperatorName());
     if (Precedence::kPostfix >= parentPrecedence) {
         this->write(")");
     }
@@ -1225,8 +1223,7 @@ void GLSLCodeGenerator::writeStatement(const Statement& s) {
             this->writeBlock(s.as<Block>());
             break;
         case Statement::Kind::kExpression:
-            this->writeExpression(*s.as<ExpressionStatement>().expression(), Precedence::kTopLevel);
-            this->write(";");
+            this->writeExpressionStatement(s.as<ExpressionStatement>());
             break;
         case Statement::Kind::kReturn:
             this->writeReturnStatement(s.as<ReturnStatement>());
@@ -1382,6 +1379,13 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
     this->finishLine();
     fIndentation--;
     this->write("}");
+}
+
+void GLSLCodeGenerator::writeExpressionStatement(const ExpressionStatement& s) {
+    if (s.expression()->hasSideEffects()) {
+        this->writeExpression(*s.expression(), Precedence::kTopLevel);
+        this->write(";");
+    }
 }
 
 void GLSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {

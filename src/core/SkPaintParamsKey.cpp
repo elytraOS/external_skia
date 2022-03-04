@@ -40,6 +40,9 @@ DumpMethod get_dump_method(CodeSnippetID id) {
         case CodeSnippetID::kSweepGradientShader:   [[fallthrough]];
         case CodeSnippetID::kConicalGradientShader: return GradientShaderBlocks::Dump;
 
+        case CodeSnippetID::kImageShader:           return ImageShaderBlock::Dump;
+        case CodeSnippetID::kBlendShader:           return BlendShaderBlock::Dump;
+
         // BlendMode code snippets
         case CodeSnippetID::kSimpleBlendMode:       return BlendModeBlock::Dump;
 
@@ -49,16 +52,21 @@ DumpMethod get_dump_method(CodeSnippetID id) {
 
 } // anonymous namespace
 
+int SkPaintParamsKey::DumpBlock(const SkPaintParamsKey& key, int headerOffset) {
+    auto [codeSnippetID, blockSize] = key.readCodeSnippetID(headerOffset);
+
+    get_dump_method(codeSnippetID)(key, headerOffset);
+
+    return blockSize;
+}
+
 // This just iterates over the top-level blocks calling block-specific dump methods.
 void SkPaintParamsKey::dump() const {
     SkDebugf("SkPaintParamsKey %dB:\n", this->sizeInBytes());
 
     int curHeaderOffset = 0;
     while (curHeaderOffset < this->sizeInBytes()) {
-        auto [codeSnippetID, blockSize] = this->readCodeSnippetID(curHeaderOffset);
-
-        get_dump_method(codeSnippetID)(*this, curHeaderOffset);
-
+        int blockSize = DumpBlock(*this, curHeaderOffset);
         curHeaderOffset += blockSize;
     }
 }
