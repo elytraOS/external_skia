@@ -70,6 +70,9 @@ std::tuple<const SkPath*, size_t> SkScalerCache::mergePath(
         SkGlyph* glyph, const SkPath* path, bool hairline) {
     SkAutoMutexExclusive lock{fMu};
     size_t pathDelta = 0;
+    if (glyph->setPathHasBeenCalled()) {
+        SkDEBUGFAIL("Re-adding path to existing glyph. This should not happen.");
+    }
     if (glyph->setPath(&fAlloc, path, hairline)) {
         pathDelta = glyph->path()->approximateBytesUsed();
     }
@@ -109,14 +112,20 @@ std::tuple<const void*, size_t> SkScalerCache::prepareImage(SkGlyph* glyph) {
 std::tuple<SkGlyph*, size_t> SkScalerCache::mergeGlyphAndImage(
         SkPackedGlyphID toID, const SkGlyph& from) {
     SkAutoMutexExclusive lock{fMu};
-    // TODO(herb): remove finding the glyph when we are sure there are no glyph collisions.
+    // TODO(herb): remove finding the glyph when setting the metrics and image are separated
     SkGlyphDigest* digest = fDigestForPackedGlyphID.find(toID.value());
     if (digest != nullptr) {
-        // Since there is no search for replacement glyphs, this glyph should not exist yet.
-        SkDEBUGFAIL("This implies adding to an existing glyph. This should not happen.");
-
-        // Just return what we have. The invariants have already been cast in stone.
-        return {fGlyphForIndex[digest->index()], 0};
+        SkGlyph* to = fGlyphForIndex[digest->index()];
+        size_t delta = 0;
+        if (from.setImageHasBeenCalled()) {
+            if (to->setImageHasBeenCalled()) {
+                // Should never set an image on a glyph which already has an image.
+                SkDEBUGFAIL("Re-adding image to existing glyph. This should not happen.");
+            }
+            // TODO: assert that any metrics on `from` are the same.
+            delta = to->setMetricsAndImage(&fAlloc, from);
+        }
+        return {to, delta};
     } else {
         SkGlyph* glyph = fAlloc.make<SkGlyph>(toID);
         size_t delta = glyph->setMetricsAndImage(&fAlloc, from);
@@ -155,9 +164,9 @@ std::tuple<SkSpan<const SkGlyph*>, size_t> SkScalerCache::prepareImages(
 }
 
 template <typename Fn>
-size_t SkScalerCache::commonFilterLoop(SkDrawableGlyphBuffer* drawables, Fn&& fn) {
+size_t SkScalerCache::commonFilterLoop(SkDrawableGlyphBuffer* accepted, Fn&& fn) {
     size_t total = 0;
-    for (auto [i, packedID, pos] : SkMakeEnumerate(drawables->input())) {
+    for (auto [i, packedID, pos] : SkMakeEnumerate(accepted->input())) {
         if (SkScalarsAreFinite(pos.x(), pos.y())) {
             auto [digest, size] = this->digest(packedID);
             total += size;
@@ -169,16 +178,16 @@ size_t SkScalerCache::commonFilterLoop(SkDrawableGlyphBuffer* drawables, Fn&& fn
     return total;
 }
 
-size_t SkScalerCache::prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* drawables) {
+size_t SkScalerCache::prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* accepted) {
     SkAutoMutexExclusive lock{fMu};
     size_t imageDelta = 0;
-    size_t delta = this->commonFilterLoop(drawables,
+    size_t delta = this->commonFilterLoop(accepted,
         [&](size_t i, SkGlyphDigest digest, SkPoint pos) SK_REQUIRES(fMu) {
             // If the glyph is too large, then no image is created.
             SkGlyph* glyph = fGlyphForIndex[digest.index()];
             auto [image, imageSize] = this->prepareImage(glyph);
             if (image != nullptr) {
-                drawables->push_back(glyph, i);
+                accepted->accept(glyph, i);
                 imageDelta += imageSize;
             }
         });
@@ -188,23 +197,15 @@ size_t SkScalerCache::prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* drawables
 
 // Note: this does not actually fill out the image. That happens at atlas building time.
 size_t SkScalerCache::prepareForMaskDrawing(
-        SkDrawableGlyphBuffer* drawables, SkSourceGlyphBuffer* rejects) {
+        SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected) {
     SkAutoMutexExclusive lock{fMu};
-    size_t delta = this->commonFilterLoop(drawables,
+    size_t delta = this->commonFilterLoop(accepted,
         [&](size_t i, SkGlyphDigest digest, SkPoint pos) SK_REQUIRES(fMu) {
+            // N.B. this must have the same behavior as RemoteStrike::prepareForMaskDrawing.
             if (digest.canDrawAsMask()) {
-                drawables->push_back(fGlyphForIndex[digest.index()], i);
+                accepted->accept(fGlyphForIndex[digest.index()], i);
             } else {
-                // Only collect dimensions of the color glyphs assuming that paths will take care
-                // of the large mask glyphs. This may be inaccurate in the very rare case where
-                // a bitmap only font is being used.
-                // N.B. this must have the same behavior as RemoteStrike::prepareForMaskDrawing.
-                if (digest.isColor()) {
-                    // Paths can't handle color, so these will fall to the drawing of last resort.
-                    rejects->reject(i, digest.maxDimension());
-                } else {
-                    rejects->reject(i);
-                }
+                rejected->reject(i, digest.maxDimension());
             }
         });
 
@@ -212,14 +213,15 @@ size_t SkScalerCache::prepareForMaskDrawing(
 }
 
 size_t SkScalerCache::prepareForSDFTDrawing(
-        SkDrawableGlyphBuffer* drawables, SkSourceGlyphBuffer* rejects) {
+        SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected) {
     SkAutoMutexExclusive lock{fMu};
-    size_t delta = this->commonFilterLoop(drawables,
+    size_t delta = this->commonFilterLoop(accepted,
         [&](size_t i, SkGlyphDigest digest, SkPoint pos) SK_REQUIRES(fMu) {
             if (digest.canDrawAsSDFT()) {
-                drawables->push_back(fGlyphForIndex[digest.index()], i);
+                accepted->accept(fGlyphForIndex[digest.index()], i);
             } else {
-                rejects->reject(i);
+                // Assume whatever follows SDF doesn't care about the maximum rejected size.
+                rejected->reject(i);
             }
         });
 
@@ -227,25 +229,20 @@ size_t SkScalerCache::prepareForSDFTDrawing(
 }
 
 size_t SkScalerCache::prepareForPathDrawing(
-        SkDrawableGlyphBuffer* drawables, SkSourceGlyphBuffer* rejects) {
+        SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected) {
     SkAutoMutexExclusive lock{fMu};
     size_t pathDelta = 0;
-    size_t delta = this->commonFilterLoop(drawables,
+    size_t delta = this->commonFilterLoop(accepted,
         [&](size_t i, SkGlyphDigest digest, SkPoint pos) SK_REQUIRES(fMu) {
             SkGlyph* glyph = fGlyphForIndex[digest.index()];
-            if (!digest.isColor()) {
-                auto [path, pathSize] = this->preparePath(glyph);
-                pathDelta += pathSize;
-                if (path != nullptr) {
-                    // Save off the path to draw later.
-                    drawables->push_back(path, i);
-                } else {
-                    // Glyph does not have a path. It is probably bitmap only.
-                    rejects->reject(i, glyph->maxDimension());
-                }
+            auto [path, pathSize] = this->preparePath(glyph);
+            pathDelta += pathSize;
+            if (path != nullptr) {
+                // Save off the path to draw later.
+                accepted->accept(path, i);
             } else {
-                // Glyph is color.
-                rejects->reject(i, glyph->maxDimension());
+                // Glyph does not have a path.
+                rejected->reject(i, digest.maxDimension());
             }
         });
 

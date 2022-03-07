@@ -12,11 +12,13 @@
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSymbol.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/ir/SkSLProgram.h"
 
 #include <vector>
 
 namespace SkSL {
 
+class Compiler;
 class Context;
 class ErrorReporter;
 class Expression;
@@ -32,6 +34,8 @@ class Type;
  */
 class Rehydrator {
 public:
+    static constexpr uint16_t kVersion = 6;
+
     enum Command {
         // uint16 id, Type componentType, uint8 count
         kArrayType_Command,
@@ -82,6 +86,8 @@ public:
         // uint16 id, Modifiers modifiers, String name, uint8 parameterCount, uint16[] parameterIds,
         // Type returnType
         kFunctionDeclaration_Command,
+        // uint16 declaration
+        kFunctionPrototype_Command,
         // bool isStatic, Expression test, Statement ifTrue, Statement ifFalse
         kIf_Command,
         // Expression base, Expression index
@@ -92,17 +98,21 @@ public:
         kInterfaceBlock_Command,
         // int32 value
         kIntLiteral_Command,
-        // int32 flags, int8 location, int8 offset, int8 binding, int8 index, int8 set,
+        // int32 flags, int8 location, int16 offset, int16 binding, int8 index, int8 set,
         // int16 builtin, int8 inputAttachmentIndex
         kLayout_Command,
         // Layout layout, uint8 flags
         kModifiers8Bit_Command,
         // Layout layout, uint32 flags
         kModifiers_Command,
+        kNop_Command,
         // uint8 op, Expression operand
         kPostfix_Command,
         // uint8 op, Expression operand
         kPrefix_Command,
+        // uint8_t symbolTableCount, SymbolTable[] symbolTables, Elements elements,
+        // bool useFlipRTUniform
+        kProgram_Command,
         // Expression value
         kReturn_Command,
         // String name, Expression value
@@ -119,7 +129,7 @@ public:
         // uint16 id
         kSymbolRef_Command,
         // uint16 owned symbol count, Symbol[] ownedSymbols, uint16 symbol count,
-        // (String, uint16/*index*/)[].
+        // (uint16/*index*/ | { uint16 kBuiltin_Symbol, String name })
         kSymbolTable_Command,
         // uint16 id, String name
         kSystemType_Command,
@@ -139,14 +149,29 @@ public:
     };
 
     // src must remain in memory as long as the objects created from it do
-    Rehydrator(const Context* context, std::shared_ptr<SymbolTable> symbolTable,
-               const uint8_t* src, size_t length);
+    Rehydrator(const Compiler& compiler, const uint8_t* src, size_t length,
+            std::shared_ptr<SymbolTable> base = nullptr);
 
+#ifdef SK_DEBUG
+    ~Rehydrator();
+#endif
+
+    // Reads a symbol table and makes it current (inheriting from the previous current table)
+    std::shared_ptr<SymbolTable> symbolTable();
+
+    // Reads a collection of program elements and returns it
     std::vector<std::unique_ptr<ProgramElement>> elements();
 
-    std::shared_ptr<SymbolTable> symbolTable(bool inherit = true);
+    // Reads an entire program. If the sharedElements are not provided, they will be pulled from the
+    // current ThreadContext.
+    std::unique_ptr<Program> program(
+            const std::vector<const ProgramElement*>* sharedElements = nullptr);
 
 private:
+    // If this ID appears in a symbol table, it means the corresponding symbol isn't actually
+    // present in the file as it's a builtin type.
+    static constexpr uint16_t kBuiltinType_Symbol = 65535;
+
     int8_t readS8() {
         SkASSERT(fIP < fEnd);
         return *(fIP++);
@@ -178,11 +203,11 @@ private:
         return this->readS32();
     }
 
-    skstd::string_view readString() {
+    std::string_view readString() {
         uint16_t offset = this->readU16();
-        uint8_t length = *(uint8_t*) (fStart + offset);
-        const char* chars = (const char*) fStart + offset + 1;
-        return skstd::string_view(chars, length);
+        uint8_t length = *(uint8_t*) (fStringStart + offset);
+        const char* chars = (const char*) fStringStart + offset + 1;
+        return std::string_view(chars, length);
     }
 
     void addSymbol(int id, const Symbol* symbol) {
@@ -215,19 +240,20 @@ private:
 
     const Type* type();
 
-    ErrorReporter* errorReporter() { return fContext.fErrors; }
+    ErrorReporter* errorReporter() { return fContext->fErrors; }
 
-    ModifiersPool& modifiersPool() const { return *fContext.fModifiersPool; }
+    ModifiersPool& modifiersPool() const { return *fContext->fModifiersPool; }
 
-    const Context& fContext;
+    std::shared_ptr<Context> fContext;
     std::shared_ptr<SymbolTable> fSymbolTable;
     std::vector<const Symbol*> fSymbols;
 
-    const uint8_t* fStart;
+    const uint8_t* fStringStart;
     const uint8_t* fIP;
     SkDEBUGCODE(const uint8_t* fEnd;)
 
     friend class AutoRehydratorSymbolTable;
+    friend class Dehydrator;
 };
 
 }  // namespace SkSL

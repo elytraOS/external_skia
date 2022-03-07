@@ -19,16 +19,4 @@ const Gpu* ContextPriv::gpu() const {
     return fContext->fGpu.get();
 }
 
-ResourceProvider* ContextPriv::resourceProvider() {
-    return this->gpu()->resourceProvider();
-}
-
-SkShaderCodeDictionary* ContextPriv::shaderCodeDictionary() {
-    return fContext->fShaderCodeDictionary.get();
-}
-
-const SkShaderCodeDictionary* ContextPriv::shaderCodeDictionary() const {
-    return fContext->fShaderCodeDictionary.get();
-}
-
 } // namespace skgpu
