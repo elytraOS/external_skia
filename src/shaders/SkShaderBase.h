@@ -33,6 +33,7 @@ class SkPaintParamsKey;
 class SkRasterPipeline;
 class SkRuntimeEffect;
 class SkShaderCodeDictionary;
+class SkUniformBlock;
 class SkStageUpdater;
 
 class SkUpdatableShader;
@@ -217,13 +218,15 @@ public:
         Add implementation details, for the specified backend, of this SkShader to the
         provided key.
 
-        @param dictionary dictionary of code fragments available to be used in the key
-        @param backend    the backend that would be carrying out the drawing
-        @param key        destination for implementation details of this SkShader
+        @param dictionary   dictionary of code fragments available to be used in the key
+        @param backend      the backend that would be carrying out the drawing
+        @param key          destination for implementation details of this SkShader
+        @param uniformBlock if non-null, storage for this shader's uniform data
     */
     virtual void addToKey(SkShaderCodeDictionary* dictionary,
                           SkBackend backend,
-                          SkPaintParamsKey* key) const;
+                          SkPaintParamsKey* key,
+                          SkUniformBlock* uniformBlock) const;
 
 protected:
     SkShaderBase(const SkMatrix* localMatrix = nullptr);

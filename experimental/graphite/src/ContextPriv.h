@@ -12,6 +12,7 @@
 
 namespace skgpu {
 
+class GlobalCache;
 class Gpu;
 class ResourceProvider;
 
@@ -23,18 +24,11 @@ public:
     Gpu* gpu();
     const Gpu* gpu() const;
 
-    ResourceProvider* resourceProvider();
-
-    SkShaderCodeDictionary* shaderCodeDictionary();
-    const SkShaderCodeDictionary* shaderCodeDictionary() const;
-
 private:
     friend class Context; // to construct/copy this type.
 
     explicit ContextPriv(Context* context) : fContext(context) {}
 
-    // Required until C++17 copy elision
-    ContextPriv(const ContextPriv&) = default;
     ContextPriv& operator=(const ContextPriv&) = delete;
 
     // No taking addresses of this type.

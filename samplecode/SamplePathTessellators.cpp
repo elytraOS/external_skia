@@ -18,14 +18,13 @@
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 #include "src/gpu/ops/TessellationPathRenderer.h"
 #include "src/gpu/tessellate/AffineMatrix.h"
+#include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/PathCurveTessellator.h"
 #include "src/gpu/tessellate/PathWedgeTessellator.h"
 #include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 namespace skgpu {
-
-using TrianglePatch = PatchWriter::TrianglePatch;
 
 namespace {
 
@@ -142,7 +141,9 @@ private:
             AffineMatrix m(pathMatrix);
             for (PathMiddleOutFanIter it(fPath); !it.done();) {
                 for (auto [p0, p1, p2] : it.nextStack()) {
-                    TrianglePatch(patchWriter) << m.map2Points(p0, p1) << m.mapPoint(p2);
+                    auto [mp0, mp1] = m.map2Points(p0, p1);
+                    auto mp2 = m.map1Point(&p2);
+                    patchWriter.writeTriangle(mp0, mp1, mp2);
                 }
             }
         }
