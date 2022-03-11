@@ -150,7 +150,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     const GrBackendFormat format =
         dContext->priv().caps()->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                          GrRenderable::kNo);
-    GrSwizzle swizzle = dContext->priv().caps()->getReadSwizzle(format, GrColorType::kRGBA_8888);
+    skgpu::Swizzle swizzle = dContext->priv().caps()->getReadSwizzle(format,
+                                                                     GrColorType::kRGBA_8888);
 
     for (bool makeClone : {false, true}) {
         for (int parentCnt = 0; parentCnt < 2; parentCnt++) {
@@ -740,13 +741,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
 
                 // Print first failing pixel's details.
                 if (!coverageMessage.isEmpty()) {
-                    ERRORF(reporter, coverageMessage.c_str());
+                    ERRORF(reporter, "%s", coverageMessage.c_str());
                 }
                 if (!constMessage.isEmpty()) {
-                    ERRORF(reporter, constMessage.c_str());
+                    ERRORF(reporter, "%s", constMessage.c_str());
                 }
                 if (!opaqueMessage.isEmpty()) {
-                    ERRORF(reporter, opaqueMessage.c_str());
+                    ERRORF(reporter, "%s", opaqueMessage.c_str());
                 }
 
                 if (!loggedFirstFailure) {
