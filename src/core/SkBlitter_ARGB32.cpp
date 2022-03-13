@@ -15,7 +15,6 @@
 #include <semaphore.h>
 #include <assert.h>
 #include <pthread.h>
-#include <cutils/log.h>
 #include <sys/sysinfo.h>
 
 static inline int upscale_31_to_32(int value) {
