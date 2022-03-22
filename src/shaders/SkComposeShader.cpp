@@ -73,7 +73,7 @@ SkShader_Blend::SkShader_Blend(sk_sp<SkBlender> blender, sk_sp<SkShader> dst, sk
         , fSrc(std::move(src))
         , fBlender(std::move(blender))
         , fMode((SkBlendMode)kCustom_SkBlendMode) {
-    if (skstd::optional<SkBlendMode> bm = as_BB(fBlender)->asBlendMode(); bm.has_value()) {
+    if (std::optional<SkBlendMode> bm = as_BB(fBlender)->asBlendMode(); bm.has_value()) {
         fMode = *bm;
         fBlender.reset();
     }
@@ -191,9 +191,10 @@ std::unique_ptr<GrFragmentProcessor> SkShader_Blend::asFragmentProcessor(
 
 void SkShader_Blend::addToKey(SkShaderCodeDictionary* dict,
                               SkBackend backend,
-                              SkPaintParamsKey* key) const {
+                              SkPaintParamsKey* key,
+                              SkUniformBlock* uniformBlock) const {
     // TODO: add blender support
     SkASSERT(!fBlender);
 
-    BlendShaderBlock::AddToKey(backend, key, { fDst.get(), fSrc.get(), fMode });
+    BlendShaderBlock::AddToKey(backend, key, uniformBlock, { fDst.get(), fSrc.get(), fMode });
 }

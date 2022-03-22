@@ -8,17 +8,19 @@
 #include "tests/Test.h"
 
 #include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/src/ContextPriv.h"
-
+#include "experimental/graphite/include/Recorder.h"
 #include "experimental/graphite/include/mtl/MtlTypes.h"
 #include "experimental/graphite/src/Buffer.h"
 #include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
+#include "experimental/graphite/src/ContextPriv.h"
 #include "experimental/graphite/src/ContextUtils.h"
 #include "experimental/graphite/src/DrawBufferManager.h"
 #include "experimental/graphite/src/DrawWriter.h"
+#include "experimental/graphite/src/GlobalCache.h"
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/GraphicsPipeline.h"
+#include "experimental/graphite/src/RecorderPriv.h"
 #include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/ResourceProvider.h"
 #include "experimental/graphite/src/Sampler.h"
@@ -73,7 +75,7 @@ public:
                        const Transform&,
                        const Shape&) const override {
         // The shape is upload via uniforms, so this just needs to record 4 data-less vertices
-        writer->draw({}, {}, 4);
+        writer->draw({}, 4);
     }
 
     sk_sp<SkUniformData> writeUniforms(Layout layout,
@@ -83,8 +85,7 @@ public:
         SkASSERT(shape.isRect());
         // TODO: A << API for uniforms would be nice, particularly if it could take pre-computed
         // offsets for each uniform.
-        auto uniforms = SkUniformData::Make(this->numUniforms(), this->uniforms().data(),
-                                            sizeof(float) * 4);
+        auto uniforms = SkUniformData::Make(this->uniforms(), sizeof(float) * 4);
         float2 scale = shape.rect().size();
         float2 translate = shape.rect().topLeft();
         memcpy(uniforms->data(), &scale, sizeof(float2));
@@ -139,15 +140,14 @@ public:
         indexWriter << 0 << 1 << 2
                     << 2 << 1 << 3;
 
-        writer->draw(vertices, indices, 6);
+        writer->drawIndexed(vertices, indices, 6);
     }
 
     sk_sp<SkUniformData> writeUniforms(Layout layout,
                                        const SkIRect&,
                                        const Transform&,
                                        const Shape&) const override {
-        auto uniforms = SkUniformData::Make(this->numUniforms(), this->uniforms().data(),
-                                          sizeof(float) * 4);
+        auto uniforms = SkUniformData::Make(this->uniforms(), sizeof(float) * 4);
         float data[4] = {2.f, 2.f, -1.f, -1.f};
         memcpy(uniforms->data(), data, 4 * sizeof(float));
         return uniforms;
@@ -196,9 +196,8 @@ public:
         indexWriter << 0 << 1 << 2
                     << 2 << 1 << 3;
 
-        writer->setInstanceTemplate({}, indices, 6);
-        auto instanceWriter = writer->appendInstances(1);
-        instanceWriter << shape.rect().topLeft() << shape.rect().size();
+        DrawWriter::Instances instances{*writer, {}, indices, 6};
+        instances.append(1) << shape.rect().topLeft() << shape.rect().size();
     }
 
     sk_sp<SkUniformData> writeUniforms(Layout,
@@ -236,7 +235,9 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
 #if GRAPHITE_TEST_UTILS && CAPTURE_COMMANDBUFFER
     gpu->testingOnly_startCapture();
 #endif
-    auto commandBuffer = gpu->resourceProvider()->createCommandBuffer();
+    auto recorder = context->makeRecorder();
+    auto resourceProvider = recorder->priv().resourceProvider();
+    auto commandBuffer = resourceProvider->createCommandBuffer();
 
     SkISize textureSize = { kTextureWidth, kTextureHeight };
 #ifdef SK_METAL
@@ -258,7 +259,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
                                      SkTileMode::kClamp,
                                      SkBlendMode::kSrc);
 
-    auto entry = context->priv().shaderCodeDictionary()->findOrCreate(key);
+    auto dict = resourceProvider->shaderCodeDictionary();
+    auto entry = dict->findOrCreate(key);
 
     auto target = sk_sp<TextureProxy>(new TextureProxy(textureSize, textureInfo));
     REPORTER_ASSERT(reporter, target);
@@ -269,8 +271,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     renderPassDesc.fColorAttachment.fStoreOp = StoreOp::kStore;
     renderPassDesc.fClearColor = { 1, 0, 0, 1 }; // red
 
-    target->instantiate(gpu->resourceProvider());
-    DrawBufferManager bufferMgr(gpu->resourceProvider(), 4);
+    target->instantiate(resourceProvider);
+    DrawBufferManager bufferMgr(resourceProvider, 4);
 
     TextureInfo depthStencilInfo =
             gpu->caps()->getDefaultDepthStencilTextureInfo(DepthStencilFlags::kDepthStencil,
@@ -280,10 +282,10 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     renderPassDesc.fDepthStencilAttachment.fLoadOp = LoadOp::kDiscard;
     renderPassDesc.fDepthStencilAttachment.fStoreOp = StoreOp::kDiscard;
     sk_sp<Texture> depthStencilTexture =
-            gpu->resourceProvider()->findOrCreateTexture(textureSize, depthStencilInfo);
+            resourceProvider->findOrCreateTexture(textureSize, depthStencilInfo);
 
     // Create Sampler -- for now, just to test creation
-    sk_sp<Sampler> sampler = gpu->resourceProvider()->findOrCreateCompatibleSampler(
+    sk_sp<Sampler> sampler = resourceProvider->findOrCreateCompatibleSampler(
             SkSamplingOptions(SkFilterMode::kLinear), SkTileMode::kClamp, SkTileMode::kDecal);
     REPORTER_ASSERT(reporter, sampler);
 
@@ -305,9 +307,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
         drawWriter.newPipelineState(step->primitiveType(),
                                     step->vertexStride(),
                                     step->instanceStride());
-        auto pipeline = gpu->resourceProvider()->findOrCreateGraphicsPipeline(context,
-                                                                              pipelineDesc,
-                                                                              renderPassDesc);
+        auto pipeline = resourceProvider->findOrCreateGraphicsPipeline(pipelineDesc,
+                                                                       renderPassDesc);
         commandBuffer->bindGraphicsPipeline(std::move(pipeline));
 
         // All of the test RenderSteps ignore the transform, so just use the identity
@@ -370,7 +371,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     //       add bpp to Caps
     size_t rowBytes = 4*kTextureWidth;
     size_t bufferSize = rowBytes*kTextureHeight;
-    sk_sp<Buffer> copyBuffer = gpu->resourceProvider()->findOrCreateBuffer(
+    sk_sp<Buffer> copyBuffer = resourceProvider->findOrCreateBuffer(
             bufferSize, BufferType::kXferGpuToCpu, PrioritizeGpuReads::kNo);
     REPORTER_ASSERT(reporter, copyBuffer);
     SkIRect srcRect = { 0, 0, kTextureWidth, kTextureHeight };

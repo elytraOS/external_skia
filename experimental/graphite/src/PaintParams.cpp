@@ -31,7 +31,7 @@ PaintParams::PaintParams(const PaintParams& other) = default;
 PaintParams::~PaintParams() = default;
 PaintParams& PaintParams::operator=(const PaintParams& other) = default;
 
-skstd::optional<SkBlendMode> PaintParams::asBlendMode() const {
+std::optional<SkBlendMode> PaintParams::asBlendMode() const {
     return fBlender ? as_BB(fBlender)->asBlendMode()
                     : SkBlendMode::kSrcOver;
 }
@@ -42,18 +42,19 @@ sk_sp<SkShader> PaintParams::refShader() const { return fShader; }
 
 void PaintParams::toKey(SkShaderCodeDictionary* dict,
                         SkBackend backend,
-                        SkPaintParamsKey* key) const {
+                        SkPaintParamsKey* key,
+                        SkUniformBlock* uniformBlock) const {
 
     if (fShader) {
-        as_SB(fShader)->addToKey(dict, backend, key);
+        as_SB(fShader)->addToKey(dict, backend, key, uniformBlock);
     } else {
-        SolidColorShaderBlock::AddToKey(backend, key);
+        SolidColorShaderBlock::AddToKey(backend, key, uniformBlock, fColor);
     }
 
     if (fBlender) {
-        as_BB(fBlender)->addToKey(dict, backend, key);
+        as_BB(fBlender)->addToKey(dict, backend, key, uniformBlock);
     } else {
-        BlendModeBlock::AddToKey(backend, key, SkBlendMode::kSrcOver);
+        BlendModeBlock::AddToKey(backend, key, uniformBlock, SkBlendMode::kSrcOver);
     }
 
     SkASSERT(key->sizeInBytes() > 0);

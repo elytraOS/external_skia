@@ -23,6 +23,7 @@ class Buffer;
 class Gpu;
 class GraphicsPipeline;
 class Resource;
+class Sampler;
 class Texture;
 class TextureProxy;
 
@@ -82,6 +83,18 @@ public:
                          BindBufferInfo instances,
                          BindBufferInfo indices) final;
 
+    struct TextureBindEntry {
+        sk_sp<Texture> fTexture;
+        unsigned int   fBindIndex;
+    };
+    void bindTextures(const TextureBindEntry* entries, int count);
+
+    struct SamplerBindEntry {
+        sk_sp<Sampler> fSampler;
+        unsigned int   fBindIndex;
+    };
+    void bindSamplers(const SamplerBindEntry* entries, int count);
+
     // TODO: do we want to handle multiple scissor rects and viewports?
     void setScissor(unsigned int left, unsigned int top, unsigned int width, unsigned int height) {
         this->onSetScissor(left, top, width, height);
@@ -131,6 +144,16 @@ public:
                              sk_sp<Buffer>,
                              size_t bufferOffset,
                              size_t bufferRowBytes);
+    struct BufferTextureCopyData {
+        size_t fBufferOffset;
+        size_t fBufferRowBytes;
+        SkIRect fRect;
+        unsigned int fMipLevel;
+    };
+    bool copyBufferToTexture(sk_sp<Buffer>,
+                             sk_sp<Texture>,
+                             const BufferTextureCopyData*,
+                             int count);
 
 protected:
     CommandBuffer();
@@ -156,6 +179,9 @@ private:
                                      const Buffer* instanceBuffer, size_t instanceOffset) = 0;
     virtual void onBindIndexBuffer(const Buffer* indexBuffer, size_t bufferOffset) = 0;
 
+    virtual void onBindTextures(const TextureBindEntry* entries, int count) = 0;
+    virtual void onBindSamplers(const SamplerBindEntry* entries, int count) = 0;
+
     virtual void onSetScissor(unsigned int left, unsigned int top,
                               unsigned int width, unsigned int height) = 0;
     virtual void onSetViewport(float x, float y, float width, float height,
@@ -177,6 +203,10 @@ private:
                                        const Buffer*,
                                        size_t bufferOffset,
                                        size_t bufferRowBytes) = 0;
+    virtual bool onCopyBufferToTexture(const Buffer*,
+                                       const Texture*,
+                                       const BufferTextureCopyData*,
+                                       int count) = 0;
 
 #ifdef SK_DEBUG
     bool fHasWork = false;

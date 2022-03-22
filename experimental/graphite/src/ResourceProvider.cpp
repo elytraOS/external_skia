@@ -11,6 +11,7 @@
 #include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
 #include "experimental/graphite/src/ContextPriv.h"
+#include "experimental/graphite/src/GlobalCache.h"
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/GraphicsPipeline.h"
 #include "experimental/graphite/src/Sampler.h"
@@ -18,7 +19,12 @@
 
 namespace skgpu {
 
-ResourceProvider::ResourceProvider(const Gpu* gpu) : fGpu(gpu) {
+ResourceProvider::ResourceProvider(const Gpu* gpu,
+                                   sk_sp<GlobalCache> globalCache,
+                                   SingleOwner* singleOwner)
+        : fGpu(gpu)
+        , fResourceCache(singleOwner)
+        , fGlobalCache(std::move(globalCache)) {
     fGraphicsPipelineCache.reset(new GraphicsPipelineCache(this));
 }
 
@@ -27,9 +33,13 @@ ResourceProvider::~ResourceProvider() {
 }
 
 sk_sp<GraphicsPipeline> ResourceProvider::findOrCreateGraphicsPipeline(
-        Context* context, const GraphicsPipelineDesc& pipelineDesc,
+        const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc) {
-    return fGraphicsPipelineCache->refPipeline(context, pipelineDesc, renderPassDesc);
+    return fGraphicsPipelineCache->refPipeline(fGpu->caps(), pipelineDesc, renderPassDesc);
+}
+
+SkShaderCodeDictionary* ResourceProvider::shaderCodeDictionary() const {
+    return fGlobalCache->shaderCodeDictionary();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -53,16 +63,15 @@ void ResourceProvider::GraphicsPipelineCache::release() {
 }
 
 sk_sp<GraphicsPipeline> ResourceProvider::GraphicsPipelineCache::refPipeline(
-        Context* context, const GraphicsPipelineDesc& pipelineDesc,
+        const Caps* caps,
+        const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc) {
-    Gpu* gpu = context->priv().gpu();
-    UniqueKey pipelineKey = gpu->caps()->makeGraphicsPipelineKey(pipelineDesc, renderPassDesc);
+    UniqueKey pipelineKey = caps->makeGraphicsPipelineKey(pipelineDesc, renderPassDesc);
 
 	std::unique_ptr<Entry>* entry = fMap.find(pipelineKey);
 
     if (!entry) {
-        auto pipeline = fResourceProvider->onCreateGraphicsPipeline(context, pipelineDesc,
-                                                                    renderPassDesc);
+        auto pipeline = fResourceProvider->onCreateGraphicsPipeline(pipelineDesc, renderPassDesc);
         if (!pipeline) {
             return nullptr;
         }

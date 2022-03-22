@@ -129,7 +129,7 @@ cc_defaults {
     ],
 
     cppflags:[
-        "-Wno-c++17-extensions",
+        
     ],
 
     export_include_dirs: [
@@ -369,7 +369,6 @@ cc_library_static {
         "src/core/SkStrikeSpec.cpp",
         "src/core/SkString.cpp",
         "src/core/SkStringUtils.cpp",
-        "src/core/SkStringView.cpp",
         "src/core/SkStroke.cpp",
         "src/core/SkStrokeRec.cpp",
         "src/core/SkStrokerPriv.cpp",
@@ -811,6 +810,7 @@ cc_library_static {
         "src/sksl/SkSLUtil.cpp",
         "src/sksl/analysis/SkSLCanExitWithoutReturningValue.cpp",
         "src/sksl/analysis/SkSLCheckProgramUnrolledSize.cpp",
+        "src/sksl/analysis/SkSLFinalizationChecks.cpp",
         "src/sksl/analysis/SkSLGetLoopUnrollInfo.cpp",
         "src/sksl/analysis/SkSLIsConstantExpression.cpp",
         "src/sksl/analysis/SkSLProgramUsage.cpp",
@@ -1152,7 +1152,6 @@ cc_library_static {
         "src/core/SkStrikeSpec.cpp",
         "src/core/SkString.cpp",
         "src/core/SkStringUtils.cpp",
-        "src/core/SkStringView.cpp",
         "src/core/SkStroke.cpp",
         "src/core/SkStrokeRec.cpp",
         "src/core/SkStrokerPriv.cpp",
@@ -1339,6 +1338,7 @@ cc_library_static {
         "src/sksl/SkSLUtil.cpp",
         "src/sksl/analysis/SkSLCanExitWithoutReturningValue.cpp",
         "src/sksl/analysis/SkSLCheckProgramUnrolledSize.cpp",
+        "src/sksl/analysis/SkSLFinalizationChecks.cpp",
         "src/sksl/analysis/SkSLGetLoopUnrollInfo.cpp",
         "src/sksl/analysis/SkSLIsConstantExpression.cpp",
         "src/sksl/analysis/SkSLProgramUsage.cpp",
@@ -1983,6 +1983,7 @@ cc_defaults {
         "gm/blurs.cpp",
         "gm/blurtextsmallradii.cpp",
         "gm/bmpfilterqualityrepeat.cpp",
+        "gm/bug12866.cpp",
         "gm/bug5252.cpp",
         "gm/bug530095.cpp",
         "gm/bug615686.cpp",
@@ -2080,6 +2081,7 @@ cc_defaults {
         "gm/drawbitmaprect.cpp",
         "gm/drawglyphs.cpp",
         "gm/drawimageset.cpp",
+        "gm/drawlines_with_local_matrix.cpp",
         "gm/drawminibitmaprect.cpp",
         "gm/drawquadset.cpp",
         "gm/drawregion.cpp",
@@ -2700,6 +2702,7 @@ cc_defaults {
         "tests/GrSlugTest.cpp",
         "tests/GrStyledShapeTest.cpp",
         "tests/GrSubmittedFlushTest.cpp",
+        "tests/GrSurfaceResolveTest.cpp",
         "tests/GrSurfaceTest.cpp",
         "tests/GrTextBlobTest.cpp",
         "tests/GrTextureMipMapInvalidationTest.cpp",
@@ -2915,7 +2918,6 @@ cc_defaults {
         "tests/SkStrikeCacheTest.cpp",
         "tests/SkStringViewTest.cpp",
         "tests/SkTBlockListTest.cpp",
-        "tests/SkTOptionalTest.cpp",
         "tests/SkUTFTest.cpp",
         "tests/SkVMDebugTracePlayerTest.cpp",
         "tests/SkVMDebugTraceTest.cpp",
@@ -3208,7 +3210,7 @@ cc_library_shared {
     ],
 
     cppflags:[
-        "-Wno-c++17-extensions",
+        
     ],
 
     local_include_dirs: [
@@ -3307,6 +3309,7 @@ cc_library_shared {
         "gm/blurs.cpp",
         "gm/blurtextsmallradii.cpp",
         "gm/bmpfilterqualityrepeat.cpp",
+        "gm/bug12866.cpp",
         "gm/bug5252.cpp",
         "gm/bug530095.cpp",
         "gm/bug615686.cpp",
@@ -3404,6 +3407,7 @@ cc_library_shared {
         "gm/drawbitmaprect.cpp",
         "gm/drawglyphs.cpp",
         "gm/drawimageset.cpp",
+        "gm/drawlines_with_local_matrix.cpp",
         "gm/drawminibitmaprect.cpp",
         "gm/drawquadset.cpp",
         "gm/drawregion.cpp",
@@ -3901,7 +3905,6 @@ cc_library_shared {
         "src/core/SkStrikeSpec.cpp",
         "src/core/SkString.cpp",
         "src/core/SkStringUtils.cpp",
-        "src/core/SkStringView.cpp",
         "src/core/SkStroke.cpp",
         "src/core/SkStrokeRec.cpp",
         "src/core/SkStrokerPriv.cpp",
@@ -4346,6 +4349,7 @@ cc_library_shared {
         "src/sksl/SkSLUtil.cpp",
         "src/sksl/analysis/SkSLCanExitWithoutReturningValue.cpp",
         "src/sksl/analysis/SkSLCheckProgramUnrolledSize.cpp",
+        "src/sksl/analysis/SkSLFinalizationChecks.cpp",
         "src/sksl/analysis/SkSLGetLoopUnrollInfo.cpp",
         "src/sksl/analysis/SkSLIsConstantExpression.cpp",
         "src/sksl/analysis/SkSLProgramUsage.cpp",
@@ -4568,6 +4572,7 @@ cc_library_shared {
         "tests/GrSlugTest.cpp",
         "tests/GrStyledShapeTest.cpp",
         "tests/GrSubmittedFlushTest.cpp",
+        "tests/GrSurfaceResolveTest.cpp",
         "tests/GrSurfaceTest.cpp",
         "tests/GrTextBlobTest.cpp",
         "tests/GrTextureMipMapInvalidationTest.cpp",
@@ -4783,7 +4788,6 @@ cc_library_shared {
         "tests/SkStrikeCacheTest.cpp",
         "tests/SkStringViewTest.cpp",
         "tests/SkTBlockListTest.cpp",
-        "tests/SkTOptionalTest.cpp",
         "tests/SkUTFTest.cpp",
         "tests/SkVMDebugTracePlayerTest.cpp",
         "tests/SkVMDebugTraceTest.cpp",
