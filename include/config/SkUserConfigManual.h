@@ -32,7 +32,5 @@
   #define SK_DISABLE_DAA  // skbug.com/6886
 
   #define SK_ABORT(...) __android_log_assert(nullptr, "skia", ##__VA_ARGS__)
-  // TODO(b/180114901): remove when fix in fastmmi
-  #define SK_SUPPORT_LEGACY_DRAWBITMAP
 
 #endif // SkUserConfigManual_DEFINED
