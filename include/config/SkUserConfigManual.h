@@ -7,6 +7,7 @@
 
 #ifndef SkUserConfigManual_DEFINED
 #define SkUserConfigManual_DEFINED
+  #include <android/log.h>
   #define GR_TEST_UTILS 1
   #define SK_BUILD_FOR_ANDROID_FRAMEWORK
   #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
@@ -30,7 +31,6 @@
 
   #define SK_DISABLE_DAA  // skbug.com/6886
 
-  // TODO(b/180114901): remove when fix in fastmmi
-  #define SK_SUPPORT_LEGACY_DRAWBITMAP
+  #define SK_ABORT(...) __android_log_assert(nullptr, "skia", ##__VA_ARGS__)
 
 #endif // SkUserConfigManual_DEFINED
